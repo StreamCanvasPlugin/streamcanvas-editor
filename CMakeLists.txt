@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../engine engine)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine engine)
 
 set(PROJECT_SOURCES
         main.cpp
