@@ -1,6 +1,6 @@
 # obs-graphics-editor
 
-Standalone Qt6 desktop application for authoring animated broadcast graphics scenes. Scenes are saved as JSON and loaded by the [obs-graphics](https://github.com/diegolopes/obs-graphics) OBS plugin at runtime.
+Standalone Qt6 desktop application for authoring animated broadcast graphics scenes. Scenes are saved as JSON and loaded by the [obs-graphics](https://github.com/OBS-Graphics/obs-graphics) OBS plugin at runtime.
 
 ## Dependencies
 
@@ -46,5 +46,5 @@ data/             Demo scenes and data sources
 
 ## Related repos
 
-- [obs-graphics-engine](https://github.com/diegolopes/obs-graphics-engine) — rendering engine (submodule)
-- [obs-graphics](https://github.com/diegolopes/obs-graphics) — OBS plugin that loads scenes produced by this editor
+- [obs-graphics-engine](https://github.com/OBS-Graphics/obs-graphics-engine) — rendering engine (submodule)
+- [obs-graphics](https://github.com/OBS-Graphics/obs-graphics) — OBS plugin that loads scenes produced by this editor
