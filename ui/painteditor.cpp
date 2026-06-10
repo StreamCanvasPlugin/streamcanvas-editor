@@ -69,6 +69,10 @@ PaintEditor::PaintEditor(QWidget* parent) : QWidget(parent)
                 &PaintEditor::onStopsChanged);
         connect(m_linearEditor, &LinearGradientEditor::stopSelected, this,
                 &PaintEditor::onStopSelected);
+        connect(m_linearEditor, &LinearGradientEditor::p1Changed, this,
+                [this](QPointF) { emitPaint(); });
+        connect(m_linearEditor, &LinearGradientEditor::p2Changed, this,
+                [this](QPointF) { emitPaint(); });
 
         m_linearEditor->setStops({{0.0, Qt::black}, {1.0, Qt::white}});
     }
@@ -110,6 +114,8 @@ PaintEditor::PaintEditor(QWidget* parent) : QWidget(parent)
                 &PaintEditor::onStopsChanged);
         connect(m_radialEditor, &RadialGradientEditor::stopSelected, this,
                 &PaintEditor::onStopSelected);
+        connect(m_radialEditor, &RadialGradientEditor::geometryChanged, this,
+                [this](QPointF, qreal) { emitPaint(); });
 
         m_radialEditor->setStops({{0.0, Qt::black}, {1.0, Qt::white}});
     }
@@ -216,8 +222,8 @@ void PaintEditor::setPaint(const Paint& paint)
         m_linearEditor->setStops(stops);
     } break;
     case Paint::Type::Radial: {
-        m_radialEditor->setCenter(QPointF(paint.params[0], paint.params[1]));
-        m_radialEditor->setRadius(paint.params[2]);
+        m_radialEditor->setCenter(QPointF(paint.params[3], paint.params[4]));
+        m_radialEditor->setRadius(paint.params[5]);
         QVector<GradientStop> stops;
         for (auto st : paint.stops) {
             stops.push_back(GradientStop{

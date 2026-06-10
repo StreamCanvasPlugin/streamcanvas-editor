@@ -284,11 +284,13 @@ void RadialGradientEditor::mouseReleaseEvent(QMouseEvent* e)
 
     if (m_draggingCenter) {
         m_draggingCenter = false;
+        emit geometryChanged(m_center, radius());
         update();
         return;
     }
     if (m_draggingEdge) {
         m_draggingEdge = false;
+        emit geometryChanged(m_center, radius());
         update();
         return;
     }

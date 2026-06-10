@@ -36,7 +36,7 @@ MainWindow::MainWindow(QWidget* parent)
       m_editorScene(new EditorScene(m_doc, this)),
       m_canvas(new CanvasWidget(m_doc, m_editorScene, this))
 {
-    resize(1440, 860);
+    showMaximized();
     setCentralWidget(m_canvas);
 
     // Scene tree — left dock

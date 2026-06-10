@@ -262,11 +262,13 @@ void LinearGradientEditor::mouseReleaseEvent(QMouseEvent* e)
 
     if (m_draggingP1) {
         m_draggingP1 = false;
+        emit p1Changed(m_p1);
         update();
         return;
     }
     if (m_draggingP2) {
         m_draggingP2 = false;
+        emit p2Changed(m_p2);
         update();
         return;
     }
