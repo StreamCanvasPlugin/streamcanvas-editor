@@ -1,6 +1,5 @@
 #include "mainwindow.h"
 #include "engine/graphic.h"
-#include "engine/json.hpp"
 #include "engine/scene.h"
 #include "icons.h"
 #include "model/EditorScene.h"

@@ -38,9 +38,9 @@ jobs:
       - name: Install dependencies
         run: brew install cairo pango lua pkgconf ninja
 
-      - uses: jurplel/install-qt-action@v3
+      - uses: jurplel/install-qt-action@v4
         with:
-          version: '6.7.3'
+          version: '6.8.3'
           host: 'mac'
           target: 'desktop'
           cache: true
@@ -63,9 +63,9 @@ jobs:
       - name: Install pkg-config
         run: choco install pkgconfiglite -y
 
-      - uses: jurplel/install-qt-action@v3
+      - uses: jurplel/install-qt-action@v4
         with:
-          version: '6.7.3'
+          version: '6.8.3'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'

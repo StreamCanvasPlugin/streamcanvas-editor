@@ -6,9 +6,10 @@
 #include <QString>
 #include <QUndoCommand>
 
+#include <nlohmann/json.hpp>
+
 #include "engine/element.h"
 #include "engine/graphic.h"
-#include "engine/json.hpp"
 #include "engine/scene.h"
 
 #include "SceneDocument.h"

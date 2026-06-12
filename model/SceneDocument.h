@@ -8,8 +8,8 @@
 #include <QObject>
 #include <QString>
 #include <QUndoStack>
+#include <nlohmann/json.hpp>
 
-#include "engine/json.hpp"
 #include "engine/scene.h"
 
 struct ElementRef {

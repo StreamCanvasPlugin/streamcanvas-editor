@@ -5,8 +5,6 @@
 #include "model/SceneDocument.h"
 #include "model/UndoCommands.h"
 
-#include "engine/json.hpp"
-
 #include <QContextMenuEvent>
 #include <QHeaderView>
 #include <QItemSelectionModel>

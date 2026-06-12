@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(editor_v2 VERSION 0.1 LANGUAGES C CXX)
+project(editor VERSION 0.1 LANGUAGES C CXX)
 
 include(cmake/CPM.cmake)
 
@@ -57,23 +57,19 @@ set(PROJECT_SOURCES
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    qt_add_executable(editor_v2
+    qt_add_executable(${PROJECT_NAME}
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
     )
-# Define target properties for Android with Qt 6 as:
-#    set_property(TARGET editor_v2 APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
-#                 ${CMAKE_CURRENT_SOURCE_DIR}/android)
-# For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
 else()
     if(ANDROID)
-        add_library(editor_v2 SHARED
+        add_library(${PROJECT_NAME} SHARED
             ${PROJECT_SOURCES}
         )
 # Define properties for Android with Qt 5 after find_package() calls as:
 #    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
     else()
-        add_executable(editor_v2
+        add_executable(${PROJECT_NAME}
             ${PROJECT_SOURCES}
         )
     endif()
@@ -87,6 +83,17 @@ CPMAddPackage(
     DOWNLOAD_ONLY YES
 )
 
+CPMAddPackage(
+  NAME nlohmann_json
+  URL https://github.com/nlohmann/json/releases/download/v3.12.0/include.zip
+  DOWNLOAD_ONLY YES
+)
+
+if (nlohmann_json_ADDED)
+  add_library(nlohmann_json INTERFACE IMPORTED)
+  target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
+endif()
+
 # Patch out CPack inclusion — it only runs when QtAwesome is the top-level project
 set(_qtawesome_cmake_patched)
 file(READ "${QtAwesome_SOURCE_DIR}/CMakeLists.txt" _qtawesome_cmake)
@@ -95,16 +102,16 @@ file(WRITE "${QtAwesome_SOURCE_DIR}/CMakeLists.txt" "${_qtawesome_cmake_patched}
 
 add_subdirectory(${QtAwesome_SOURCE_DIR} ${QtAwesome_BINARY_DIR})
 
-target_include_directories(editor_v2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(editor_v2 PRIVATE Qt${QT_VERSION_MAJOR}::Widgets engine QtAwesome)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets engine QtAwesome nlohmann_json)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.
 if(${QT_VERSION} VERSION_LESS 6.1.0)
-  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.editor_v2)
+  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER br.com.teknetsys.obs_graphics_editor)
 endif()
-set_target_properties(editor_v2 PROPERTIES
+set_target_properties(${PROJECT_NAME} PROPERTIES
     ${BUNDLE_ID_OPTION}
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
@@ -113,12 +120,12 @@ set_target_properties(editor_v2 PROPERTIES
 )
 
 include(GNUInstallDirs)
-install(TARGETS editor_v2
+install(TARGETS ${PROJECT_NAME}
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 if(QT_VERSION_MAJOR EQUAL 6)
-    qt_finalize_executable(editor_v2)
+    qt_finalize_executable(${PROJECT_NAME})
 endif()
