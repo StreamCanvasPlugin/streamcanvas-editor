@@ -103,7 +103,7 @@ file(WRITE "${QtAwesome_SOURCE_DIR}/CMakeLists.txt" "${_qtawesome_cmake_patched}
 add_subdirectory(${QtAwesome_SOURCE_DIR} ${QtAwesome_BINARY_DIR})
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets engine QtAwesome nlohmann_json)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets engine QtAwesome)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
