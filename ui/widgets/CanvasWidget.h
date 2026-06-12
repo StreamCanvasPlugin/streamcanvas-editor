@@ -9,7 +9,11 @@
 #include <QRectF>
 #include <QWidget>
 
+#ifdef __APPLE__
+#include <cairo.h>
+#else
 #include <cairo/cairo.h>
+#endif
 
 #include "engine/types.hpp"
 #include "model/EditorScene.h"
