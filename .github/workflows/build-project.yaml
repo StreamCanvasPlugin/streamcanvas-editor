@@ -1,0 +1,223 @@
+name: Build Project
+
+on:
+  workflow_call:
+    outputs:
+      commitHash:
+        description: Short commit hash used in artifact names
+        value: ${{ jobs.check-event.outputs.commitHash }}
+
+jobs:
+  check-event:
+    name: Check Event Data 🔎
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      package: ${{ steps.setup.outputs.package }}
+      config: ${{ steps.setup.outputs.config }}
+      commitHash: ${{ steps.setup.outputs.commitHash }}
+    steps:
+      - name: Check Event Data ☑️
+        id: setup
+        run: |
+          : Check Event Data ☑️
+          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
+
+          if [[ "${GITHUB_REF_TYPE}" == 'tag' ]]; then
+            echo 'package=true' >> $GITHUB_OUTPUT
+            echo 'config=Release' >> $GITHUB_OUTPUT
+          else
+            echo 'package=false' >> $GITHUB_OUTPUT
+            echo 'config=RelWithDebInfo' >> $GITHUB_OUTPUT
+          fi
+
+          echo "commitHash=${GITHUB_SHA:0:9}" >> $GITHUB_OUTPUT
+
+  build-ubuntu:
+    name: Build (Ubuntu) 🐧
+    needs: check-event
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies 📦
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config \
+            qt6-base-dev qt6-base-private-dev \
+            libcairo2-dev libpango1.0-dev liblua5.4-dev \
+            libgl1-mesa-dev libxkbcommon-dev libxcb-cursor-dev \
+            imagemagick
+
+      - name: Build 🧱
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ needs.check-event.outputs.config }}
+          cmake --build build --parallel
+
+      - name: Package (AppImage) 📀
+        if: fromJSON(needs.check-event.outputs.package)
+        run: |
+          : Package (AppImage) 📀
+          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
+
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+
+          DESTDIR=AppDir cmake --install build --prefix /usr
+
+          mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cat > AppDir/usr/share/applications/editor.desktop << 'DESKTOP'
+          [Desktop Entry]
+          Name=OBS Graphics Editor
+          Exec=editor
+          Icon=editor
+          Type=Application
+          Categories=Graphics;AudioVideo;
+          DESKTOP
+
+          convert -size 256x256 xc:'#1a1a2e' \
+            -fill '#e94560' -draw 'rectangle 64,64 192,192' \
+            AppDir/usr/share/icons/hicolor/256x256/apps/editor.png
+
+          QMAKE=$(which qmake6 2>/dev/null || which qmake) \
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --plugin qt \
+            --output appimage
+
+          mv OBS_Graphics_Editor*.AppImage \
+            editor-${{ github.ref_name }}-linux-x86_64.AppImage
+
+      - name: Upload Artifacts 📡
+        if: fromJSON(needs.check-event.outputs.package)
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-linux-x86_64-${{ needs.check-event.outputs.commitHash }}
+          path: editor-${{ github.ref_name }}-linux-x86_64.AppImage
+
+  build-macos:
+    name: Build (macOS) 🍏
+    needs: check-event
+    runs-on: macos-15
+    defaults:
+      run:
+        shell: zsh --no-rcs --errexit --pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies 📦
+        run: brew install cairo pango lua pkgconf ninja
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: 'mac'
+          target: 'desktop'
+          cache: true
+
+      - name: Build 🧱
+        run: |
+          export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$(brew --prefix)/share/pkgconfig"
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ needs.check-event.outputs.config }} \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+          cmake --build build --parallel
+
+      - name: Package (DMG) 📀
+        if: fromJSON(needs.check-event.outputs.package)
+        run: |
+          : Package (DMG) 📀
+          if (( ${+RUNNER_DEBUG} )) setopt XTRACE
+          macdeployqt build/editor.app -dmg
+          mv build/editor.dmg editor-${{ github.ref_name }}-macos.dmg
+
+      - name: Upload Artifacts 📡
+        if: fromJSON(needs.check-event.outputs.package)
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-macos-${{ needs.check-event.outputs.commitHash }}
+          path: editor-${{ github.ref_name }}-macos.dmg
+
+  build-windows:
+    name: Build (Windows) 🪟
+    needs: check-event
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install pkg-config
+        run: choco install pkgconfiglite -y
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          cache: true
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: build/vcpkg_installed
+          key: vcpkg-installed-x64-windows-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-installed-x64-windows-
+
+      - name: Configure
+        run: |
+          # Configure
+          if ( $Env:RUNNER_DEBUG -ne $null ) { Set-PSDebug -Trace 1 }
+          $vcpkgInstalled = "$PWD\build\vcpkg_installed\x64-windows"
+          $env:PKG_CONFIG_PATH = "$vcpkgInstalled\lib\pkgconfig"
+          cmake -B build `
+            -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DPKG_CONFIG_EXECUTABLE="$vcpkgInstalled\tools\pkgconf\pkgconf.exe"
+
+      - name: Build 🧱
+        run: cmake --build build --config ${{ needs.check-event.outputs.config }} --parallel
+
+      - name: Package (ZIP) 📀
+        if: fromJSON(needs.check-event.outputs.package)
+        run: |
+          # Package (ZIP) 📀
+          if ( $Env:RUNNER_DEBUG -ne $null ) { Set-PSDebug -Trace 1 }
+
+          $stagingDir = "editor-windows-stage"
+          New-Item -ItemType Directory -Path $stagingDir
+
+          Copy-Item "build\${{ needs.check-event.outputs.config }}\editor.exe" $stagingDir\
+          windeployqt --release --no-translations --no-system-d3d-compiler "$stagingDir\editor.exe"
+
+          $vcpkgBin = "build\vcpkg_installed\x64-windows\bin"
+          if (Test-Path $vcpkgBin) {
+            Copy-Item "$vcpkgBin\*.dll" $stagingDir\
+          }
+
+          Compress-Archive -Path $stagingDir `
+            -DestinationPath "editor-${{ github.ref_name }}-windows-x64.zip"
+
+      - name: Upload Artifacts 📡
+        if: fromJSON(needs.check-event.outputs.package)
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-windows-x64-${{ needs.check-event.outputs.commitHash }}
+          path: editor-${{ github.ref_name }}-windows-x64.zip
