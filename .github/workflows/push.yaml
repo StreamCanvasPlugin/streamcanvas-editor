@@ -66,12 +66,13 @@ jobs:
           : Generate Checksums 🪪
           if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
           shopt -s nullglob
+          shopt -s extglob
 
           echo "### Checksums" > ${{ github.workspace }}/CHECKSUMS.txt
-          for file in ${{ github.workspace }}/*.AppImage \
-                      ${{ github.workspace }}/*.dmg \
-                      ${{ github.workspace }}/*.zip; do
-            echo "    ${file##*/}: $(sha256sum "${file}" | cut -d ' ' -f 1)" \
+          for file in "${{ github.workspace }}"/*.AppImage \
+                      "${{ github.workspace }}"/*.dmg \
+                      "${{ github.workspace }}"/*.zip; do
+            [[ -e "$file" ]] && echo "    ${file##*/}: $(sha256sum "${file}" | cut -d ' ' -f 1)" \
               >> ${{ github.workspace }}/CHECKSUMS.txt
           done
 
