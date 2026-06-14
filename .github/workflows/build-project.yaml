@@ -66,7 +66,7 @@ jobs:
       - name: Package (AppImage) 📀
         if: fromJSON(needs.check-event.outputs.package)
         run: |
-          : Package (AppImage) 📀
+          : 'Package (AppImage) 📀'
           if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
 
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
@@ -137,7 +137,7 @@ jobs:
       - name: Package (DMG) 📀
         if: fromJSON(needs.check-event.outputs.package)
         run: |
-          : Package (DMG) 📀
+          : 'Package (DMG) 📀'
           if (( ${+RUNNER_DEBUG} )) setopt XTRACE
           macdeployqt build/editor.app -dmg
           mv build/editor.dmg editor-${{ github.ref_name }}-macos.dmg
