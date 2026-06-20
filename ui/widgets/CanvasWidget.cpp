@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -309,6 +310,9 @@ SelectionId CanvasWidget::hitTest(QPointF scenePt) const
         return scene.graphics[a].zOrder > scene.graphics[b].zOrder;
     });
 
+    SelectionId bestHit;
+    double bestArea = std::numeric_limits<double>::max();
+
     for (int gi : gOrder) {
         const Graphic& g = scene.graphics[gi];
         std::vector<int> eOrder;
@@ -320,12 +324,17 @@ SelectionId CanvasWidget::hitTest(QPointF scenePt) const
 
         for (int ei : eOrder) {
             const Rectangle gb = globalBounds(g.elements[ei]);
-            if (scenePt.x() >= gb.x && scenePt.x() <= gb.x + gb.width && scenePt.y() >= gb.y &&
-                scenePt.y() <= gb.y + gb.height)
-                return {SelectionId::Level::Element, gi, ei};
+            if (scenePt.x() >= gb.x && scenePt.x() <= gb.x + gb.width &&
+                scenePt.y() >= gb.y && scenePt.y() <= gb.y + gb.height) {
+                double area = gb.width * gb.height;
+                if (area < bestArea) {
+                    bestArea = area;
+                    bestHit = {SelectionId::Level::Element, gi, ei};
+                }
+            }
         }
     }
-    return {};
+    return bestHit;
 }
 
 int CanvasWidget::hitHandle(QPointF widgetPt) const
@@ -355,12 +364,18 @@ void CanvasWidget::renderStaticScene()
     cairo_paint(m_cr);
     cairo_restore(m_cr);
 
-    // Force all graphics visible (editor display — bypass state machine)
-    // Setting timer=1e9 ensures EvaluateAnimation returns t=1 (at-rest position)
+    // Render only the selected graphic's elements; show all when nothing is selected.
+    // Setting timer=1e9 ensures EvaluateAnimation returns t=1 (at-rest position).
+    const SelectionId sel = m_editorState->selection();
+    const int selGi = (sel.level == SelectionId::Level::Graphic ||
+                       sel.level == SelectionId::Level::Element)
+                      ? sel.graphicIndex : -1;
+
     Scene& s = const_cast<Scene&>(m_doc->scene());
-    for (auto& g : s.graphics) {
-        g.state = GraphicState::Visible;
-        g.timer = 1e9;
+    for (int i = 0; i < (int)s.graphics.size(); ++i) {
+        s.graphics[i].state = (selGi < 0 || i == selGi)
+                              ? GraphicState::Visible : GraphicState::Hidden;
+        s.graphics[i].timer = 1e9;
     }
 
     cairo_set_antialias(m_cr, CAIRO_ANTIALIAS_BEST);
@@ -464,6 +479,34 @@ void CanvasWidget::drawSnapLines(QPainter& p, const QRectF& lb)
     p.restore();
 }
 
+void CanvasWidget::drawElementOutlines(QPainter& p)
+{
+    const SelectionId sel = m_editorState->selection();
+    if (sel.level != SelectionId::Level::Graphic && sel.level != SelectionId::Level::Element)
+        return;
+
+    const Scene& scene = m_doc->scene();
+    if (sel.graphicIndex < 0 || sel.graphicIndex >= (int)scene.graphics.size())
+        return;
+
+    const Graphic& g = scene.graphics[sel.graphicIndex];
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, false);
+    p.setBrush(Qt::NoBrush);
+
+    for (int ei = 0; ei < (int)g.elements.size(); ++ei) {
+        if (sel.level == SelectionId::Level::Element && ei == sel.elementIndex)
+            continue;
+        const QRectF r = sceneToWidget(globalBounds(g.elements[ei]));
+        p.setPen(QPen(QColor(0, 0, 0, 84), 3.0, Qt::DashLine));
+        p.drawRect(r);
+        p.setPen(QPen(QColor(255, 255, 255, 178), 1.0, Qt::DashLine));
+        p.drawRect(r);
+    }
+
+    p.restore();
+}
+
 // ── paintEvent ────────────────────────────────────────────────────────────────
 
 void CanvasWidget::paintEvent(QPaintEvent*)
@@ -489,6 +532,9 @@ void CanvasWidget::paintEvent(QPaintEvent*)
 
     if (m_dragging)
         drawSnapLines(p, lb);
+
+    if (!m_previewScene)
+        drawElementOutlines(p);
 
     // Selection overlay
     if (!m_previewScene) {
@@ -545,7 +591,10 @@ void CanvasWidget::onDocumentChanged()
 
 void CanvasWidget::onSelectionChanged(SelectionId)
 {
-    update();
+    if (!m_previewScene)
+        renderStaticScene();
+    else
+        update();
 }
 
 void CanvasWidget::onAnimTick()
@@ -564,6 +613,13 @@ void CanvasWidget::startAnimationPreview(int graphicIndex, bool playIn)
     stopAnimationPreview();
     const nlohmann::json j = SceneDocument::sceneToJson(m_doc->scene());
     m_previewScene = std::make_unique<Scene>(Scene::LoadString(j.dump()));
+
+    for (int i = 0; i < (int)m_previewScene->graphics.size(); ++i) {
+        if (i != graphicIndex) {
+            m_previewScene->graphics[i].state = GraphicState::Hidden;
+            m_previewScene->graphics[i].timer = 1e9;
+        }
+    }
 
     if (graphicIndex >= 0 && graphicIndex < (int)m_previewScene->graphics.size()) {
         if (playIn)
@@ -605,10 +661,10 @@ void CanvasWidget::previewAtTime(int graphicIndex, bool isIn, double t)
         m_previewScene = std::make_unique<Scene>(Scene::LoadString(j.dump()));
     }
 
-    // All graphics visible at rest, then override the one being previewed
-    for (auto& g : m_previewScene->graphics) {
-        g.state = GraphicState::Visible;
-        g.timer = 1e9;
+    // Only the target graphic visible at rest; mirrors edit-mode behavior
+    for (int i = 0; i < (int)m_previewScene->graphics.size(); ++i) {
+        m_previewScene->graphics[i].state = (i == graphicIndex) ? GraphicState::Visible : GraphicState::Hidden;
+        m_previewScene->graphics[i].timer = 1e9;
     }
 
     if (graphicIndex >= 0 && graphicIndex < (int)m_previewScene->graphics.size()) {
@@ -772,7 +828,8 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
     const SelectionId curSel = m_editorState->selection();
     const QPointF sp = widgetToScene(wpos);
 
-    // 2. Graphic selected → drag whole group if click is inside the bounding box
+    // 2. Graphic selected → drag whole group if click is inside the bounding box,
+    //    but if the click lands directly on an element, fall through to select it.
     if (curSel.level == SelectionId::Level::Graphic) {
         const Scene& scene = m_doc->scene();
         if (curSel.graphicIndex >= 0 && curSel.graphicIndex < (int)scene.graphics.size()) {
@@ -780,15 +837,26 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
             if (!g.elements.empty()) {
                 const QRectF gRect = sceneToWidget(graphicSceneBounds(curSel.graphicIndex));
                 if (gRect.contains(wpos)) {
-                    m_graphicOrigBounds.clear();
-                    for (const auto& el : g.elements)
-                        m_graphicOrigBounds.push_back(el.bounds);
-                    m_dragMode = DragMode::MoveGraphic;
-                    m_dragHandle = -1;
-                    m_dragStartScene = sp;
-                    m_dragGi = curSel.graphicIndex;
-                    m_dragging = true;
-                    return;
+                    bool onElement = false;
+                    for (const auto& el : g.elements) {
+                        const Rectangle gb = globalBounds(el);
+                        if (sp.x() >= gb.x && sp.x() <= gb.x + gb.width &&
+                            sp.y() >= gb.y && sp.y() <= gb.y + gb.height) {
+                            onElement = true;
+                            break;
+                        }
+                    }
+                    if (!onElement) {
+                        m_graphicOrigBounds.clear();
+                        for (const auto& el : g.elements)
+                            m_graphicOrigBounds.push_back(el.bounds);
+                        m_dragMode = DragMode::MoveGraphic;
+                        m_dragHandle = -1;
+                        m_dragStartScene = sp;
+                        m_dragGi = curSel.graphicIndex;
+                        m_dragging = true;
+                        return;
+                    }
                 }
             }
         }
