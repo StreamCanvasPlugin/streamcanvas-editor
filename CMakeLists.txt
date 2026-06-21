@@ -57,6 +57,7 @@ set(PROJECT_SOURCES
         ui/widgets/BrandColorSwatchGrid.h ui/widgets/BrandColorSwatchGrid.cpp
         ui/widgets/RibbonFormatSection.h ui/widgets/RibbonFormatSection.cpp
         ui/UiUtils.h ui/UiUtils.cpp
+        resources/resources.qrc
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

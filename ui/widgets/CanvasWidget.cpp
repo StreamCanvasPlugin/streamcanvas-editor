@@ -4,7 +4,13 @@
 #include <cmath>
 #include <limits>
 
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QFileInfo>
+#include <QImage>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
@@ -12,6 +18,7 @@
 #include <QPixmap>
 #include <QResizeEvent>
 #include <QTimer>
+#include <QUrl>
 #include <QWheelEvent>
 
 #include "engine/element.h"
@@ -25,6 +32,9 @@
 #include "SelectionHandles.h"
 
 static constexpr int kArrowMergeTag = 9999;
+
+static const QStringList kCanvasImageExts = {
+    "png","jpg","jpeg","bmp","gif","tiff","tif","webp"};
 
 static Rectangle globalBounds(const Element& el)
 {
@@ -44,6 +54,7 @@ CanvasWidget::CanvasWidget(SceneDocument* doc, EditorScene* editorState, QWidget
     setAttribute(Qt::WA_OpaquePaintEvent, true);
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    setAcceptDrops(true);
 
     setupCairo();
 
@@ -1228,11 +1239,7 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
         const int gi = m_dragGi, ei = m_dragEi;
         const std::string gid = scene.graphics[gi].id;
         const std::string eid = scene.graphics[gi].elements[ei].id;
-        auto* cmd = new SetElementFieldCmd<Rectangle>(
-            m_doc, gid, eid, finalBounds, [](Element& e) -> Rectangle& { return e.bounds; },
-            "bounds");
-
-        // Revert to original so cmd->redo() applies the final value cleanly
+        // Revert first so SetElementFieldCmd captures m_before = orig, not finalBounds
         m_doc->applyMutation([gi, ei, orig = m_dragOrigBounds](Scene& s) {
             if (gi < (int)s.graphics.size()) {
                 Graphic& g = s.graphics[gi];
@@ -1240,6 +1247,9 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
                     g.elements[ei].bounds = orig;
             }
         });
+        auto* cmd = new SetElementFieldCmd<Rectangle>(
+            m_doc, gid, eid, finalBounds, [](Element& e) -> Rectangle& { return e.bounds; },
+            "bounds");
         m_doc->undoStack()->push(cmd);
     }
 
@@ -1254,6 +1264,137 @@ void CanvasWidget::leaveEvent(QEvent* event)
 {
     unsetCursor();
     QWidget::leaveEvent(event);
+}
+
+// ── Drag and drop ─────────────────────────────────────────────────────────────
+
+static bool mimeHasImageFile(const QMimeData* md)
+{
+    if (!md || !md->hasUrls()) return false;
+    for (const QUrl& url : md->urls()) {
+        if (!url.isLocalFile()) continue;
+        if (kCanvasImageExts.contains(QFileInfo(url.toLocalFile()).suffix().toLower()))
+            return true;
+    }
+    return false;
+}
+
+void CanvasWidget::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (mimeHasImageFile(event->mimeData()))
+        event->acceptProposedAction();
+    else
+        event->ignore();
+}
+
+void CanvasWidget::dragMoveEvent(QDragMoveEvent* event)
+{
+    if (mimeHasImageFile(event->mimeData()))
+        event->acceptProposedAction();
+    else
+        event->ignore();
+}
+
+void CanvasWidget::dropEvent(QDropEvent* event)
+{
+    if (m_previewScene) { event->ignore(); return; }
+
+    const QMimeData* md = event->mimeData();
+    if (!md || !md->hasUrls()) { event->ignore(); return; }
+
+    QStringList imagePaths;
+    for (const QUrl& url : md->urls()) {
+        if (!url.isLocalFile()) continue;
+        QString p = url.toLocalFile();
+        if (kCanvasImageExts.contains(QFileInfo(p).suffix().toLower()))
+            imagePaths << p;
+    }
+    if (imagePaths.isEmpty()) { event->ignore(); return; }
+
+    const QPointF scenePt = widgetToScene(event->position());
+
+    // Determine target graphic; auto-create one if nothing is selected
+    const SelectionId sel = m_editorState->selection();
+    int gi = -1;
+    if (sel.level == SelectionId::Level::Graphic || sel.level == SelectionId::Level::Element)
+        gi = sel.graphicIndex;
+
+    const bool needsGraphic = (gi < 0 || gi >= (int)m_doc->scene().graphics.size());
+    const bool needsMacro   = needsGraphic || imagePaths.size() > 1;
+    if (needsMacro)
+        m_doc->undoStack()->beginMacro(imagePaths.size() == 1 ? "Drop Image" : "Drop Images");
+
+    std::string gid;
+    if (needsGraphic) {
+        int maxN = 0;
+        for (const auto& g : m_doc->scene().graphics)
+            if (g.id.rfind("graphic_", 0) == 0)
+                try { maxN = std::max(maxN, std::stoi(g.id.substr(8))); } catch (...) {}
+        gid = "graphic_" + std::to_string(maxN + 1);
+        int newZ = (int)m_doc->scene().graphics.size();
+        using json = nlohmann::json;
+        json gj = {{"id", gid}, {"z_order", newZ}, {"elements", json::array()}};
+        m_doc->undoStack()->push(new AddGraphicCmd(m_doc, std::move(gj)));
+
+        const auto& gs = m_doc->scene().graphics;
+        for (int i = 0; i < (int)gs.size(); ++i)
+            if (gs[i].id == gid) { gi = i; break; }
+
+        if (gi < 0) {
+            if (needsMacro) m_doc->undoStack()->endMacro();
+            event->ignore();
+            return;
+        }
+        m_editorState->setSelection({SelectionId::Level::Graphic, gi, -1});
+    } else {
+        gid = m_doc->scene().graphics[gi].id;
+    }
+
+    std::string firstNewId;
+    for (int idx = 0; idx < imagePaths.size(); ++idx) {
+        const QString& imagePath = imagePaths[idx];
+        QImage img(imagePath);
+
+        // Max ID in this graphic for "image_N" naming
+        int maxN = 0;
+        for (const auto& el : m_doc->scene().graphics[gi].elements)
+            if (el.id.rfind("image_", 0) == 0)
+                try { maxN = std::max(maxN, std::stoi(el.id.substr(6))); } catch (...) {}
+        const std::string newId = "image_" + std::to_string(maxN + 1);
+        if (idx == 0) firstNewId = newId;
+
+        double w = img.isNull() ? 200.0 : img.width();
+        double h = img.isNull() ? 200.0 : img.height();
+        const Scene& sc = m_doc->scene();
+        if (w > sc.width)  { h = h * sc.width  / w; w = sc.width; }
+        if (h > sc.height) { w = w * sc.height / h; h = sc.height; }
+
+        // Center at drop point; stagger multiple images
+        const double x = scenePt.x() - w / 2.0 + idx * 20.0;
+        const double y = scenePt.y() - h / 2.0 + idx * 20.0;
+        const int zOrder = (int)m_doc->scene().graphics[gi].elements.size();
+
+        using json = nlohmann::json;
+        json j = {{"id", newId}, {"type", "image"},
+                  {"x", x}, {"y", y}, {"w", w}, {"h", h},
+                  {"z_order", zOrder},
+                  {"image_path", imagePath.toStdString()},
+                  {"scale_mode", "contain"}};
+        m_doc->undoStack()->push(new AddElementCmd(m_doc, gid, std::move(j)));
+    }
+
+    if (needsMacro)
+        m_doc->undoStack()->endMacro();
+
+    // Select the first created element
+    if (!firstNewId.empty()) {
+        const auto& els = m_doc->scene().graphics[gi].elements;
+        for (int ei = 0; ei < (int)els.size(); ++ei)
+            if (els[ei].id == firstNewId)
+                { m_editorState->setSelection({SelectionId::Level::Element, gi, ei}); break; }
+    }
+
+    event->acceptProposedAction();
 }
 
 void CanvasWidget::updateCursorForPos(QPointF wpos)

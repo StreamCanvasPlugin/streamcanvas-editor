@@ -3,6 +3,8 @@
 #include "model/EditorScene.h"
 #include <QMainWindow>
 #include <RibbonWidget>
+#include <nlohmann/json.hpp>
+#include <optional>
 
 class SceneDocument;
 class EditorScene;
@@ -30,6 +32,8 @@ private slots:
     void onOpen();
     void onSave();
     void onSaveAs();
+    void onCopy();
+    void onCut();
 
 private:
     void setupMenuBar();
@@ -37,6 +41,7 @@ private:
     void updateWindowTitle();
     void updateToolBarState(SelectionId sel);
     bool maybeSave();
+    void doPaste(bool inPlace);
 
     SceneDocument* m_doc;
     EditorScene*   m_editorScene;
@@ -55,6 +60,12 @@ private:
 
     QAction* m_undoAction{nullptr};
     QAction* m_redoAction{nullptr};
+    QAction* m_cutAction{nullptr};
+    QAction* m_copyAction{nullptr};
+    QAction* m_pasteAction{nullptr};
+    QAction* m_pasteInPlaceAction{nullptr};
+
+    std::optional<nlohmann::json> m_clipboard;
 
     QAction* m_addRectAction{nullptr};
     QAction* m_addTextAction{nullptr};

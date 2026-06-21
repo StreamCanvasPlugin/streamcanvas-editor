@@ -65,6 +65,9 @@ private slots:
     void onParentChanged(int idx);
     void onFitToChildrenToggled(bool checked);
     void onChildrenPaddingChanged();
+    void onShearXChanged(double v);
+    void onShearYChanged(double v);
+    void onShadowChanged();
 
     // Text tab slots
     void onFontFamilyChanged(int idx);
@@ -122,6 +125,8 @@ private:
     QDoubleSpinBox* m_spinW{nullptr};
     QDoubleSpinBox* m_spinH{nullptr};
     QDoubleSpinBox* m_spinRot{nullptr};
+    QDoubleSpinBox* m_spinShearX{nullptr};
+    QDoubleSpinBox* m_spinShearY{nullptr};
 
     // Appearance group
     QSpinBox*       m_spinZ{nullptr};
@@ -141,6 +146,14 @@ private:
     QDoubleSpinBox* m_spinTR{nullptr};
     QDoubleSpinBox* m_spinBR{nullptr};
     QDoubleSpinBox* m_spinBL{nullptr};
+
+    // Shadow group (Style tab)
+    QCheckBox*      m_shadowEnabled{nullptr};
+    QWidget*        m_shadowControls{nullptr};
+    QDoubleSpinBox* m_spinShadowOffX{nullptr};
+    QDoubleSpinBox* m_spinShadowOffY{nullptr};
+    QDoubleSpinBox* m_spinShadowBlur{nullptr};
+    QToolButton*    m_shadowColorBtn{nullptr};
 
     // Info group (element)
     QLineEdit* m_idEdit{nullptr};

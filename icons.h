@@ -6,3 +6,4 @@ using namespace oclero::qlementine::icons;
 
 void initIcons();
 QIcon themedIcon(Icons16 id);
+QIcon qrCodeIcon();

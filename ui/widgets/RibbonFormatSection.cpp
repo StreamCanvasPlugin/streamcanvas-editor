@@ -11,6 +11,7 @@
 #include "ui/painteditor.h"
 
 #include <QAbstractItemView>
+#include <QColorDialog>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
@@ -273,6 +274,21 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
         gl->addWidget(makeRibbonLabel("Rotation (deg.) "),2, 0);
         gl->addWidget(m_spinRot,                    2, 1, 1, 3);
 
+        m_spinShearX = mkSpin("", -10, 10);
+        m_spinShearX->setDecimals(3);
+        m_spinShearX->setSingleStep(0.01);
+        m_spinShearX->setToolTip("Horizontal shear");
+
+        m_spinShearY = mkSpin("", -10, 10);
+        m_spinShearY->setDecimals(3);
+        m_spinShearY->setSingleStep(0.01);
+        m_spinShearY->setToolTip("Vertical shear");
+
+        gl->addWidget(makeRibbonLabel("Shear X "), 3, 0);
+        gl->addWidget(m_spinShearX,                3, 1);
+        gl->addWidget(makeRibbonLabel("Shear Y "), 3, 2);
+        gl->addWidget(m_spinShearY,                3, 3);
+
         gl->setColumnStretch(0, 0);
         gl->setColumnStretch(1, 0);
         gl->setColumnStretch(2, 0);
@@ -283,6 +299,10 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
         connect(m_spinW,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onWChanged);
         connect(m_spinH,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onHChanged);
         connect(m_spinRot, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onRotChanged);
+        connect(m_spinShearX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, &RibbonFormatSection::onShearXChanged);
+        connect(m_spinShearY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, &RibbonFormatSection::onShearYChanged);
     }
 
     // ── Appearance group ───────────────────────────────────────────────────────
@@ -541,6 +561,71 @@ void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
         connectRadius(m_spinTR);
         connectRadius(m_spinBR);
         connectRadius(m_spinBL);
+    }
+
+    // ── Shadow group ───────────────────────────────────────────────────────────
+    {
+        auto* gl = addGroup(page, pageLayout, "Shadow");
+
+        m_shadowEnabled = new QCheckBox("Enable");
+        gl->addWidget(m_shadowEnabled, 0, 0, 1, 4);
+
+        m_shadowControls = new QWidget;
+        auto* scGrid = new QGridLayout(m_shadowControls);
+        scGrid->setContentsMargins(0, 0, 0, 0);
+        scGrid->setSpacing(4);
+
+        m_spinShadowOffX = makeSpinBox(-9999, 9999, 1, " px", 72);
+        m_spinShadowOffX->setSingleStep(0.5);
+        m_spinShadowOffY = makeSpinBox(-9999, 9999, 1, " px", 72);
+        m_spinShadowOffY->setSingleStep(0.5);
+        m_spinShadowBlur = makeSpinBox(0, 200, 1, " px", 72);
+        m_spinShadowBlur->setSingleStep(0.5);
+
+        m_shadowColorBtn = new QToolButton;
+        m_shadowColorBtn->setIconSize({24, 16});
+        m_shadowColorBtn->setToolTip("Shadow color");
+        m_shadowColorBtn->setAutoRaise(true);
+
+        scGrid->addWidget(makeRibbonLabel("Off X "), 0, 0);
+        scGrid->addWidget(m_spinShadowOffX,           0, 1);
+        scGrid->addWidget(makeRibbonLabel("Off Y "), 0, 2);
+        scGrid->addWidget(m_spinShadowOffY,           0, 3);
+        scGrid->addWidget(makeRibbonLabel("Blur "),   1, 0);
+        scGrid->addWidget(m_spinShadowBlur,           1, 1);
+        scGrid->addWidget(makeRibbonLabel("Color "),  1, 2);
+        scGrid->addWidget(m_shadowColorBtn,           1, 3);
+
+        gl->addWidget(m_shadowControls, 1, 0, 1, 4);
+        gl->setColumnStretch(0, 0);
+
+        connect(m_shadowEnabled, &QCheckBox::toggled, this, &RibbonFormatSection::onShadowChanged);
+        auto connectShadow = [this](QDoubleSpinBox* s) {
+            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                    this, &RibbonFormatSection::onShadowChanged);
+        };
+        connectShadow(m_spinShadowOffX);
+        connectShadow(m_spinShadowOffY);
+        connectShadow(m_spinShadowBlur);
+
+        connect(m_shadowColorBtn, &QToolButton::clicked, this, [this]() {
+            if (m_graphicId.empty()) return;
+            try {
+                const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
+                const auto& c = el.shadow.color;
+                QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
+                QColor picked  = QColorDialog::getColor(initial, nullptr, "Shadow Color",
+                                                        QColorDialog::ShowAlphaChannel);
+                if (!picked.isValid()) return;
+                Element::DropShadow sh = el.shadow;
+                sh.color[0] = static_cast<float>(picked.redF());
+                sh.color[1] = static_cast<float>(picked.greenF());
+                sh.color[2] = static_cast<float>(picked.blueF());
+                sh.color[3] = static_cast<float>(picked.alphaF());
+                m_doc->undoStack()->push(
+                    new SetElementShadowCmd(m_doc, m_graphicId, m_elementId, sh));
+            } catch (...) {}
+        });
     }
 }
 
@@ -812,7 +897,7 @@ void RibbonFormatSection::buildQrTab(RibbonWidget* ribbon)
         auto* gl = addGroup(page, pageLayout, "Content");
 
         auto* qrBtn = new QToolButton;
-        qrBtn->setIcon(themedIcon(Icons16::Hardware_Scanner));
+        qrBtn->setIcon(qrCodeIcon());
         qrBtn->setText("Edit Content…");
         qrBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         qrBtn->setIconSize({32, 32});
@@ -987,6 +1072,23 @@ void RibbonFormatSection::onDocumentChanged()
     m_spinTR->setValue(static_cast<double>(el->cornerRadius[1]));
     m_spinBR->setValue(static_cast<double>(el->cornerRadius[2]));
     m_spinBL->setValue(static_cast<double>(el->cornerRadius[3]));
+
+    // Shear
+    m_spinShearX->setValue(static_cast<double>(el->shearX));
+    m_spinShearY->setValue(static_cast<double>(el->shearY));
+
+    // Shadow
+    m_shadowEnabled->setChecked(el->shadow.enabled);
+    m_spinShadowOffX->setValue(el->shadow.offsetX);
+    m_spinShadowOffY->setValue(el->shadow.offsetY);
+    m_spinShadowBlur->setValue(el->shadow.blur);
+    {
+        const auto& c = el->shadow.color;
+        QPixmap px(24, 14);
+        px.fill(QColor::fromRgbF(c[0], c[1], c[2], c[3]));
+        m_shadowColorBtn->setIcon(QIcon(px));
+    }
+    m_shadowControls->setEnabled(el->shadow.enabled);
 
     // ID field
     bool usedAsParent = false;
@@ -1421,4 +1523,34 @@ void RibbonFormatSection::onScaleModeChanged(int index)
         [](Element& e) -> ScaleMode& { return e.imageScaleMode; }, "scale_mode"));
 }
 
+void RibbonFormatSection::onShearXChanged(double v)
+{
+    if (m_updating || m_graphicId.empty()) return;
+    m_doc->undoStack()->push(new SetElementFieldCmd<float>(
+        m_doc, m_graphicId, m_elementId, static_cast<float>(v),
+        [](Element& e) -> float& { return e.shearX; }, "shearX", ElemMergeTag::ShearX));
+}
+
+void RibbonFormatSection::onShearYChanged(double v)
+{
+    if (m_updating || m_graphicId.empty()) return;
+    m_doc->undoStack()->push(new SetElementFieldCmd<float>(
+        m_doc, m_graphicId, m_elementId, static_cast<float>(v),
+        [](Element& e) -> float& { return e.shearY; }, "shearY", ElemMergeTag::ShearY));
+}
+
+void RibbonFormatSection::onShadowChanged()
+{
+    if (m_updating || m_graphicId.empty()) return;
+    try {
+        Element::DropShadow sh = m_doc->scene().GetById(m_graphicId).GetById(m_elementId).shadow;
+        sh.enabled = m_shadowEnabled->isChecked();
+        sh.offsetX = m_spinShadowOffX->value();
+        sh.offsetY = m_spinShadowOffY->value();
+        sh.blur    = m_spinShadowBlur->value();
+        m_shadowControls->setEnabled(sh.enabled);
+        m_doc->undoStack()->push(
+            new SetElementShadowCmd(m_doc, m_graphicId, m_elementId, sh));
+    } catch (...) {}
+}
 

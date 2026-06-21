@@ -204,7 +204,7 @@ QVariant SceneTreeModel::data(const QModelIndex& index, int role) const
             switch (g.elements[ei].type) {
             case ElementType::Text:   return themedIcon(Icons16::File_Font);
             case ElementType::Image:  return themedIcon(Icons16::File_Picture);
-            case ElementType::QrCode: return themedIcon(Icons16::Hardware_Scanner);
+            case ElementType::QrCode: return qrCodeIcon();
             default:                  return themedIcon(Icons16::Shape_Square);
             }
         }

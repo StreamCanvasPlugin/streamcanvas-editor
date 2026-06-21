@@ -245,6 +245,32 @@ void SetChildrenPaddingCmd::redo()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SetElementShadowCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetElementShadowCmd::SetElementShadowCmd(SceneDocument* doc, std::string gi, std::string ei,
+                                         const Element::DropShadow& after, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_ei(std::move(ei)), m_after(after)
+{
+    setText("Set shadow");
+    try { m_before = m_doc->scene().GetById(m_gi).GetById(m_ei).shadow; } catch (...) {}
+}
+
+void SetElementShadowCmd::undo()
+{
+    m_doc->applyMutation([&](Scene& s) {
+        try { s.GetById(m_gi).GetById(m_ei).shadow = m_before; } catch (...) {}
+    });
+}
+
+void SetElementShadowCmd::redo()
+{
+    m_doc->applyMutation([&](Scene& s) {
+        try { s.GetById(m_gi).GetById(m_ei).shadow = m_after; } catch (...) {}
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SetCornerRadiusCmd
 // ─────────────────────────────────────────────────────────────────────────────
 

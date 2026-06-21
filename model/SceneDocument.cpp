@@ -239,6 +239,8 @@ static json elementToJson(const Element& el)
     j["z_order"] = el.zOrder;
     j["opacity"] = el.opacity;
     j["rotation"] = el.rotation;
+    if (el.shearX != 0.0f) j["shear_x"] = el.shearX;
+    if (el.shearY != 0.0f) j["shear_y"] = el.shearY;
     j["stroke_width"] = el.strokeWidth;
 
     // Corner radius: emit as number if all equal, else array
@@ -262,6 +264,15 @@ static json elementToJson(const Element& el)
         j["anim_in"] = animDefToJson(el.inAnimation);
     if (el.outAnimation.type != AnimationType::None)
         j["anim_out"] = animDefToJson(el.outAnimation);
+
+    if (el.shadow.enabled) {
+        j["shadow"] = {{"enabled",  el.shadow.enabled},
+                       {"offset_x", el.shadow.offsetX},
+                       {"offset_y", el.shadow.offsetY},
+                       {"blur",     el.shadow.blur},
+                       {"color",    json::array({el.shadow.color[0], el.shadow.color[1],
+                                                 el.shadow.color[2], el.shadow.color[3]})}};
+    }
 
     if (el.mask)
         j["mask"] = el.mask->id;

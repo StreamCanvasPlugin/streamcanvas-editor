@@ -58,3 +58,8 @@ QIcon themedIcon(Icons16 id)
 {
     return QIcon(new PaletteIconEngine(iconPath(id)));
 }
+
+QIcon qrCodeIcon()
+{
+    return QIcon(new PaletteIconEngine(":/icons/icons/qrcode-scan.svg"));
+}

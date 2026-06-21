@@ -123,6 +123,8 @@ enum : int {
     Rotation = 1005,
     Opacity = 1006,
     StrokeW = 1007,
+    ShearX = 1008,
+    ShearY = 1009,
 };
 }
 
@@ -255,6 +257,20 @@ private:
     std::string m_ei;
     float m_before[4];
     float m_after[4];
+};
+
+// ── SetElementShadowCmd ───────────────────────────────────────────────────────
+
+class SetElementShadowCmd : public QUndoCommand {
+public:
+    SetElementShadowCmd(SceneDocument* doc, std::string gi, std::string ei,
+                        const Element::DropShadow& after, QUndoCommand* parent = nullptr);
+    void undo() override;
+    void redo() override;
+private:
+    SceneDocument* m_doc;
+    std::string    m_gi, m_ei;
+    Element::DropShadow m_before, m_after;
 };
 
 // ── SetCornerRadiusCmd ────────────────────────────────────────────────────────

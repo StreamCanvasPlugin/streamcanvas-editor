@@ -15,17 +15,27 @@
 #include <string>
 
 #include <QAction>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QComboBox>
+#include <QDir>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTextBrowser>
 #include <QUndoStack>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QToolButton>
@@ -39,6 +49,26 @@ static const struct { const char* label; int w, h; } kScenePresets[] = {
     {"Custom", 0, 0},
 };
 static constexpr int kSceneCustomIdx = 5;
+
+static const QStringList kImageExts = {
+    "png","jpg","jpeg","bmp","gif","tiff","tif","webp"};
+
+static bool clipboardHasExternalImage()
+{
+    const QMimeData* md = QGuiApplication::clipboard()->mimeData();
+    if (!md) return false;
+    if (md->hasImage()) return true;
+    for (const QString& fmt : md->formats())
+        if (fmt.startsWith("image/")) return true;
+    if (md->hasUrls()) {
+        for (const QUrl& url : md->urls()) {
+            if (!url.isLocalFile()) continue;
+            if (kImageExts.contains(QFileInfo(url.toLocalFile()).suffix().toLower()))
+                return true;
+        }
+    }
+    return false;
+}
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_doc(new SceneDocument(this)),
@@ -113,6 +143,12 @@ MainWindow::MainWindow(QWidget* parent)
 
     setupMenuBar();
     updateWindowTitle();
+
+    connect(QGuiApplication::clipboard(), &QClipboard::changed, this,
+        [this](QClipboard::Mode mode) {
+            if (mode == QClipboard::Clipboard)
+                updateToolBarState(m_editorScene->selection());
+        });
 
     connect(m_editorScene, &EditorScene::selectionChanged, this, &MainWindow::onSelectionChanged);
     connect(m_formatSection, &RibbonFormatSection::elementIdChanged,
@@ -197,15 +233,22 @@ void MainWindow::setupRibbon()
         makeSmallStack(gl, {openAct, saveAct});
     }
 
-    {   // Clipboard group (placeholder)
+    {   // Clipboard group
         auto* gl = makeGroup(homePage, homeLayout, "Clipboard");
 
-        auto* paste = new QAction(themedIcon(Icons16::Action_Paste), "Paste", this);
+        m_pasteAction = new QAction(themedIcon(Icons16::Action_Paste), "Paste", this);
+        m_pasteAction->setEnabled(false);
+        connect(m_pasteAction, &QAction::triggered, this, [this]() { doPaste(false); });
+
         auto* pasteMenu = new QMenu(this);
-        pasteMenu->addAction("Paste in place");
-        pasteMenu->addAction("Paste special…");
+        m_pasteInPlaceAction = new QAction("Paste in Place", this);
+        m_pasteInPlaceAction->setEnabled(false);
+        connect(m_pasteInPlaceAction, &QAction::triggered, this, [this]() { doPaste(true); });
+        pasteMenu->addAction(m_pasteInPlaceAction);
+        pasteMenu->addAction("Paste special…")->setEnabled(false);
+
         auto* pasteBtn = new QToolButton;
-        pasteBtn->setDefaultAction(paste);
+        pasteBtn->setDefaultAction(m_pasteAction);
         pasteBtn->setIconSize({32, 32});
         pasteBtn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         pasteBtn->setMinimumHeight(56);
@@ -214,9 +257,15 @@ void MainWindow::setupRibbon()
         pasteBtn->setPopupMode(QToolButton::MenuButtonPopup);
         gl->insertWidget(gl->count()-1, pasteBtn);
 
-        auto* cutAct  = new QAction(themedIcon(Icons16::Action_Cut),  "Cut",  this);
-        auto* copyAct = new QAction(themedIcon(Icons16::Action_Copy), "Copy", this);
-        makeSmallStack(gl, {cutAct, copyAct});
+        m_cutAction = new QAction(themedIcon(Icons16::Action_Cut), "Cut", this);
+        m_cutAction->setEnabled(false);
+        connect(m_cutAction, &QAction::triggered, this, &MainWindow::onCut);
+
+        m_copyAction = new QAction(themedIcon(Icons16::Action_Copy), "Copy", this);
+        m_copyAction->setEnabled(false);
+        connect(m_copyAction, &QAction::triggered, this, &MainWindow::onCopy);
+
+        makeSmallStack(gl, {m_cutAction, m_copyAction});
     }
 
     {   // View group
@@ -317,8 +366,8 @@ void MainWindow::setupRibbon()
         gl->insertWidget(gl->count()-1, makeLargeBtn(m_addTextAction));
 
         auto makeElementAction = [&](const std::string& prefix, const std::string& type,
-                                     Icons16 icon, const QString& label) -> QAction* {
-            auto* act = new QAction(themedIcon(icon), label, this);
+                                     QIcon icon, const QString& label) -> QAction* {
+            auto* act = new QAction(std::move(icon), label, this);
             act->setEnabled(false);
             connect(act, &QAction::triggered, this, [this, prefix, type]() {
                 const SelectionId sel = m_editorScene->selection();
@@ -345,8 +394,8 @@ void MainWindow::setupRibbon()
             return act;
         };
 
-        m_addImageAction  = makeElementAction("image_",  "image",   Icons16::File_Picture,     "Image");
-        m_addQrCodeAction = makeElementAction("qr_",     "qr_code", Icons16::Hardware_Scanner,  "QR Code");
+        m_addImageAction  = makeElementAction("image_",  "image",   themedIcon(Icons16::File_Picture), "Image");
+        m_addQrCodeAction = makeElementAction("qr_",     "qr_code", qrCodeIcon(),                     "QR Code");
     }
 
     // ── Scene tab — always visible, holds scene name + canvas dimensions ────────
@@ -524,8 +573,23 @@ void MainWindow::setupMenuBar()
     editMenu->addAction(m_undoAction);
 
     m_redoAction = m_doc->undoStack()->createRedoAction(this, "&Redo");
-    m_redoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y));
+    m_redoAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z),
+                                QKeySequence(Qt::CTRL | Qt::Key_Y)});
     editMenu->addAction(m_redoAction);
+
+    editMenu->addSeparator();
+
+    m_cutAction->setShortcut(QKeySequence::Cut);
+    editMenu->addAction(m_cutAction);
+
+    m_copyAction->setShortcut(QKeySequence::Copy);
+    editMenu->addAction(m_copyAction);
+
+    m_pasteAction->setShortcut(QKeySequence::Paste);
+    editMenu->addAction(m_pasteAction);
+
+    m_pasteInPlaceAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
+    editMenu->addAction(m_pasteInPlaceAction);
 
     // View
     auto* viewMenu = menuBar()->addMenu("&View");
@@ -562,6 +626,94 @@ void MainWindow::setupMenuBar()
     makeGuide("Center Lines",     CanvasWidget::GuideCenterLines,  true);
     makeGuide("Title Safe (90%)", CanvasWidget::GuideTitleSafe,    false);
     makeGuide("Action Safe (80%)",CanvasWidget::GuideActionSafe,   false);
+
+    // Help
+    auto* helpMenu = menuBar()->addMenu("&Help");
+
+    auto* shortcutsAct = helpMenu->addAction("Keyboard &Shortcuts...");
+    shortcutsAct->setShortcut(QKeySequence(Qt::Key_F1));
+    connect(shortcutsAct, &QAction::triggered, this, [this]() {
+        auto* dlg = new QDialog(this);
+        dlg->setWindowTitle("Keyboard Shortcuts");
+        dlg->resize(500, 520);
+        auto* browser = new QTextBrowser(dlg);
+        browser->setHtml(
+            "<style>"
+            "body { font-family: sans-serif; font-size: 13px; margin: 8px; }"
+            "h3 { margin-top: 14px; margin-bottom: 2px; color: #555; font-size: 12px;"
+            "     text-transform: uppercase; letter-spacing: 1px; }"
+            "table { border-collapse: collapse; width: 100%; margin-bottom: 4px; }"
+            "td { padding: 3px 6px; border-bottom: 1px solid #eee; }"
+            "td:first-child { font-family: monospace; font-weight: bold;"
+            "                 white-space: nowrap; color: #333; width: 200px; }"
+            "</style>"
+            "<h3>File</h3>"
+            "<table>"
+            "<tr><td>Ctrl+N</td><td>New scene</td></tr>"
+            "<tr><td>Ctrl+O</td><td>Open scene file</td></tr>"
+            "<tr><td>Ctrl+S</td><td>Save</td></tr>"
+            "<tr><td>Ctrl+Shift+S</td><td>Save As</td></tr>"
+            "<tr><td>Ctrl+Q</td><td>Quit</td></tr>"
+            "</table>"
+            "<h3>Edit</h3>"
+            "<table>"
+            "<tr><td>Ctrl+Z</td><td>Undo</td></tr>"
+            "<tr><td>Ctrl+Shift+Z &nbsp;/&nbsp; Ctrl+Y</td><td>Redo</td></tr>"
+            "<tr><td>Ctrl+C</td><td>Copy selected graphic or element</td></tr>"
+            "<tr><td>Ctrl+X</td><td>Cut selected graphic or element</td></tr>"
+            "<tr><td>Ctrl+V</td><td>Paste (offset +10 px)</td></tr>"
+            "<tr><td>Ctrl+Shift+V</td><td>Paste in place</td></tr>"
+            "</table>"
+            "<h3>View</h3>"
+            "<table>"
+            "<tr><td>Ctrl+=</td><td>Zoom in</td></tr>"
+            "<tr><td>Ctrl+−</td><td>Zoom out</td></tr>"
+            "<tr><td>Ctrl+0</td><td>Fit canvas to window</td></tr>"
+            "<tr><td>;</td><td>Toggle snapping</td></tr>"
+            "</table>"
+            "<h3>Canvas</h3>"
+            "<table>"
+            "<tr><td>Click</td><td>Select element or graphic</td></tr>"
+            "<tr><td>Drag element</td><td>Move element</td></tr>"
+            "<tr><td>Drag handle</td><td>Resize element</td></tr>"
+            "<tr><td>Shift + drag corner</td><td>Resize proportionally</td></tr>"
+            "<tr><td>Ctrl + drag corner</td><td>Resize from center</td></tr>"
+            "<tr><td>← ↑ → ↓</td><td>Nudge element / graphic 1 px</td></tr>"
+            "<tr><td>Shift + ← ↑ → ↓</td><td>Nudge element / graphic 10 px</td></tr>"
+            "<tr><td>Middle mouse drag</td><td>Pan canvas</td></tr>"
+            "<tr><td>Scroll wheel</td><td>Zoom canvas</td></tr>"
+            "</table>"
+            "<h3>Insert (requires a graphic selected)</h3>"
+            "<table>"
+            "<tr><td>Insert tab → Graphic</td><td>Add new graphic layer</td></tr>"
+            "<tr><td>Insert tab → Rectangle</td><td>Add rectangle element</td></tr>"
+            "<tr><td>Insert tab → Text</td><td>Add text element</td></tr>"
+            "<tr><td>Insert tab → Image</td><td>Add image element</td></tr>"
+            "<tr><td>Insert tab → QR Code</td><td>Add QR code element</td></tr>"
+            "</table>"
+            "<h3>Misc</h3>"
+            "<table>"
+            "<tr><td>F1</td><td>Show this shortcuts reference</td></tr>"
+            "</table>"
+        );
+        auto* layout = new QVBoxLayout(dlg);
+        layout->addWidget(browser);
+        auto* btns = new QDialogButtonBox(QDialogButtonBox::Close, dlg);
+        connect(btns, &QDialogButtonBox::rejected, dlg, &QDialog::accept);
+        layout->addWidget(btns);
+        dlg->exec();
+    });
+
+    helpMenu->addSeparator();
+
+    auto* aboutAct = helpMenu->addAction("&About...");
+    connect(aboutAct, &QAction::triggered, this, [this]() {
+        QMessageBox::about(this, "About obs-graphics Scene Editor",
+            "<b>obs-graphics Scene Editor</b> &mdash; version 0.1<br><br>"
+            "A standalone desktop editor for authoring animated broadcast graphics scenes.<br>"
+            "Scenes are saved as JSON and consumed by the <i>obs-graphics</i> OBS Studio plugin.<br><br>"
+            "Built with Qt 6 and Cairo.");
+    });
 }
 
 // ── File operations ───────────────────────────────────────────────────────────
@@ -637,6 +789,22 @@ void MainWindow::updateToolBarState(SelectionId id)
     if (m_addTextAction)   m_addTextAction->setEnabled(hasGraphic);
     if (m_addImageAction)  m_addImageAction->setEnabled(hasGraphic);
     if (m_addQrCodeAction) m_addQrCodeAction->setEnabled(hasGraphic);
+
+    bool hasSelection = (id.level == SelectionId::Level::Graphic ||
+                         id.level == SelectionId::Level::Element);
+    if (m_cutAction)  m_cutAction->setEnabled(hasSelection);
+    if (m_copyAction) m_copyAction->setEnabled(hasSelection);
+
+    bool canPaste = false;
+    if (m_clipboard.has_value()) {
+        std::string clipType = m_clipboard->value("_clipboard_type", "");
+        canPaste = (clipType == "graphic") ||
+                   (clipType == "element" && hasGraphic);
+    }
+    if (!canPaste && hasGraphic)
+        canPaste = clipboardHasExternalImage();
+    if (m_pasteAction)        m_pasteAction->setEnabled(canPaste);
+    if (m_pasteInPlaceAction) m_pasteInPlaceAction->setEnabled(canPaste);
 }
 
 void MainWindow::onSelectionChanged(SelectionId id)
@@ -694,4 +862,232 @@ void MainWindow::onSelectionChanged(SelectionId id)
 
         m_timingEditor->clear();
     }
+}
+
+// ── Clipboard ─────────────────────────────────────────────────────────────────
+
+void MainWindow::onCopy()
+{
+    const SelectionId sel = m_editorScene->selection();
+    const Scene& s = m_doc->scene();
+
+    if (sel.level == SelectionId::Level::Graphic &&
+        sel.graphicIndex >= 0 && sel.graphicIndex < (int)s.graphics.size()) {
+        nlohmann::json full = SceneDocument::sceneToJson(s);
+        nlohmann::json gj = full["graphics"][sel.graphicIndex];
+        gj["_clipboard_type"] = "graphic";
+        m_clipboard = std::move(gj);
+
+    } else if (sel.level == SelectionId::Level::Element &&
+               sel.graphicIndex >= 0 && sel.graphicIndex < (int)s.graphics.size()) {
+        const Graphic& g = s.graphics[sel.graphicIndex];
+        if (sel.elementIndex >= 0 && sel.elementIndex < (int)g.elements.size()) {
+            nlohmann::json full = SceneDocument::sceneToJson(s);
+            nlohmann::json ej = full["graphics"][sel.graphicIndex]["elements"][sel.elementIndex];
+            ej["_clipboard_type"] = "element";
+            m_clipboard = std::move(ej);
+        }
+    }
+    updateToolBarState(m_editorScene->selection());
+}
+
+void MainWindow::onCut()
+{
+    const SelectionId sel = m_editorScene->selection();
+    onCopy();
+    if (!m_clipboard.has_value()) return;
+
+    if (sel.level == SelectionId::Level::Graphic) {
+        if (sel.graphicIndex < 0 || sel.graphicIndex >= (int)m_doc->scene().graphics.size()) return;
+        const std::string gid = m_doc->scene().graphics[sel.graphicIndex].id;
+        m_doc->undoStack()->push(new RemoveGraphicCmd(m_doc, gid));
+    } else if (sel.level == SelectionId::Level::Element) {
+        if (sel.graphicIndex < 0 || sel.graphicIndex >= (int)m_doc->scene().graphics.size()) return;
+        const auto& g = m_doc->scene().graphics[sel.graphicIndex];
+        if (sel.elementIndex < 0 || sel.elementIndex >= (int)g.elements.size()) return;
+        m_doc->undoStack()->push(new RemoveElementCmd(m_doc, g.id, g.elements[sel.elementIndex].id));
+    }
+}
+
+void MainWindow::doPaste(bool inPlace)
+{
+    using json = nlohmann::json;
+
+    // ── Internal clipboard (app-internal cut/copy takes priority) ────────────
+    if (m_clipboard.has_value()) {
+        json cb = *m_clipboard;
+        std::string clipType = cb.value("_clipboard_type", "");
+        cb.erase("_clipboard_type");
+        cb.erase("mask");
+        cb.erase("parent");
+        const double offset = inPlace ? 0.0 : 10.0;
+
+        if (clipType == "graphic") {
+            int maxN = 0;
+            for (const auto& g : m_doc->scene().graphics)
+                if (g.id.rfind("graphic_", 0) == 0)
+                    try { maxN = std::max(maxN, std::stoi(g.id.substr(8))); } catch (...) {}
+            std::string newId = "graphic_" + std::to_string(maxN + 1);
+            cb["id"] = newId;
+            cb["z_order"] = (int)m_doc->scene().graphics.size();
+
+            if (cb.contains("elements") && cb["elements"].is_array()) {
+                for (auto& ej : cb["elements"]) {
+                    ej.erase("mask");
+                    ej.erase("parent");
+                    if (offset != 0.0) {
+                        if (ej.contains("x")) ej["x"] = ej["x"].get<double>() + offset;
+                        if (ej.contains("y")) ej["y"] = ej["y"].get<double>() + offset;
+                    }
+                }
+            }
+
+            m_doc->undoStack()->push(new AddGraphicCmd(m_doc, std::move(cb)));
+
+            const auto& gs = m_doc->scene().graphics;
+            for (int i = 0; i < (int)gs.size(); ++i)
+                if (gs[i].id == newId)
+                    { m_editorScene->setSelection({SelectionId::Level::Graphic, i, -1}); break; }
+
+        } else if (clipType == "element") {
+            const SelectionId sel = m_editorScene->selection();
+            int gi = -1;
+            if (sel.level == SelectionId::Level::Graphic || sel.level == SelectionId::Level::Element)
+                gi = sel.graphicIndex;
+            if (gi < 0 || gi >= (int)m_doc->scene().graphics.size()) {
+                updateToolBarState(m_editorScene->selection());
+                return;
+            }
+
+            const Graphic& graphic = m_doc->scene().graphics[gi];
+            const std::string gid = graphic.id;
+
+            std::string origType = cb.value("type", "rectangle");
+            std::string prefix = "element_";
+            if (origType == "text")     prefix = "text_";
+            else if (origType == "image")    prefix = "image_";
+            else if (origType == "qr_code")  prefix = "qr_";
+
+            int maxN = 0;
+            for (const auto& el : graphic.elements)
+                if (el.id.rfind(prefix, 0) == 0)
+                    try { maxN = std::max(maxN, std::stoi(el.id.substr(prefix.size()))); } catch (...) {}
+            std::string newId = prefix + std::to_string(maxN + 1);
+
+            cb["id"] = newId;
+            cb["z_order"] = (int)graphic.elements.size();
+            if (offset != 0.0) {
+                if (cb.contains("x")) cb["x"] = cb["x"].get<double>() + offset;
+                if (cb.contains("y")) cb["y"] = cb["y"].get<double>() + offset;
+            }
+
+            m_doc->undoStack()->push(new AddElementCmd(m_doc, gid, std::move(cb)));
+
+            const auto& els = m_doc->scene().graphics[gi].elements;
+            for (int ei = 0; ei < (int)els.size(); ++ei)
+                if (els[ei].id == newId)
+                    { m_editorScene->setSelection({SelectionId::Level::Element, gi, ei}); break; }
+        }
+
+        updateToolBarState(m_editorScene->selection());
+        return;
+    }
+
+    // ── System clipboard image ────────────────────────────────────────────────
+    const QMimeData* md = QGuiApplication::clipboard()->mimeData();
+    if (!md) return;
+
+    // Prefer a local file URL so we don't need to save anything
+    QString imagePath;
+    QImage img;
+    if (md->hasUrls()) {
+        for (const QUrl& url : md->urls()) {
+            if (!url.isLocalFile()) continue;
+            QString p = url.toLocalFile();
+            if (kImageExts.contains(QFileInfo(p).suffix().toLower())) {
+                imagePath = p;
+                img.load(imagePath);
+                break;
+            }
+        }
+    }
+    // Fall back to raw pixel data
+    if (imagePath.isEmpty()) {
+        if (md->hasImage())
+            img = qvariant_cast<QImage>(md->imageData());
+        // hasImage() can return false even when image/* formats are present (Linux/Wayland)
+        if (img.isNull()) {
+            for (const QString& fmt : md->formats()) {
+                if (!fmt.startsWith("image/")) continue;
+                QByteArray raw = md->data(fmt);
+                if (!raw.isEmpty() && img.loadFromData(raw)) break;
+            }
+        }
+    }
+
+    if (img.isNull() && imagePath.isEmpty()) return;
+
+    // Need a target graphic
+    const SelectionId sel = m_editorScene->selection();
+    int gi = -1;
+    if (sel.level == SelectionId::Level::Graphic || sel.level == SelectionId::Level::Element)
+        gi = sel.graphicIndex;
+    if (gi < 0 || gi >= (int)m_doc->scene().graphics.size()) {
+        QMessageBox::information(this, "Paste Image",
+            "Select a graphic layer first to paste an image into.");
+        return;
+    }
+
+    // Raw pixel data needs to be saved to disk first
+    if (imagePath.isEmpty()) {
+        QString defaultDir = m_doc->filePath().isEmpty()
+            ? QDir::homePath()
+            : QFileInfo(m_doc->filePath()).absolutePath();
+        imagePath = QFileDialog::getSaveFileName(
+            this, "Save Clipboard Image",
+            defaultDir + "/clipboard_image.png",
+            "PNG Images (*.png);;JPEG Images (*.jpg *.jpeg);;All Files (*)");
+        if (imagePath.isEmpty()) return;
+        if (!img.save(imagePath)) {
+            QMessageBox::warning(this, "Save Failed",
+                "Could not save the clipboard image.");
+            return;
+        }
+    }
+
+    // Load dimensions if we only resolved a URL (img still null)
+    if (img.isNull()) img.load(imagePath);
+
+    // Build element, scale down to fit scene if necessary
+    double w = img.isNull() ? 200.0 : img.width();
+    double h = img.isNull() ? 200.0 : img.height();
+    const Scene& sc = m_doc->scene();
+    if (w > sc.width)  { h = h * sc.width  / w; w = sc.width; }
+    if (h > sc.height) { w = w * sc.height / h; h = sc.height; }
+
+    const Graphic& graphic = m_doc->scene().graphics[gi];
+    const std::string gid = graphic.id;
+
+    int maxN = 0;
+    for (const auto& el : graphic.elements)
+        if (el.id.rfind("image_", 0) == 0)
+            try { maxN = std::max(maxN, std::stoi(el.id.substr(6))); } catch (...) {}
+    std::string newId = "image_" + std::to_string(maxN + 1);
+
+    json j = {{"id", newId}, {"type", "image"},
+              {"x", inPlace ? 0.0 : 100.0},
+              {"y", inPlace ? 0.0 : 100.0},
+              {"w", w}, {"h", h},
+              {"z_order", (int)graphic.elements.size()},
+              {"image_path", imagePath.toStdString()},
+              {"scale_mode", "contain"}};
+
+    m_doc->undoStack()->push(new AddElementCmd(m_doc, gid, std::move(j)));
+
+    const auto& els = m_doc->scene().graphics[gi].elements;
+    for (int ei = 0; ei < (int)els.size(); ++ei)
+        if (els[ei].id == newId)
+            { m_editorScene->setSelection({SelectionId::Level::Element, gi, ei}); break; }
+
+    updateToolBarState(m_editorScene->selection());
 }
