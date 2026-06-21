@@ -82,3 +82,7 @@ CMakeLists.txt.user*
 .uic/
 /build*/
 /.qtcreator/
+
+# Claude Code internal state
+.claude/
+.vscode/
