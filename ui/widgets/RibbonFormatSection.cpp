@@ -263,17 +263,6 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
         m_spinH   = mkSpin(" px", -9999, 9999);
         m_spinRot = mkSpin("°",   -9999, 9999);
 
-        gl->addWidget(makeRibbonLabel("X "),              0, 0);
-        gl->addWidget(m_spinX,                      0, 1);
-        gl->addWidget(makeRibbonLabel("Width "),          0, 2);
-        gl->addWidget(m_spinW,                      0, 3);
-        gl->addWidget(makeRibbonLabel("Y "),              1, 0);
-        gl->addWidget(m_spinY,                      1, 1);
-        gl->addWidget(makeRibbonLabel("Height "),         1, 2);
-        gl->addWidget(m_spinH,                      1, 3);
-        gl->addWidget(makeRibbonLabel("Rotation (deg.) "),2, 0);
-        gl->addWidget(m_spinRot,                    2, 1, 1, 3);
-
         m_spinShearX = mkSpin("", -10, 10);
         m_spinShearX->setDecimals(3);
         m_spinShearX->setSingleStep(0.01);
@@ -284,15 +273,26 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
         m_spinShearY->setSingleStep(0.01);
         m_spinShearY->setToolTip("Vertical shear");
 
-        gl->addWidget(makeRibbonLabel("Shear X "), 3, 0);
-        gl->addWidget(m_spinShearX,                3, 1);
-        gl->addWidget(makeRibbonLabel("Shear Y "), 3, 2);
-        gl->addWidget(m_spinShearY,                3, 3);
+        gl->addWidget(makeRibbonLabel("X "),              0, 0);
+        gl->addWidget(m_spinX,                            0, 1);
+        gl->addWidget(makeRibbonLabel("Width "),          0, 2);
+        gl->addWidget(m_spinW,                            0, 3);
+        gl->addWidget(makeRibbonLabel("Shear X "),        0, 4);
+        gl->addWidget(m_spinShearX,                       0, 5);
 
-        gl->setColumnStretch(0, 0);
-        gl->setColumnStretch(1, 0);
-        gl->setColumnStretch(2, 0);
-        gl->setColumnStretch(3, 0);
+        gl->addWidget(makeRibbonLabel("Y "),              1, 0);
+        gl->addWidget(m_spinY,                            1, 1);
+        gl->addWidget(makeRibbonLabel("Height "),         1, 2);
+        gl->addWidget(m_spinH,                            1, 3);
+        gl->addWidget(makeRibbonLabel("Shear Y "),        1, 4);
+        gl->addWidget(m_spinShearY,                       1, 5);
+
+        gl->addWidget(makeRibbonLabel("Rotation (deg.) "),2, 0);
+        gl->addWidget(m_spinRot,                    2, 1, 1, 3);
+
+        gl->setColumnStretch(1, 1);
+        gl->setColumnStretch(3, 1);
+        gl->setColumnStretch(5, 1);
 
         connect(m_spinX,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onXChanged);
         connect(m_spinY,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onYChanged);

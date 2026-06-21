@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>icons/qrcode-scan.svg</file>
+    </qresource>
+</RCC>

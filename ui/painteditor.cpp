@@ -1,10 +1,12 @@
 #include "painteditor.h"
 #include "ui/widgets/BrandColorSwatchGrid.h"
 #include "model/SceneDocument.h"
+#include <QFileDialog>
 #include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QEvent>
 
@@ -17,7 +19,7 @@ PaintEditor::PaintEditor(SceneDocument* doc, QWidget* parent) : QWidget(parent)
 
     auto* typeLabel = new QLabel("Type");
     m_typeCombo = new QComboBox;
-    m_typeCombo->addItems({"None", "Solid", "Linear Gradient", "Radial Gradient"});
+    m_typeCombo->addItems({"None", "Solid", "Linear Gradient", "Radial Gradient", "Image"});
     m_typeCombo->installEventFilter(this);
     layout->addWidget(typeLabel, 0, 0);
     layout->addWidget(m_typeCombo, 0, 1);
@@ -122,6 +124,37 @@ PaintEditor::PaintEditor(SceneDocument* doc, QWidget* parent) : QWidget(parent)
         m_radialEditor->setStops({{0.0, Qt::black}, {1.0, Qt::white}});
     }
 
+    // Page 3: Image
+    {
+        auto* page = new QGroupBox();
+        auto* gl = new QGridLayout(page);
+        gl->setColumnStretch(1, 1);
+
+        m_imagePathForPaint = new QLineEdit;
+        m_imagePathForPaint->setPlaceholderText("Image path (PNG)…");
+
+        auto* browseBtn = new QToolButton;
+        browseBtn->setText("…");
+        browseBtn->setToolTip("Browse for image file");
+
+        gl->addWidget(new QLabel("Path"), 0, 0);
+        gl->addWidget(m_imagePathForPaint, 0, 1);
+        gl->addWidget(browseBtn, 0, 2);
+
+        m_mainSelector->addWidget(page);
+
+        connect(m_imagePathForPaint, &QLineEdit::editingFinished, this, [this]() {
+            emitPaint();
+        });
+        connect(browseBtn, &QToolButton::clicked, this, [this]() {
+            const QString path = QFileDialog::getOpenFileName(
+                this, "Select Image", QString(), "PNG Images (*.png);;All Files (*)");
+            if (path.isEmpty()) return;
+            m_imagePathForPaint->setText(path);
+            emitPaint();
+        });
+    }
+
     m_mainSelector->hide();
 
     layout->addWidget(m_mainSelector, 1, 0, 1, 2);
@@ -189,6 +222,9 @@ Paint PaintEditor::getPaint() const
             paint.stops.push_back(est);
         }
     } break;
+    case 4: // Image
+        paint = Paint::Image(m_imagePathForPaint->text().toStdString());
+        break;
     }
 
     return paint;
@@ -212,6 +248,9 @@ void PaintEditor::setPaint(const Paint& paint)
         break;
     case Paint::Type::Radial:
         idx = 3;
+        break;
+    case Paint::Type::Image:
+        idx = 4;
         break;
     }
     m_typeCombo->setCurrentIndex(idx);
@@ -254,6 +293,9 @@ void PaintEditor::setPaint(const Paint& paint)
         }
         m_radialEditor->setStops(stops);
     } break;
+    case Paint::Type::Image:
+        m_imagePathForPaint->setText(QString::fromStdString(paint.imagePath));
+        break;
     }
 
     m_updating = false;
