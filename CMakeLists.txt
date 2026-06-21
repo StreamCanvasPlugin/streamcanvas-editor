@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Svg)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Svg)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine engine)
 
@@ -26,7 +26,6 @@ set(PROJECT_SOURCES
         model/UndoCommands.cpp
         ui/adaptivestack.h ui/adaptivestack.cpp
         ui/sceneproperties.h ui/sceneproperties.cpp
-        ui/elementproperties.h ui/elementproperties.cpp
         ui/transformeditor.h ui/transformeditor.cpp
         ui/animationeditor.h ui/animationeditor.cpp
         ui/widgets/ColorUtils.h     ui/widgets/ColorUtils.cpp
@@ -42,11 +41,9 @@ set(PROJECT_SOURCES
         ui/widgets/ColorPicker.h    ui/widgets/ColorPicker.cpp
         ui/cornerradiuseditor.h ui/cornerradiuseditor.cpp
         ui/paddingeditor.h ui/paddingeditor.cpp
-        ui/fontproperties.h ui/fontproperties.cpp
         ui/graphicproperties.h ui/graphicproperties.cpp
         icons.h icons.cpp
         ui/painteditor.h ui/painteditor.cpp
-        ui/styleproperties.h ui/styleproperties.cpp
         ui/widgets/CanvasWidget.h ui/widgets/CanvasWidget.cpp
         ui/widgets/SceneTreeModel.h ui/widgets/SceneTreeModel.cpp
         ui/widgets/SceneTreeView.h ui/widgets/SceneTreeView.cpp
@@ -54,6 +51,12 @@ set(PROJECT_SOURCES
         ui/widgets/AnimationTimingEditor.h ui/widgets/AnimationTimingEditor.cpp
         ui/widgets/GraphicTimingEditor.h ui/widgets/GraphicTimingEditor.cpp
         ui/widgets/ScrubRuler.h ui/widgets/ScrubRuler.cpp
+        ui/widgets/CornerRadiusButton.h ui/widgets/CornerRadiusButton.cpp
+        ui/widgets/PaddingButton.h      ui/widgets/PaddingButton.cpp
+        ui/widgets/PaintPickerWidget.h  ui/widgets/PaintPickerWidget.cpp
+        ui/widgets/BrandColorSwatchGrid.h ui/widgets/BrandColorSwatchGrid.cpp
+        ui/widgets/RibbonFormatSection.h ui/widgets/RibbonFormatSection.cpp
+        ui/UiUtils.h ui/UiUtils.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -75,12 +78,16 @@ else()
     endif()
 endif()
 
-# Get and Link QtAwesome
 CPMAddPackage(
-    NAME QtAwesome
-    GITHUB_REPOSITORY gamecreature/QtAwesome
-    GIT_TAG font-awesome-7.0.0
-    DOWNLOAD_ONLY YES
+    NAME qlementine-icons
+    GITHUB_REPOSITORY oclero/qlementine-icons
+    GIT_TAG master
+)
+
+CPMAddPackage(
+    NAME Ribbon
+    GITHUB_REPOSITORY obs-graphics/qt-ribbon
+    GIT_TAG master
 )
 
 CPMAddPackage(
@@ -94,16 +101,14 @@ if (nlohmann_json_ADDED)
   target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
 endif()
 
-# Patch out CPack inclusion — it only runs when QtAwesome is the top-level project
-set(_qtawesome_cmake_patched)
-file(READ "${QtAwesome_SOURCE_DIR}/CMakeLists.txt" _qtawesome_cmake)
-string(REPLACE "include(CPack)" "# include(CPack)  # disabled by consumer" _qtawesome_cmake_patched "${_qtawesome_cmake}")
-file(WRITE "${QtAwesome_SOURCE_DIR}/CMakeLists.txt" "${_qtawesome_cmake_patched}")
-
-add_subdirectory(${QtAwesome_SOURCE_DIR} ${QtAwesome_BINARY_DIR})
-
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets engine QtAwesome)
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Svg
+    engine
+    qlementine-icons
+    Ribbon::Ribbon
+)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

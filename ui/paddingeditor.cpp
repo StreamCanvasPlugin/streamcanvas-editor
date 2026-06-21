@@ -32,7 +32,7 @@ PaddingEditor::PaddingEditor(QWidget* parent) : QWidget(parent)
     // row 2 col 1: bottom
     layout->addWidget(m_bottom, 2, 1, Qt::AlignHCenter);
 
-    m_link = new QPushButton(qta()->icon(fa::fa_solid, fa::fa_link), "");
+    m_link = new QPushButton(themedIcon(Icons16::Misc_Link), "");
     m_link->setToolTip("Link");
     m_link->setCheckable(true);
     layout->addWidget(m_link, 1, 1, Qt::AlignCenter);
@@ -84,7 +84,7 @@ void PaddingEditor::onLinkClick(bool linked)
     m_right->setEnabled(!linked);
     m_bottom->setEnabled(!linked);
     m_link->setToolTip(linked ? "Unlink" : "Link");
-    m_link->setIcon(qta()->icon(fa::fa_solid, linked ? fa::fa_link_slash : fa::fa_link));
+    m_link->setIcon(QIcon(iconPath(linked ? Icons16::Misc_LinkBreak : Icons16::Misc_Link)));
 
     if (!linked)
         return;

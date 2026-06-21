@@ -1,5 +1,4 @@
-#ifndef PAINTEDITOR_H
-#define PAINTEDITOR_H
+#pragma once
 
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -11,11 +10,14 @@
 #include "ui/widgets/LinearGradientEditor.h"
 #include "ui/widgets/RadialGradientEditor.h"
 
+class BrandColorSwatchGrid;
+class SceneDocument;
+
 class PaintEditor : public QWidget {
     Q_OBJECT
 
 public:
-    explicit PaintEditor(QWidget* parent = nullptr);
+    explicit PaintEditor(SceneDocument* doc = nullptr, QWidget* parent = nullptr);
 
     Paint getPaint() const;
     void setPaint(const Paint& paint);
@@ -31,8 +33,8 @@ private slots:
     void onStopSelected(int index);
 
 private:
-    QComboBox* typeComboBox;
-    AdaptiveStack* mainSelector;
+    QComboBox* m_typeCombo;
+    AdaptiveStack* m_mainSelector;
 
     // solid page
     ColorPicker* m_cpSolid;
@@ -48,9 +50,8 @@ private:
     RadialGradientEditor* m_radialEditor;
 
     bool m_updating{false}; // prevent recursion
+    BrandColorSwatchGrid* m_brandGrid{nullptr};
 
     void emitPaint();
-    bool filterScroll(QObject* obj, QEvent* event);
+    bool eventFilter(QObject* obj, QEvent* event) override;
 };
-
-#endif // PAINTEDITOR_H

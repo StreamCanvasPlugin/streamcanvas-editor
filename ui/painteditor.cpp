@@ -1,12 +1,14 @@
 #include "painteditor.h"
+#include "ui/widgets/BrandColorSwatchGrid.h"
+#include "model/SceneDocument.h"
 #include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QVBoxLayout>
-#include <qcoreevent.h>
+#include <QEvent>
 
-PaintEditor::PaintEditor(QWidget* parent) : QWidget(parent)
+PaintEditor::PaintEditor(SceneDocument* doc, QWidget* parent) : QWidget(parent)
 {
     auto* layout = new QGridLayout(this);
     layout->setColumnStretch(0, 0);
@@ -14,21 +16,21 @@ PaintEditor::PaintEditor(QWidget* parent) : QWidget(parent)
     layout->setContentsMargins(0, 0, 0, 0);
 
     auto* typeLabel = new QLabel("Type");
-    typeComboBox = new QComboBox;
-    typeComboBox->addItems({"None", "Solid", "Linear Gradient", "Radial Gradient"});
-    typeComboBox->installEventFilter(this);
+    m_typeCombo = new QComboBox;
+    m_typeCombo->addItems({"None", "Solid", "Linear Gradient", "Radial Gradient"});
+    m_typeCombo->installEventFilter(this);
     layout->addWidget(typeLabel, 0, 0);
-    layout->addWidget(typeComboBox, 0, 1);
+    layout->addWidget(m_typeCombo, 0, 1);
 
-    connect(typeComboBox, &QComboBox::currentIndexChanged, this, &PaintEditor::onTypeChanged);
+    connect(m_typeCombo, &QComboBox::currentIndexChanged, this, &PaintEditor::onTypeChanged);
 
-    mainSelector = new AdaptiveStack;
+    m_mainSelector = new AdaptiveStack;
 
     // Page 0: solid
     m_cpSolid = new ColorPicker();
     m_cpSolid->setGeometry(0, 0, 80, 80);
     m_cpSolid->setColor(Qt::black);
-    mainSelector->addWidget(m_cpSolid);
+    m_mainSelector->addWidget(m_cpSolid);
 
     connect(m_cpSolid, &ColorPicker::colorChanged, this, &PaintEditor::onColorChanged);
 
@@ -60,7 +62,7 @@ PaintEditor::PaintEditor(QWidget* parent) : QWidget(parent)
         m_cpLinear->setColor(Qt::black);
         layout->addWidget(m_cpLinear, 2, 0, 1, 2);
 
-        mainSelector->addWidget(page);
+        m_mainSelector->addWidget(page);
 
         connect(m_cpLinear, &ColorPicker::colorChanged, this, &PaintEditor::onColorChanged);
         connect(m_lnStopPosition, &QDoubleSpinBox::valueChanged, this,
@@ -105,7 +107,7 @@ PaintEditor::PaintEditor(QWidget* parent) : QWidget(parent)
         m_cpRadial->setColor(Qt::black);
         layout->addWidget(m_cpRadial, 2, 0, 1, 2);
 
-        mainSelector->addWidget(page);
+        m_mainSelector->addWidget(page);
 
         connect(m_cpRadial, &ColorPicker::colorChanged, this, &PaintEditor::onColorChanged);
         connect(m_radStopPosition, &QDoubleSpinBox::valueChanged, this,
@@ -120,14 +122,33 @@ PaintEditor::PaintEditor(QWidget* parent) : QWidget(parent)
         m_radialEditor->setStops({{0.0, Qt::black}, {1.0, Qt::white}});
     }
 
-    mainSelector->hide();
+    m_mainSelector->hide();
 
-    layout->addWidget(mainSelector, 1, 0, 1, 2);
+    layout->addWidget(m_mainSelector, 1, 0, 1, 2);
+
+    if (doc) {
+        auto* brandLabel = new QLabel("Brand Colors");
+        brandLabel->setStyleSheet("font-size: 10px; color: gray;");
+        layout->addWidget(brandLabel, 2, 0, 1, 2);
+
+        m_brandGrid = new BrandColorSwatchGrid(doc, BrandColorSwatchGrid::Mode::Full);
+        layout->addWidget(m_brandGrid, 3, 0, 1, 2);
+
+        connect(m_brandGrid, &BrandColorSwatchGrid::colorSelected, this, [this](const QColor& c) {
+            setPaint(Paint::Solid(c.redF(), c.greenF(), c.blueF(), c.alphaF()));
+            emitPaint();
+        });
+
+        connect(m_cpSolid, &ColorPicker::colorChanged, this, [this](const QColor& c) {
+            if (m_brandGrid)
+                m_brandGrid->setCurrentColor(c);
+        });
+    }
 }
 
 Paint PaintEditor::getPaint() const
 {
-    int idx = typeComboBox->currentIndex();
+    int idx = m_typeCombo->currentIndex();
     Paint paint{};
 
     switch (idx) {
@@ -193,13 +214,13 @@ void PaintEditor::setPaint(const Paint& paint)
         idx = 3;
         break;
     }
-    typeComboBox->setCurrentIndex(idx);
+    m_typeCombo->setCurrentIndex(idx);
 
     if (idx == 0) {
-        mainSelector->hide();
+        m_mainSelector->hide();
     } else {
-        mainSelector->show();
-        mainSelector->setCurrentIndex(idx - 1);
+        m_mainSelector->show();
+        m_mainSelector->setCurrentIndex(idx - 1);
     }
 
     switch (paint.type) {
@@ -241,10 +262,10 @@ void PaintEditor::setPaint(const Paint& paint)
 void PaintEditor::onTypeChanged(int index)
 {
     if (index == 0) {
-        mainSelector->hide();
+        m_mainSelector->hide();
     } else {
-        mainSelector->setCurrentIndex(index - 1);
-        mainSelector->show();
+        m_mainSelector->setCurrentIndex(index - 1);
+        m_mainSelector->show();
     }
 
     emitPaint();
@@ -288,7 +309,7 @@ void PaintEditor::onStopPosChanged(double value)
     emitPaint();
 }
 
-void PaintEditor::onStopsChanged(const QVector<GradientStop>& stops)
+void PaintEditor::onStopsChanged(const QVector<GradientStop>&)
 {
     emitPaint();
 }
@@ -299,12 +320,12 @@ void PaintEditor::onStopSelected(int index)
     if (!widget)
         return;
 
-    if (auto* edt = dynamic_cast<LinearGradientEditor*>(widget)) {
+    if (dynamic_cast<LinearGradientEditor*>(widget)) {
         auto stop = m_linearEditor->stop(index);
         m_lnStopPosition->setValue(stop.position);
         m_lnStopPosition->setEnabled(index > 0 && index < m_linearEditor->stops().size() - 1);
         m_cpLinear->setColor(stop.color);
-    } else if (auto* edt = dynamic_cast<RadialGradientEditor*>(widget)) {
+    } else if (dynamic_cast<RadialGradientEditor*>(widget)) {
         auto stop = m_radialEditor->stop(index);
         m_radStopPosition->setValue(stop.position);
         m_radStopPosition->setEnabled(index > 0 && index < m_radialEditor->stops().size() - 1);
@@ -319,9 +340,9 @@ void PaintEditor::emitPaint()
     emit paintChanged(getPaint());
 }
 
-bool PaintEditor::filterScroll(QObject* obj, QEvent* event)
+bool PaintEditor::eventFilter(QObject* obj, QEvent* event)
 {
-    if (obj == typeComboBox && event->type() == QEvent::Wheel) {
+    if (obj == m_typeCombo && event->type() == QEvent::Wheel) {
         event->ignore();
         return true; // consumed — parent won't scroll either
     }

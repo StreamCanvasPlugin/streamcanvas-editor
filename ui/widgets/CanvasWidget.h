@@ -109,6 +109,7 @@ private:
     void drawCheckerboard(QPainter& p, const QRectF& lb);
     void drawGuides(QPainter& p, const QRectF& lb);
     void drawSnapLines(QPainter& p, const QRectF& lb);
+    void drawElementOutlines(QPainter& p);
 
     // Scene dimension helpers
     int sceneW() const;

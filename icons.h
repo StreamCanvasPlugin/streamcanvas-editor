@@ -1,5 +1,8 @@
 #pragma once
 
-#include "QtAwesome.h"
+#include <QIcon>
+#include <oclero/qlementine/icons/Icons16.hpp>
+using namespace oclero::qlementine::icons;
 
-fa::QtAwesome* qta();
+void initIcons();
+QIcon themedIcon(Icons16 id);

@@ -92,6 +92,26 @@ void SetSceneNameCmd::redo()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SetBrandColorsCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetBrandColorsCmd::SetBrandColorsCmd(SceneDocument* doc, QList<QColor> after, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_before(doc->brandColors()), m_after(std::move(after))
+{
+    setText("Set brand colors");
+}
+
+void SetBrandColorsCmd::undo()
+{
+    m_doc->setBrandColors(m_before);
+}
+
+void SetBrandColorsCmd::redo()
+{
+    m_doc->setBrandColors(m_after);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SetElementPaintCmd
 // ─────────────────────────────────────────────────────────────────────────────
 

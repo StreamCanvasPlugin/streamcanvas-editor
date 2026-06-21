@@ -1,5 +1,6 @@
 #include "SceneTreeModel.h"
 
+#include <QIcon>
 #include "engine/element.h"
 #include "engine/graphic.h"
 #include "engine/scene.h"
@@ -186,10 +187,10 @@ QVariant SceneTreeModel::data(const QModelIndex& index, int role) const
 
     if (role == Qt::DecorationRole) {
         if (level == LEVEL_SCENE)
-            return qta()->icon(fa::fa_solid, fa::fa_film);
+            return themedIcon(Icons16::Misc_FilmRoll);
 
         if (level == LEVEL_GRAPHIC)
-            return qta()->icon(fa::fa_solid, fa::fa_layer_group);
+            return themedIcon(Icons16::Navigation_Layers1);
 
         if (level == LEVEL_ELEMENT) {
             int gi = giOf(id);
@@ -200,9 +201,12 @@ QVariant SceneTreeModel::data(const QModelIndex& index, int role) const
             const Graphic& g = s.graphics[gi];
             if (ei < 0 || ei >= static_cast<int>(g.elements.size()))
                 return {};
-            if (g.elements[ei].type == ElementType::Text)
-                return qta()->icon(fa::fa_solid, fa::fa_font);
-            return qta()->icon(fa::fa_solid, fa::fa_square);
+            switch (g.elements[ei].type) {
+            case ElementType::Text:   return themedIcon(Icons16::File_Font);
+            case ElementType::Image:  return themedIcon(Icons16::File_Picture);
+            case ElementType::QrCode: return themedIcon(Icons16::Hardware_Scanner);
+            default:                  return themedIcon(Icons16::Shape_Square);
+            }
         }
     }
 

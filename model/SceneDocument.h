@@ -5,6 +5,8 @@
 #include <string>
 #include <utility>
 
+#include <QColor>
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QUndoStack>
@@ -64,8 +66,14 @@ public:
     // Expose scene name mutation (used by SetSceneNameCmd)
     void setSceneName(const QString& name);
 
+    // Brand colors (editor-only, stored in JSON, not in Scene struct)
+    QList<QColor> brandColors() const { return m_brandColors; }
+    void setBrandColors(const QList<QColor>& colors);
+    static QList<QColor> defaultBrandColors();
+
     // Serialization
-    static nlohmann::json sceneToJson(const Scene& scene, const std::string& name = "");
+    static nlohmann::json sceneToJson(const Scene& scene, const std::string& name = "",
+                                      const QList<QColor>& brandColors = {});
 
 signals:
     void documentChanged();
@@ -78,6 +86,7 @@ private:
     QString m_filePath;
     bool m_modified{false};
     std::string m_sceneName;
+    QList<QColor> m_brandColors;
 
     // Rebuild Element::mask / Element::parent raw pointers after any
     // structural change.  We store the logical ids in parallel maps that

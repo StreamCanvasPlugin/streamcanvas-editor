@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include <QFileInfo>
+#include <QColor>
 
 using json = nlohmann::json;
 
@@ -182,6 +183,10 @@ static json paintToJson(const Paint& p)
         return json::array({p.params[0], p.params[1], p.params[2], p.params[3]});
     }
 
+    if (p.type == Paint::Type::Image) {
+        return json(p.imagePath);
+    }
+
     json obj;
     if (p.type == Paint::Type::Linear) {
         obj["type"] = "linear";
@@ -222,7 +227,10 @@ static json elementToJson(const Element& el)
 {
     json j;
     j["id"] = el.id;
-    j["type"] = (el.type == ElementType::Text) ? "text" : "rectangle";
+    if (el.type == ElementType::Text) j["type"] = "text";
+    else if (el.type == ElementType::Image) j["type"] = "image";
+    else if (el.type == ElementType::QrCode) j["type"] = "qr_code";
+    else j["type"] = "rectangle";
     j["x"] = el.bounds.x;
     j["y"] = el.bounds.y;
     j["w"] = el.bounds.width;
@@ -266,7 +274,6 @@ static json elementToJson(const Element& el)
                                              el.childrenPadding[2], el.childrenPadding[3]});
     }
 
-    // Text-specific fields (harmless to emit for rectangles too)
     if (el.type == ElementType::Text) {
         j["text"] = el.text;
         j["font_family"] = el.font.family;
@@ -275,13 +282,24 @@ static json elementToJson(const Element& el)
         j["font_underline"] = el.font.isUnderline;
         j["font_strikethrough"] = el.font.isStrikethrough;
         j["font_weight"] = fontWeightToString(el.font.weight);
-        j["auto_scale"] = el.autoScale;
-        j["text_align_x"] = alignmentHToString(el.textAlignX);
-        j["text_align_y"] = alignmentVToString(el.textAlignY);
-        j["ellipsize"] = ellipsizeToString(el.ellipsize);
-        j["wrap"] = wrapModeToString(el.wrapMode);
-        j["text_transform"] = textTransformToString(el.transform);
+        j["auto_scale"] = el.textStyle.autoScale;
+        j["text_align_x"] = alignmentHToString(el.textStyle.alignX);
+        j["text_align_y"] = alignmentVToString(el.textStyle.alignY);
+        j["ellipsize"] = ellipsizeToString(el.textStyle.ellipsize);
+        j["wrap"] = wrapModeToString(el.textStyle.wrapMode);
+        j["text_transform"] = textTransformToString(el.textStyle.transform);
     }
+
+    if (el.type == ElementType::Image || el.type == ElementType::QrCode) {
+        if (!el.imagePath.empty())
+            j["image_path"] = el.imagePath;
+    }
+    if (el.type == ElementType::Image) {
+        static const char* kScaleModeStr[] = {"stretch","contain","cover","fit_width","fit_height","none"};
+        j["scale_mode"] = kScaleModeStr[static_cast<int>(el.imageScaleMode)];
+    }
+    if (el.type == ElementType::QrCode)
+        j["text"] = el.text;
 
     return j;
 }
@@ -302,7 +320,10 @@ static json graphicToJson(const Graphic& g)
 
 // ── SceneDocument ─────────────────────────────────────────────────────────────
 
-SceneDocument::SceneDocument(QObject* parent) : QObject(parent) {}
+SceneDocument::SceneDocument(QObject* parent) : QObject(parent)
+{
+    m_brandColors = defaultBrandColors();
+}
 
 bool SceneDocument::load(const QString& path)
 {
@@ -312,13 +333,23 @@ bool SceneDocument::load(const QString& path)
         return false;
     }
 
-    // Parse name field separately (Scene struct has no name)
+    // Parse editor-only fields (name, brand_colors) that Scene struct ignores
     m_sceneName.clear();
+    m_brandColors = defaultBrandColors();
     try {
         std::ifstream f(path.toStdString());
         auto j = json::parse(f);
         if (j.contains("name") && j["name"].is_string())
             m_sceneName = j["name"].get<std::string>();
+        if (j.contains("brand_colors") && j["brand_colors"].is_array()) {
+            m_brandColors.clear();
+            for (const auto& arr : j["brand_colors"]) {
+                if (arr.is_array() && arr.size() == 4)
+                    m_brandColors.append(QColor::fromRgbF(
+                        arr[0].get<double>(), arr[1].get<double>(),
+                        arr[2].get<double>(), arr[3].get<double>()));
+            }
+        }
     } catch (...) {
     }
 
@@ -366,7 +397,7 @@ bool SceneDocument::save()
 bool SceneDocument::saveAs(const QString& path)
 {
     try {
-        json j = sceneToJson(m_scene, m_sceneName);
+        json j = sceneToJson(m_scene, m_sceneName, m_brandColors);
         std::ofstream f(path.toStdString());
         if (!f.is_open())
             return false;
@@ -406,6 +437,30 @@ void SceneDocument::setSceneName(const QString& name)
     emit documentChanged();
 }
 
+void SceneDocument::setBrandColors(const QList<QColor>& colors)
+{
+    m_brandColors = colors;
+    setModified(true);
+    emit documentChanged();
+}
+
+// static
+QList<QColor> SceneDocument::defaultBrandColors()
+{
+    return {
+        QColor(255, 255, 255),   // White
+        QColor(0,   0,   0),     // Black
+        QColor(50,  80,  180),   // Broadcast blue
+        QColor(233, 30,  35),    // Alert red
+        QColor(245, 165, 0),     // Amber/ticker
+        QColor(39,  174, 96),    // Green accent
+        QColor(245, 245, 245),   // Light gray
+        QColor(51,  51,  51),    // Dark gray
+        QColor(255, 255, 0),     // Broadcast yellow
+        QColor(0,   193, 233),   // Cyan
+    };
+}
+
 void SceneDocument::setElementRef(const std::string& graphicId, const std::string& elementId,
                                   const std::string& maskId, const std::string& parentId)
 {
@@ -419,6 +474,7 @@ void SceneDocument::reset()
 {
     m_scene = Scene::LoadString(R"({"name":"New Scene","graphics":[]})");
     m_sceneName = "New Scene";
+    m_brandColors = defaultBrandColors();
     m_filePath.clear();
     m_elementRefs.clear();
     m_undoStack.clear();
@@ -479,7 +535,8 @@ void SceneDocument::applyMutation(std::function<void(Scene&)> fn)
 }
 
 // static
-nlohmann::json SceneDocument::sceneToJson(const Scene& scene, const std::string& name)
+nlohmann::json SceneDocument::sceneToJson(const Scene& scene, const std::string& name,
+                                          const QList<QColor>& brandColors)
 {
     json j;
     if (!name.empty())
@@ -487,6 +544,13 @@ nlohmann::json SceneDocument::sceneToJson(const Scene& scene, const std::string&
 
     j["width"] = scene.width;
     j["height"] = scene.height;
+
+    if (!brandColors.isEmpty()) {
+        json bc = json::array();
+        for (const QColor& c : brandColors)
+            bc.push_back(json::array({c.redF(), c.greenF(), c.blueF(), c.alphaF()}));
+        j["brand_colors"] = bc;
+    }
 
     json graphics = json::array();
     for (const auto& g : scene.graphics)

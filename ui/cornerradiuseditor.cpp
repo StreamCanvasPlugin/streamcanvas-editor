@@ -1,5 +1,7 @@
 #include "cornerradiuseditor.h"
 #include <QGridLayout>
+#include <QPainter>
+#include <QPen>
 #include <QStyle>
 
 #include "../icons.h"
@@ -39,7 +41,7 @@ CornerRadiusEditor::CornerRadiusEditor(QWidget* parent) : QWidget{parent}
     m_bl->setSingleStep(0.1);
     layout->addWidget(m_bl, 2, 0);
 
-    m_link = new QPushButton(qta()->icon(fa::fa_solid, fa::fa_link), "");
+    m_link = new QPushButton(themedIcon(Icons16::Misc_Link), "");
     m_link->setToolTip("Link");
     m_link->setCheckable(true);
     layout->addWidget(m_link, 1, 1, Qt::AlignCenter);
@@ -88,7 +90,7 @@ void CornerRadiusEditor::onLinkClick(bool checked)
     m_br->setEnabled(!checked);
     m_bl->setEnabled(!checked);
     m_link->setToolTip(checked ? "Unlink" : "Link");
-    m_link->setIcon(qta()->icon(fa::fa_solid, checked ? fa::fa_link_slash : fa::fa_link));
+    m_link->setIcon(QIcon(iconPath(checked ? Icons16::Misc_LinkBreak : Icons16::Misc_Link)));
 
     if (!checked)
         return;

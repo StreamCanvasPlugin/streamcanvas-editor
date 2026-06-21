@@ -2,19 +2,18 @@
 
 #include "model/EditorScene.h"
 #include <QMainWindow>
-#include <QTabWidget>
+#include <RibbonWidget>
 
 class SceneDocument;
 class EditorScene;
-class ElementProperties;
-class FontProperties;
-class StyleProperties;
-class SceneProperties;
-class GraphicProperties;
 class CanvasWidget;
 class GraphicTimingEditor;
+class RibbonFormatSection;
 class QAction;
 class QCloseEvent;
+class QLineEdit;
+class QComboBox;
+class QSpinBox;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -34,24 +33,23 @@ private slots:
 
 private:
     void setupMenuBar();
-    void setupToolBar();
+    void setupRibbon();
     void updateWindowTitle();
     void updateToolBarState(SelectionId sel);
     bool maybeSave();
 
     SceneDocument* m_doc;
-    EditorScene* m_editorScene;
-    CanvasWidget* m_canvas;
-    ElementProperties* m_elementProperties;
-    StyleProperties* m_styleProperties;
-    SceneProperties* m_sceneProperties;
-    FontProperties* m_fontProperties{nullptr};
-    GraphicProperties* m_graphicProperties{nullptr};
-    QTabWidget* m_propTabs{nullptr};
-    int m_elemTabIndex{-1};
-    int m_styleTabIndex{-1};
-    int m_fontTabIndex{-1};
-    int m_graphicTabIndex{-1};
+    EditorScene*   m_editorScene;
+    CanvasWidget*  m_canvas;
+
+    // Scene ribbon controls
+    QLineEdit* m_sceneNameEdit{nullptr};
+    QComboBox* m_scenePresetCombo{nullptr};
+    QSpinBox*  m_sceneWidthSpin{nullptr};
+    QSpinBox*  m_sceneHeightSpin{nullptr};
+    bool       m_sceneUpdating{false};
+
+    RibbonFormatSection* m_formatSection{nullptr};
 
     GraphicTimingEditor* m_timingEditor{nullptr};
 
@@ -60,5 +58,8 @@ private:
 
     QAction* m_addRectAction{nullptr};
     QAction* m_addTextAction{nullptr};
-    QAction* m_deleteAction{nullptr};
+    QAction* m_addImageAction{nullptr};
+    QAction* m_addQrCodeAction{nullptr};
+
+    Nedrysoft::Ribbon::RibbonWidget* m_ribbon{nullptr};
 };

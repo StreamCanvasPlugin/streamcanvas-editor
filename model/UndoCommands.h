@@ -3,6 +3,8 @@
 #include <functional>
 #include <string>
 
+#include <QColor>
+#include <QList>
 #include <QString>
 #include <QUndoCommand>
 
@@ -43,6 +45,21 @@ private:
     SceneDocument* m_doc;
     QString m_before;
     QString m_after;
+};
+
+// ── SetBrandColorsCmd ─────────────────────────────────────────────────────────
+
+class SetBrandColorsCmd : public QUndoCommand {
+public:
+    SetBrandColorsCmd(SceneDocument* doc, QList<QColor> after, QUndoCommand* parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    SceneDocument* m_doc;
+    QList<QColor> m_before;
+    QList<QColor> m_after;
 };
 
 // ── SetGraphicFieldCmd ────────────────────────────────────────────────────────
