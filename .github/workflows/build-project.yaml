@@ -124,7 +124,6 @@ jobs:
           version: '6.8.3'
           host: 'mac'
           target: 'desktop'
-          modules: 'qtsvg'
           cache: true
 
       - name: Build 🧱
@@ -171,7 +170,6 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
-          modules: 'qtsvg'
           cache: true
 
       - name: Cache vcpkg packages
