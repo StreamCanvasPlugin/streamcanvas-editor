@@ -11,7 +11,7 @@
 #include "ui/painteditor.h"
 
 #include <QAbstractItemView>
-#include <QColorDialog>
+#include "ColorPicker.h"
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
@@ -582,10 +582,12 @@ void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
         m_spinShadowBlur = makeSpinBox(0, 200, 1, " px", 72);
         m_spinShadowBlur->setSingleStep(0.5);
 
-        m_shadowColorBtn = new QToolButton;
+        m_shadowColorPicker = new ColorPicker;
+        auto [shadowColorBtn, shadowColorMenu] = makePopupButton("", m_shadowColorPicker);
+        m_shadowColorBtn = shadowColorBtn;
         m_shadowColorBtn->setIconSize({24, 16});
         m_shadowColorBtn->setToolTip("Shadow color");
-        m_shadowColorBtn->setAutoRaise(true);
+        m_shadowColorBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
 
         scGrid->addWidget(makeRibbonLabel("Off X "), 0, 0);
         scGrid->addWidget(m_spinShadowOffX,           0, 1);
@@ -608,16 +610,21 @@ void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
         connectShadow(m_spinShadowOffY);
         connectShadow(m_spinShadowBlur);
 
-        connect(m_shadowColorBtn, &QToolButton::clicked, this, [this]() {
+        connect(shadowColorMenu, &QMenu::aboutToShow, this, [this]() {
             if (m_graphicId.empty()) return;
             try {
                 const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
                 const auto& c = el.shadow.color;
-                QColor initial = QColor::fromRgbF(c[0], c[1], c[2], c[3]);
-                QColor picked  = QColorDialog::getColor(initial, nullptr, "Shadow Color",
-                                                        QColorDialog::ShowAlphaChannel);
-                if (!picked.isValid()) return;
-                Element::DropShadow sh = el.shadow;
+                QSignalBlocker b(m_shadowColorPicker);
+                m_shadowColorPicker->setColor(QColor::fromRgbF(c[0], c[1], c[2], c[3]));
+            } catch (...) {}
+        });
+
+        connect(m_shadowColorPicker, &ColorPicker::colorChanged, this, [this](const QColor& picked) {
+            if (m_graphicId.empty()) return;
+            try {
+                Element::DropShadow sh =
+                    m_doc->scene().GetById(m_graphicId).GetById(m_elementId).shadow;
                 sh.color[0] = static_cast<float>(picked.redF());
                 sh.color[1] = static_cast<float>(picked.greenF());
                 sh.color[2] = static_cast<float>(picked.blueF());

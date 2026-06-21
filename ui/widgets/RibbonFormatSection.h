@@ -15,6 +15,7 @@ class QCheckBox;
 class QToolButton;
 class QDialog;
 class QPlainTextEdit;
+class ColorPicker;
 class PaintEditor;
 class PaintPickerWidget;
 
@@ -154,6 +155,7 @@ private:
     QDoubleSpinBox* m_spinShadowOffY{nullptr};
     QDoubleSpinBox* m_spinShadowBlur{nullptr};
     QToolButton*    m_shadowColorBtn{nullptr};
+    ColorPicker*    m_shadowColorPicker{nullptr};
 
     // Info group (element)
     QLineEdit* m_idEdit{nullptr};
