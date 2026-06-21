@@ -2,6 +2,7 @@
 
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QLineEdit>
 #include <QWidget>
 
 #include "engine/types.hpp"
@@ -48,6 +49,9 @@ private:
     ColorPicker* m_cpRadial;
     QDoubleSpinBox* m_radStopPosition;
     RadialGradientEditor* m_radialEditor;
+
+    // image page
+    QLineEdit* m_imagePathForPaint{nullptr};
 
     bool m_updating{false}; // prevent recursion
     BrandColorSwatchGrid* m_brandGrid{nullptr};
