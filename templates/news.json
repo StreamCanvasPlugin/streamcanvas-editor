@@ -1,0 +1,899 @@
+{
+    "name": "News Package",
+    "width": 1920,
+    "height": 1080,
+    "graphics": [
+        {
+            "id": "lower_third",
+            "z_order": 0,
+            "elements": [
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 60.0,
+                    "y": 882.0,
+                    "w": 820.0,
+                    "h": 128.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.09, 0.10, 0.14, 0.96],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 5.0,
+                        "blur": 16.0,
+                        "color": [0.0, 0.0, 0.0, 0.55]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.05,
+                        "duration": 0.32,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "blue_block",
+                    "type": "rectangle",
+                    "x": 60.0,
+                    "y": 882.0,
+                    "w": 7.0,
+                    "h": 128.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.44, 0.86, 1.0],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.10,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.32,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "name",
+                    "type": "text",
+                    "x": 86.0,
+                    "y": 892.0,
+                    "w": 774.0,
+                    "h": 58.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Sarah Mitchell",
+                    "font_family": "Sans",
+                    "font_size": 46.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.22,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "divider_line",
+                    "type": "rectangle",
+                    "x": 86.0,
+                    "y": 952.0,
+                    "w": 774.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.18],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.28,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "title",
+                    "type": "text",
+                    "x": 86.0,
+                    "y": 958.0,
+                    "w": 774.0,
+                    "h": 38.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.52, 0.78, 0.98, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Chief Political Correspondent",
+                    "font_family": "Sans",
+                    "font_size": 26.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.32,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "breaking_ticker",
+            "z_order": 1,
+            "elements": [
+                {
+                    "id": "ticker_bg",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 1014.0,
+                    "w": 1920.0,
+                    "h": 66.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.07, 0.08, 0.12, 0.98],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.06,
+                        "duration": 0.32,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "top_line",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 1014.0,
+                    "w": 1920.0,
+                    "h": 3.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.84, 0.10, 0.10, 1.0]},
+                            {"offset": 0.3, "color": [0.08, 0.44, 0.86, 1.0]},
+                            {"offset": 1.0, "color": [0.08, 0.44, 0.86, 0.30]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.32,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "label_bg",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 1014.0,
+                    "w": 248.0,
+                    "h": 66.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.84, 0.10, 0.10, 1.0],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.0,
+                        "duration": 0.35,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "label_text",
+                    "type": "text",
+                    "x": 0.0,
+                    "y": 1014.0,
+                    "w": 248.0,
+                    "h": 66.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "BREAKING NEWS",
+                    "font_family": "Sans",
+                    "font_size": 19.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.18,
+                        "duration": 0.25,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "divider",
+                    "type": "rectangle",
+                    "x": 252.0,
+                    "y": 1024.0,
+                    "w": 2.0,
+                    "h": 46.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.28],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_down",
+                        "delay": 0.26,
+                        "duration": 0.22,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "headline",
+                    "type": "text",
+                    "x": 268.0,
+                    "y": 1014.0,
+                    "w": 1636.0,
+                    "h": 66.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.96],
+                    "stroke_width": 0.0,
+                    "text": "Markets surge as central bank holds interest rates steady for third consecutive quarter",
+                    "font_family": "Sans",
+                    "font_size": 26.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.28,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "headline_card",
+            "z_order": 2,
+            "elements": [
+                {
+                    "id": "overlay",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "w": 1920.0,
+                    "h": 1080.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.0, 0.0, 0.0, 0.65],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.45,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.05,
+                        "duration": 0.40,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 160.0,
+                    "y": 280.0,
+                    "w": 1600.0,
+                    "h": 520.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.09, 0.10, 0.14, 0.97],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 10.0,
+                        "blur": 32.0,
+                        "color": [0.0, 0.0, 0.0, 0.70]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.08,
+                        "duration": 0.48,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.38,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "blue_top_bar",
+                    "type": "rectangle",
+                    "x": 160.0,
+                    "y": 280.0,
+                    "w": 1600.0,
+                    "h": 6.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0,  "color": [0.08, 0.44, 0.86, 1.0]},
+                            {"offset": 0.5,  "color": [0.08, 0.44, 0.86, 1.0]},
+                            {"offset": 1.0,  "color": [0.08, 0.44, 0.86, 0.20]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.18,
+                        "duration": 0.45,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.35,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "category_label",
+                    "type": "text",
+                    "x": 160.0,
+                    "y": 308.0,
+                    "w": 1600.0,
+                    "h": 42.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.52, 0.78, 0.98, 0.90],
+                    "stroke_width": 0.0,
+                    "text": "DEVELOPING STORY",
+                    "font_family": "Sans",
+                    "font_size": 20.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.26,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "headline",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 364.0,
+                    "w": 1520.0,
+                    "h": 112.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "World Leaders Gather for Emergency Climate Summit",
+                    "font_family": "Sans",
+                    "font_size": 72.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 3.0,
+                        "blur": 8.0,
+                        "color": [0.0, 0.0, 0.0, 0.50]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.32,
+                        "duration": 0.38,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.26,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "subheadline",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 492.0,
+                    "w": 1520.0,
+                    "h": 54.0,
+                    "rotation": 0.0,
+                    "opacity": 0.85,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Representatives from 193 nations convene in Geneva to address carbon targets",
+                    "font_family": "Sans",
+                    "font_size": 32.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.40,
+                        "duration": 0.34,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bottom_rule",
+                    "type": "rectangle",
+                    "x": 160.0,
+                    "y": 566.0,
+                    "w": 1600.0,
+                    "h": 2.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.44, 0.86, 0.35],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.46,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "detail",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 580.0,
+                    "w": 1520.0,
+                    "h": 38.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.52, 0.78, 0.98, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Reporting live from Geneva  |  Tuesday, June 22",
+                    "font_family": "Sans",
+                    "font_size": 24.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.50,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "program_title",
+            "z_order": 3,
+            "elements": [
+                {
+                    "id": "overlay",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "w": 1920.0,
+                    "h": 1080.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.0, 0.0, 0.0, 0.70],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.50,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.08,
+                        "duration": 0.45,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 240.0,
+                    "y": 310.0,
+                    "w": 1440.0,
+                    "h": 460.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.09, 0.10, 0.14, 0.97],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 12.0,
+                        "blur": 40.0,
+                        "color": [0.0, 0.0, 0.0, 0.75]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.10,
+                        "duration": 0.52,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.42,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "red_top_bar",
+                    "type": "rectangle",
+                    "x": 240.0,
+                    "y": 310.0,
+                    "w": 1440.0,
+                    "h": 8.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.84, 0.10, 0.10, 1.0]},
+                            {"offset": 0.5, "color": [0.84, 0.10, 0.10, 1.0]},
+                            {"offset": 1.0, "color": [0.84, 0.10, 0.10, 0.15]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.22,
+                        "duration": 0.48,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.36,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "channel_name",
+                    "type": "text",
+                    "x": 240.0,
+                    "y": 342.0,
+                    "w": 1440.0,
+                    "h": 48.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.84, 0.10, 0.10, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "CHANNEL 7 NEWS NETWORK",
+                    "font_family": "Sans",
+                    "font_size": 22.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.30,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "show_title",
+                    "type": "text",
+                    "x": 280.0,
+                    "y": 404.0,
+                    "w": 1360.0,
+                    "h": 148.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "EVENING NEWS",
+                    "font_family": "Sans",
+                    "font_size": 114.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 4.0,
+                        "blur": 10.0,
+                        "color": [0.0, 0.0, 0.0, 0.50]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.35,
+                        "duration": 0.42,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "edition",
+                    "type": "text",
+                    "x": 240.0,
+                    "y": 566.0,
+                    "w": 1440.0,
+                    "h": 44.0,
+                    "rotation": 0.0,
+                    "opacity": 0.72,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "SPECIAL EDITION",
+                    "font_family": "Sans",
+                    "font_size": 26.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.46,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "date_time",
+                    "type": "text",
+                    "x": 240.0,
+                    "y": 622.0,
+                    "w": 1440.0,
+                    "h": 40.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.52, 0.78, 0.98, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Monday, June 22, 2026  |  6:00 PM",
+                    "font_family": "Sans",
+                    "font_size": 26.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.54,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        }
+    ]
+}
