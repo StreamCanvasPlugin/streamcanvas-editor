@@ -1,7 +1,8 @@
 #include "RibbonFormatSection.h"
 #include "PaintPickerWidget.h"
-#include <RibbonWidget>
-#include <RibbonGroup>
+#include <SARibbonBar.h>
+#include <SARibbonCategory.h>
+#include <SARibbonPanel.h>
 #include "engine/element.h"
 #include "engine/graphic.h"
 #include "engine/scene.h"
@@ -38,8 +39,6 @@
 #include <QWidgetAction>
 
 #include "../UiUtils.h"
-
-using namespace Nedrysoft::Ribbon;
 
 // Renders each font family item in its own typeface (lazy — only when visible).
 class FontItemDelegate : public QStyledItemDelegate {
@@ -153,7 +152,7 @@ void RibbonFormatSection::updateStrokeSwatch()
 
 // ── construction ───────────────────────────────────────────────────────────────
 
-RibbonFormatSection::RibbonFormatSection(SceneDocument* doc, RibbonWidget* ribbon, QObject* parent)
+RibbonFormatSection::RibbonFormatSection(SceneDocument* doc, SARibbonBar* ribbon, QObject* parent)
     : QObject(parent), m_doc(doc)
 {
     buildGraphicTab(ribbon);
@@ -166,33 +165,33 @@ RibbonFormatSection::RibbonFormatSection(SceneDocument* doc, RibbonWidget* ribbo
     connect(m_doc, &SceneDocument::documentChanged, this, &RibbonFormatSection::onDocumentChanged);
 }
 
-// ── helper: create a group on a tab page ──────────────────────────────────────
-static QGridLayout* addGroup(QWidget* page, QHBoxLayout* pageLayout, const QString& name)
+// ── helper: create a panel on a category and return its container grid layout ──
+static QGridLayout* addGroup(SARibbonCategory* category, const QString& name)
 {
-    auto* grp = new RibbonGroup(page);
-    grp->setGroupName(name);
-    grp->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    auto* gl = new QGridLayout(grp);
-    gl->setContentsMargins(4, 2, 4, 2);
+    auto* panel = category->addPanel(name);
+    // Outer container provides uniform padding around the grid content.
+    auto* outer = new QWidget;
+    auto* ol = new QHBoxLayout(outer);
+    ol->setContentsMargins(5, 5, 5, 5);
+    ol->setSpacing(0);
+    auto* container = new QWidget;
+    auto* gl = new QGridLayout(container);
+    gl->setContentsMargins(0, 0, 0, 0);
     gl->setSpacing(6);
-    pageLayout->insertWidget(pageLayout->count() - 1, grp);
+    ol->addWidget(container);
+    panel->addLargeWidget(outer);
     return gl;
 }
 
 // ── Graphic tab ────────────────────────────────────────────────────────────────
 
-void RibbonFormatSection::buildGraphicTab(RibbonWidget* ribbon)
+void RibbonFormatSection::buildGraphicTab(SARibbonBar* ribbon)
 {
-    auto* page = new QWidget;
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(0);
-    pageLayout->addStretch();
-    m_graphicTabIdx = ribbon->addTab(page, "Graphic");
+    m_graphicCategory = ribbon->addCategoryPage("Graphic");
 
     // ── Info group ─────────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Info");
+        auto* gl = addGroup(m_graphicCategory, "Info");
 
         m_graphicIdEdit = new QLineEdit;
         m_graphicIdEdit->setFixedWidth(120);
@@ -207,9 +206,9 @@ void RibbonFormatSection::buildGraphicTab(RibbonWidget* ribbon)
 
     // ── Actions group ──────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Actions");
+        auto* gl = addGroup(m_graphicCategory, "Actions");
 
-        auto* deleteAct = new QAction(themedIcon(Icons16::Action_Trash), "Delete", page);
+        auto* deleteAct = new QAction(themedIcon(Icons16::Action_Trash), "Delete", nullptr);
         auto* deleteBtn = new QToolButton;
         deleteBtn->setDefaultAction(deleteAct);
         deleteBtn->setIconSize({32, 32});
@@ -225,18 +224,13 @@ void RibbonFormatSection::buildGraphicTab(RibbonWidget* ribbon)
 
 // ── Element tab ────────────────────────────────────────────────────────────────
 
-void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
+void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
 {
-    auto* page = new QWidget;
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(0);
-    pageLayout->addStretch();
-    m_elemTabIdx = ribbon->addTab(page, "Element");
+    m_elemCategory = ribbon->addCategoryPage("Element");
 
     // ── Info group ─────────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Info");
+        auto* gl = addGroup(m_elemCategory, "Info");
 
         m_idEdit = new QLineEdit;
         m_idEdit->setFixedWidth(120);
@@ -250,7 +244,7 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
 
     // ── Transform group ────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Transform");
+        auto* gl = addGroup(m_elemCategory, "Transform");
 
         auto mkSpin = [](const QString& suffix, double lo, double hi) {
             auto* s = makeSpinBox(lo, hi, 1, suffix, 78);
@@ -307,7 +301,7 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
 
     // ── Appearance group ───────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Appearance");
+        auto* gl = addGroup(m_elemCategory, "Appearance");
 
         m_spinZ = new QSpinBox;
         m_spinZ->setRange(-9999, 9999);
@@ -331,7 +325,7 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
 
     // ── Layout group ───────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Layout");
+        auto* gl = addGroup(m_elemCategory, "Layout");
 
         m_maskCombo = new QComboBox;
         m_maskCombo->setFixedWidth(100);
@@ -399,9 +393,9 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
 
     // ── Actions group ──────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Actions");
+        auto* gl = addGroup(m_elemCategory, "Actions");
 
-        auto* deleteAct = new QAction(themedIcon(Icons16::Action_Trash), "Delete", page);
+        auto* deleteAct = new QAction(themedIcon(Icons16::Action_Trash), "Delete", nullptr);
         auto* deleteBtn = new QToolButton;
         deleteBtn->setDefaultAction(deleteAct);
         deleteBtn->setIconSize({32, 32});
@@ -415,18 +409,13 @@ void RibbonFormatSection::buildElementTab(RibbonWidget* ribbon)
     }
 }
 
-void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
+void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
 {
-    auto* page = new QWidget;
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(0);
-    pageLayout->addStretch();
-    m_styleTabIdx = ribbon->addTab(page, "Style");
+    m_styleCategory = ribbon->addCategoryPage("Style");
 
     // ── Paint group (Fill + Stroke) ────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Paint");
+        auto* gl = addGroup(m_styleCategory, "Paint");
 
         m_fillPicker   = new PaintPickerWidget(m_doc);
         m_strokePicker = new PaintPickerWidget(m_doc);
@@ -509,7 +498,7 @@ void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
 
     // ── Stroke group ───────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Stroke");
+        auto* gl = addGroup(m_styleCategory, "Stroke");
 
         m_strokeWidth = makeSpinBox(0.0, 999.0, 1, " px", 80);
         m_strokeWidth->setSingleStep(0.5);
@@ -527,7 +516,7 @@ void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
 
     // ── Border group ───────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Border");
+        auto* gl = addGroup(m_styleCategory, "Border");
 
         auto mkRadiusSpin = []() {
             auto* s = makeSpinBox(0.0, 9999.0, 1, " px", 72);
@@ -565,7 +554,7 @@ void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
 
     // ── Shadow group ───────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Shadow");
+        auto* gl = addGroup(m_styleCategory, "Shadow");
 
         m_shadowEnabled = new QCheckBox("Enable");
         gl->addWidget(m_shadowEnabled, 0, 0, 1, 4);
@@ -636,21 +625,16 @@ void RibbonFormatSection::buildStyleTab(RibbonWidget* ribbon)
     }
 }
 
-void RibbonFormatSection::buildTextTab(RibbonWidget* ribbon)
+void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
 {
-    auto* page = new QWidget;
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(0);
-    pageLayout->addStretch();
-    m_textTabIdx = ribbon->addTab(page, "Text");
+    m_textCategory = ribbon->addCategoryPage("Text");
 
     // ── Font group ─────────────────────────────────────────────────────────────
     // Row 0: Family (full width, no label)
     // Row 1: Weight (expanding) + Size (fixed, no label)
     // Row 2: Style buttons (I U S, no label)
     {
-        auto* gl = addGroup(page, pageLayout, "Font");
+        auto* gl = addGroup(m_textCategory, "Font");
 
         auto* fontContainer = new QWidget;
         auto* fcl = new QVBoxLayout(fontContainer);
@@ -723,11 +707,11 @@ void RibbonFormatSection::buildTextTab(RibbonWidget* ribbon)
 
     // ── Paragraph group ────────────────────────────────────────────────────────
     {
-        auto* gl = addGroup(page, pageLayout, "Paragraph");
+        auto* gl = addGroup(m_textCategory, "Paragraph");
 
-        auto* hGroup = new QButtonGroup(page);
+        auto* hGroup = new QButtonGroup(nullptr);
         hGroup->setExclusive(true);
-        auto* vGroup = new QButtonGroup(page);
+        auto* vGroup = new QButtonGroup(nullptr);
         vGroup->setExclusive(true);
 
         auto mkAlignBtn = [&](Icons16 icon, const QString& tip, QButtonGroup* bg) {
@@ -775,7 +759,7 @@ void RibbonFormatSection::buildTextTab(RibbonWidget* ribbon)
     // Ellipsize / Wrap / Case: label on left, combo expands
     // Edit Text: big button below
     {
-        auto* gl = addGroup(page, pageLayout, "Text");
+        auto* gl = addGroup(m_textCategory, "Text");
 
         auto* textContainer = new QWidget;
         auto* tcGrid = new QGridLayout(textContainer);
@@ -833,17 +817,12 @@ void RibbonFormatSection::buildTextTab(RibbonWidget* ribbon)
 
 // ── Image tab ──────────────────────────────────────────────────────────────────
 
-void RibbonFormatSection::buildImageTab(RibbonWidget* ribbon)
+void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
 {
-    auto* page = new QWidget;
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(0);
-    pageLayout->addStretch();
-    m_imageTabIdx = ribbon->addTab(page, "Image");
+    m_imageCategory = ribbon->addCategoryPage("Image");
 
     {
-        auto* gl = addGroup(page, pageLayout, "Source");
+        auto* gl = addGroup(m_imageCategory, "Source");
 
         auto* container = new QWidget;
         auto* grid = new QGridLayout(container);
@@ -891,17 +870,12 @@ void RibbonFormatSection::buildImageTab(RibbonWidget* ribbon)
 
 // ── QR Code tab ────────────────────────────────────────────────────────────────
 
-void RibbonFormatSection::buildQrTab(RibbonWidget* ribbon)
+void RibbonFormatSection::buildQrTab(SARibbonBar* ribbon)
 {
-    auto* page = new QWidget;
-    auto* pageLayout = new QHBoxLayout(page);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
-    pageLayout->setSpacing(0);
-    pageLayout->addStretch();
-    m_qrTabIdx = ribbon->addTab(page, "QR Code");
+    m_qrCategory = ribbon->addCategoryPage("QR Code");
 
     {
-        auto* gl = addGroup(page, pageLayout, "Content");
+        auto* gl = addGroup(m_qrCategory, "Content");
 
         auto* qrBtn = new QToolButton;
         qrBtn->setIcon(qrCodeIcon());

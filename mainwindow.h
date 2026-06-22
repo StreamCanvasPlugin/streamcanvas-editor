@@ -1,8 +1,7 @@
 #pragma once
 
 #include "model/EditorScene.h"
-#include <QMainWindow>
-#include <RibbonWidget>
+#include <SARibbonMainWindow.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 
@@ -17,7 +16,7 @@ class QLineEdit;
 class QComboBox;
 class QSpinBox;
 
-class MainWindow : public QMainWindow {
+class MainWindow : public SARibbonMainWindow {
     Q_OBJECT
 
 public:
@@ -58,12 +57,19 @@ private:
 
     GraphicTimingEditor* m_timingEditor{nullptr};
 
+    QAction* m_newAction{nullptr};
+    QAction* m_openAction{nullptr};
+    QAction* m_saveAction{nullptr};
+    QAction* m_saveAsAction{nullptr};
+    QAction* m_exitAction{nullptr};
     QAction* m_undoAction{nullptr};
     QAction* m_redoAction{nullptr};
     QAction* m_cutAction{nullptr};
     QAction* m_copyAction{nullptr};
     QAction* m_pasteAction{nullptr};
     QAction* m_pasteInPlaceAction{nullptr};
+    QAction* m_shortcutsAction{nullptr};
+    QAction* m_aboutAction{nullptr};
 
     std::optional<nlohmann::json> m_clipboard;
 
@@ -72,5 +78,5 @@ private:
     QAction* m_addImageAction{nullptr};
     QAction* m_addQrCodeAction{nullptr};
 
-    Nedrysoft::Ribbon::RibbonWidget* m_ribbon{nullptr};
+    SARibbonBar* m_ribbon{nullptr};
 };

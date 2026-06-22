@@ -9,7 +9,10 @@
 #include "ui/widgets/GraphicTimingEditor.h"
 #include "ui/widgets/RibbonFormatSection.h"
 #include "ui/widgets/SceneTreeView.h"
-#include <RibbonGroup>
+#include <SARibbonMainWindow.h>
+#include <SARibbonCategory.h>
+#include <SARibbonPanel.h>
+#include <SARibbonBar.h>
 
 #include <algorithm>
 #include <string>
@@ -71,20 +74,14 @@ static bool clipboardHasExternalImage()
 }
 
 MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent), m_doc(new SceneDocument(this)),
+    : SARibbonMainWindow(parent), m_doc(new SceneDocument(this)),
       m_editorScene(new EditorScene(m_doc, this)),
       m_canvas(new CanvasWidget(m_doc, m_editorScene, this))
 {
     showMaximized();
 
-    // Ribbon bar
-    m_ribbon = new Nedrysoft::Ribbon::RibbonWidget(this);
-
-    auto* ribbonDock = new QDockWidget("Ribbon", this);
-    ribbonDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    ribbonDock->setTitleBarWidget(new QWidget(ribbonDock));
-    ribbonDock->setWidget(m_ribbon);
-    addDockWidget(Qt::TopDockWidgetArea, ribbonDock);
+    setRibbonTheme(SARibbonTheme::RibbonThemeDark2);
+    m_ribbon = ribbonBar();
 
     setupRibbon();
 
@@ -169,32 +166,32 @@ MainWindow::MainWindow(QWidget* parent)
 void MainWindow::setupRibbon()
 {
     // ── Shared helpers ─────────────────────────────────────────────────────────
-    auto makeGroup = [](QWidget* page, QHBoxLayout* pageLayout, const QString& name) {
-        auto* grp = new Nedrysoft::Ribbon::RibbonGroup(page);
-        grp->setGroupName(name);
-        grp->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-        auto* gl = new QHBoxLayout(grp);
-        gl->setContentsMargins(4, 2, 4, 2);
-        gl->setSpacing(4);
-        pageLayout->insertWidget(pageLayout->count()-1, grp);
-        return gl;
+
+    // Wraps any widget in a uniformly padded outer container.
+    auto padded = [](QWidget* w, int m = 5) -> QWidget* {
+        auto* outer = new QWidget;
+        auto* l = new QHBoxLayout(outer);
+        l->setContentsMargins(m, m, m, m);
+        l->setSpacing(0);
+        l->addWidget(w);
+        return outer;
     };
 
-    auto makeLargeBtn = [](QAction* act) -> QToolButton* {
+    auto makeLargeBtn = [&padded](QAction* act) -> QWidget* {
         auto* btn = new QToolButton;
         btn->setDefaultAction(act);
         btn->setIconSize({32, 32});
         btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         btn->setMinimumHeight(56);
         btn->setAutoRaise(true);
-        return btn;
+        return padded(btn);
     };
 
-    // Creates a vertical stack of small icon+text buttons and appends it to gl.
-    auto makeSmallStack = [](QHBoxLayout* gl, std::initializer_list<QAction*> acts) {
+    // Builds a vertical stack of small icon+text buttons with surrounding padding.
+    auto makeSmallStack = [](std::initializer_list<QAction*> acts) -> QWidget* {
         auto* col = new QWidget;
         auto* cl = new QVBoxLayout(col);
-        cl->setContentsMargins(0, 0, 0, 0);
+        cl->setContentsMargins(5, 5, 5, 5);
         cl->setSpacing(2);
         cl->addStretch();
         for (auto* act : acts) {
@@ -208,42 +205,145 @@ void MainWindow::setupRibbon()
             cl->addWidget(btn);
         }
         cl->addStretch();
-        gl->insertWidget(gl->count()-1, col);
+        return col;
     };
 
+    // ── Pre-create shared actions (used in ribbon + app button popup) ──────────
+    m_newAction = new QAction(themedIcon(Icons16::File_File), "New", this);
+    m_newAction->setShortcut(QKeySequence::New);
+    connect(m_newAction, &QAction::triggered, this, &MainWindow::onNew);
+    addAction(m_newAction);
+
+    m_openAction = new QAction(themedIcon(Icons16::File_FolderOpen), "Open…", this);
+    m_openAction->setShortcut(QKeySequence::Open);
+    connect(m_openAction, &QAction::triggered, this, &MainWindow::onOpen);
+    addAction(m_openAction);
+
+    m_saveAction = new QAction(themedIcon(Icons16::Action_Save), "Save", this);
+    m_saveAction->setShortcut(QKeySequence::Save);
+    connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSave);
+    addAction(m_saveAction);
+
+    m_saveAsAction = new QAction("Save As…", this);
+    m_saveAsAction->setShortcut(QKeySequence::SaveAs);
+    connect(m_saveAsAction, &QAction::triggered, this, &MainWindow::onSaveAs);
+    addAction(m_saveAsAction);
+
+    m_exitAction = new QAction("Exit", this);
+    m_exitAction->setShortcut(QKeySequence::Quit);
+    connect(m_exitAction, &QAction::triggered, this, &QWidget::close);
+    addAction(m_exitAction);
+
+    m_undoAction = m_doc->undoStack()->createUndoAction(this, "Undo");
+    m_undoAction->setIcon(themedIcon(Icons16::Action_Undo));
+    m_undoAction->setShortcut(QKeySequence::Undo);
+    addAction(m_undoAction);
+
+    m_redoAction = m_doc->undoStack()->createRedoAction(this, "Redo");
+    m_redoAction->setIcon(themedIcon(Icons16::Action_Redo));
+    m_redoAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z),
+                                QKeySequence(Qt::CTRL | Qt::Key_Y)});
+    addAction(m_redoAction);
+
+    m_shortcutsAction = new QAction(themedIcon(Icons16::Misc_Help), "Keyboard Shortcuts…", this);
+    m_shortcutsAction->setShortcut(Qt::Key_F1);
+    connect(m_shortcutsAction, &QAction::triggered, this, [this]() {
+        auto* dlg = new QDialog(this);
+        dlg->setWindowTitle("Keyboard Shortcuts");
+        dlg->resize(500, 520);
+        auto* browser = new QTextBrowser(dlg);
+        browser->setHtml(
+            "<style>"
+            "body { font-family: sans-serif; font-size: 13px; margin: 8px; }"
+            "h3 { margin-top: 14px; margin-bottom: 2px; color: #aaa; font-size: 12px;"
+            "     text-transform: uppercase; letter-spacing: 1px; }"
+            "table { border-collapse: collapse; width: 100%; margin-bottom: 4px; }"
+            "td { padding: 3px 6px; border-bottom: 1px solid #444; color: #ddd; }"
+            "td:first-child { font-family: monospace; font-weight: bold;"
+            "                 white-space: nowrap; color: #ccc; width: 200px; }"
+            "</style>"
+            "<h3>File</h3><table>"
+            "<tr><td>Ctrl+N</td><td>New scene</td></tr>"
+            "<tr><td>Ctrl+O</td><td>Open scene file</td></tr>"
+            "<tr><td>Ctrl+S</td><td>Save</td></tr>"
+            "<tr><td>Ctrl+Shift+S</td><td>Save As</td></tr>"
+            "<tr><td>Ctrl+Q</td><td>Quit</td></tr>"
+            "</table><h3>Edit</h3><table>"
+            "<tr><td>Ctrl+Z</td><td>Undo</td></tr>"
+            "<tr><td>Ctrl+Shift+Z / Ctrl+Y</td><td>Redo</td></tr>"
+            "<tr><td>Ctrl+C</td><td>Copy selected graphic or element</td></tr>"
+            "<tr><td>Ctrl+X</td><td>Cut selected graphic or element</td></tr>"
+            "<tr><td>Ctrl+V</td><td>Paste (offset +10 px)</td></tr>"
+            "<tr><td>Ctrl+Shift+V</td><td>Paste in place</td></tr>"
+            "</table><h3>View</h3><table>"
+            "<tr><td>Ctrl+=</td><td>Zoom in</td></tr>"
+            "<tr><td>Ctrl+−</td><td>Zoom out</td></tr>"
+            "<tr><td>Ctrl+0</td><td>Fit canvas to window</td></tr>"
+            "<tr><td>;</td><td>Toggle snapping</td></tr>"
+            "</table><h3>Canvas</h3><table>"
+            "<tr><td>Click</td><td>Select element or graphic</td></tr>"
+            "<tr><td>Drag element</td><td>Move element</td></tr>"
+            "<tr><td>Drag handle</td><td>Resize element</td></tr>"
+            "<tr><td>Shift + drag corner</td><td>Resize proportionally</td></tr>"
+            "<tr><td>Ctrl + drag corner</td><td>Resize from center</td></tr>"
+            "<tr><td>← ↑ → ↓</td><td>Nudge 1 px</td></tr>"
+            "<tr><td>Shift + ← ↑ → ↓</td><td>Nudge 10 px</td></tr>"
+            "<tr><td>Middle mouse drag</td><td>Pan canvas</td></tr>"
+            "<tr><td>Scroll wheel</td><td>Zoom canvas</td></tr>"
+            "</table><h3>Insert (requires a graphic selected)</h3><table>"
+            "<tr><td>Insert → Graphic</td><td>Add new graphic layer</td></tr>"
+            "<tr><td>Insert → Rectangle / Text / Image / QR Code</td><td>Add element</td></tr>"
+            "</table><h3>Misc</h3><table>"
+            "<tr><td>F1</td><td>Show this shortcuts reference</td></tr>"
+            "</table>"
+        );
+        auto* layout = new QVBoxLayout(dlg);
+        layout->addWidget(browser);
+        auto* btns = new QDialogButtonBox(QDialogButtonBox::Close, dlg);
+        connect(btns, &QDialogButtonBox::rejected, dlg, &QDialog::accept);
+        layout->addWidget(btns);
+        dlg->exec();
+    });
+    addAction(m_shortcutsAction);
+
+    m_aboutAction = new QAction(themedIcon(Icons16::Misc_Info), "About…", this);
+    connect(m_aboutAction, &QAction::triggered, this, [this]() {
+        QMessageBox::about(this, "About obs-graphics Scene Editor",
+            "<b>obs-graphics Scene Editor</b> &mdash; version " APP_VERSION "<br><br>"
+            "A standalone desktop editor for authoring animated broadcast graphics scenes.<br>"
+            "Scenes are saved as JSON and consumed by the <i>obs-graphics</i> OBS Studio plugin.<br><br>"
+            "Built with Qt 6 and Cairo.");
+    });
+
     // ── Home tab ───────────────────────────────────────────────────────────────
-    auto* homePage = new QWidget;
-    auto* homeLayout = new QHBoxLayout(homePage);
-    homeLayout->setContentsMargins(0, 0, 0, 0);
-    homeLayout->setSpacing(0);
-    homeLayout->addStretch();
-    m_ribbon->addTab(homePage, "Home");
+    auto* homeCat = m_ribbon->addCategoryPage("Home");
 
-    {   // File group
-        auto* gl = makeGroup(homePage, homeLayout, "File");
-
-        auto* newAct = new QAction(themedIcon(Icons16::File_File), "New", this);
-        connect(newAct, &QAction::triggered, this, &MainWindow::onNew);
-        gl->insertWidget(gl->count()-1, makeLargeBtn(newAct));
-
-        auto* openAct = new QAction(themedIcon(Icons16::File_FolderOpen), "Open", this);
-        connect(openAct, &QAction::triggered, this, &MainWindow::onOpen);
-        auto* saveAct = new QAction(themedIcon(Icons16::Action_Save), "Save", this);
-        connect(saveAct, &QAction::triggered, this, &MainWindow::onSave);
-        makeSmallStack(gl, {openAct, saveAct});
+    {   // Edit panel (Undo / Redo)
+        auto* panel = homeCat->addPanel("Edit");
+        panel->addLargeWidget(makeSmallStack({m_undoAction, m_redoAction}));
     }
 
-    {   // Clipboard group
-        auto* gl = makeGroup(homePage, homeLayout, "Clipboard");
+    {   // File panel
+        auto* panel = homeCat->addPanel("File");
+        panel->addLargeWidget(makeLargeBtn(m_newAction));
+        panel->addLargeWidget(makeSmallStack({m_openAction, m_saveAction}));
+    }
+
+    {   // Clipboard panel
+        auto* panel = homeCat->addPanel("Clipboard");
 
         m_pasteAction = new QAction(themedIcon(Icons16::Action_Paste), "Paste", this);
         m_pasteAction->setEnabled(false);
+        m_pasteAction->setShortcut(QKeySequence::Paste);
         connect(m_pasteAction, &QAction::triggered, this, [this]() { doPaste(false); });
+        addAction(m_pasteAction);
 
         auto* pasteMenu = new QMenu(this);
         m_pasteInPlaceAction = new QAction("Paste in Place", this);
         m_pasteInPlaceAction->setEnabled(false);
+        m_pasteInPlaceAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
         connect(m_pasteInPlaceAction, &QAction::triggered, this, [this]() { doPaste(true); });
+        addAction(m_pasteInPlaceAction);
         pasteMenu->addAction(m_pasteInPlaceAction);
         pasteMenu->addAction("Paste special…")->setEnabled(false);
 
@@ -255,62 +355,50 @@ void MainWindow::setupRibbon()
         pasteBtn->setAutoRaise(true);
         pasteBtn->setMenu(pasteMenu);
         pasteBtn->setPopupMode(QToolButton::MenuButtonPopup);
-        gl->insertWidget(gl->count()-1, pasteBtn);
+        panel->addLargeWidget(padded(pasteBtn));
 
         m_cutAction = new QAction(themedIcon(Icons16::Action_Cut), "Cut", this);
         m_cutAction->setEnabled(false);
+        m_cutAction->setShortcut(QKeySequence::Cut);
         connect(m_cutAction, &QAction::triggered, this, &MainWindow::onCut);
+        addAction(m_cutAction);
 
         m_copyAction = new QAction(themedIcon(Icons16::Action_Copy), "Copy", this);
         m_copyAction->setEnabled(false);
+        m_copyAction->setShortcut(QKeySequence::Copy);
         connect(m_copyAction, &QAction::triggered, this, &MainWindow::onCopy);
+        addAction(m_copyAction);
 
-        makeSmallStack(gl, {m_cutAction, m_copyAction});
-    }
-
-    {   // View group
-        auto* gl = makeGroup(homePage, homeLayout, "View");
-        auto* zoomInAct  = new QAction(themedIcon(Icons16::Action_ZoomIn),  "Zoom In",  this);
-        auto* zoomOutAct = new QAction(themedIcon(Icons16::Action_ZoomOut), "Zoom Out", this);
-        auto* fitAct     = new QAction(themedIcon(Icons16::Action_ZoomFit), "Fit",      this);
-        connect(zoomInAct,  &QAction::triggered, m_canvas, &CanvasWidget::zoomIn);
-        connect(zoomOutAct, &QAction::triggered, m_canvas, &CanvasWidget::zoomOut);
-        connect(fitAct,     &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
-        makeSmallStack(gl, {zoomInAct, zoomOutAct, fitAct});
+        panel->addLargeWidget(makeSmallStack({m_cutAction, m_copyAction}));
     }
 
     // ── Insert tab ─────────────────────────────────────────────────────────────
-    {
-        auto* insertPage = new QWidget;
-        auto* insertLayout = new QHBoxLayout(insertPage);
-        insertLayout->setContentsMargins(0, 0, 0, 0);
-        insertLayout->setSpacing(0);
-        insertLayout->addStretch();
-        m_ribbon->addTab(insertPage, "Insert");
+    auto* insertCat = m_ribbon->addCategoryPage("Insert");
 
-        {   // Graphic group
-            auto* gl = makeGroup(insertPage, insertLayout, "Graphic");
+    {   // Graphic panel
+        auto* panel = insertCat->addPanel("Graphic");
 
-            auto* addGraphicAct = new QAction(themedIcon(Icons16::Navigation_Layers1), "Graphic", this);
-            connect(addGraphicAct, &QAction::triggered, this, [this]() {
-                using json = nlohmann::json;
-                int maxN = 0;
-                for (const auto& g : m_doc->scene().graphics)
-                    if (g.id.rfind("graphic_", 0) == 0)
-                        try { maxN = std::max(maxN, std::stoi(g.id.substr(8))); } catch (...) {}
-                std::string newId = "graphic_" + std::to_string(maxN + 1);
-                int newZ = (int)m_doc->scene().graphics.size();
-                json j = {{"id", newId}, {"z_order", newZ}, {"elements", json::array()}};
-                m_doc->undoStack()->push(new AddGraphicCmd(m_doc, std::move(j)));
-                const auto& gs = m_doc->scene().graphics;
-                for (int i = 0; i < (int)gs.size(); ++i)
-                    if (gs[i].id == newId)
-                        { m_editorScene->setSelection({SelectionId::Level::Graphic, i, -1}); break; }
-            });
-            gl->insertWidget(gl->count()-1, makeLargeBtn(addGraphicAct));
-        }
+        auto* addGraphicAct = new QAction(themedIcon(Icons16::Navigation_Layers1), "Graphic", this);
+        connect(addGraphicAct, &QAction::triggered, this, [this]() {
+            using json = nlohmann::json;
+            int maxN = 0;
+            for (const auto& g : m_doc->scene().graphics)
+                if (g.id.rfind("graphic_", 0) == 0)
+                    try { maxN = std::max(maxN, std::stoi(g.id.substr(8))); } catch (...) {}
+            std::string newId = "graphic_" + std::to_string(maxN + 1);
+            int newZ = (int)m_doc->scene().graphics.size();
+            json j = {{"id", newId}, {"z_order", newZ}, {"elements", json::array()}};
+            m_doc->undoStack()->push(new AddGraphicCmd(m_doc, std::move(j)));
+            const auto& gs = m_doc->scene().graphics;
+            for (int i = 0; i < (int)gs.size(); ++i)
+                if (gs[i].id == newId)
+                    { m_editorScene->setSelection({SelectionId::Level::Graphic, i, -1}); break; }
+        });
+        panel->addLargeWidget(makeLargeBtn(addGraphicAct));
+    }
 
-        auto* gl = makeGroup(insertPage, insertLayout, "Elements");
+    {   // Elements panel
+        auto* panel = insertCat->addPanel("Elements");
 
         m_addRectAction = new QAction(themedIcon(Icons16::Shape_Square), "Rectangle", this);
         m_addRectAction->setEnabled(false);
@@ -336,7 +424,7 @@ void MainWindow::setupRibbon()
                 if (els[ei].id == newId)
                     { m_editorScene->setSelection({SelectionId::Level::Element, gi, ei}); break; }
         });
-        gl->insertWidget(gl->count()-1, makeLargeBtn(m_addRectAction));
+        panel->addLargeWidget(makeLargeBtn(m_addRectAction));
 
         m_addTextAction = new QAction(themedIcon(Icons16::File_Font), "Text", this);
         m_addTextAction->setEnabled(false);
@@ -363,7 +451,7 @@ void MainWindow::setupRibbon()
                 if (els[ei].id == newId)
                     { m_editorScene->setSelection({SelectionId::Level::Element, gi, ei}); break; }
         });
-        gl->insertWidget(gl->count()-1, makeLargeBtn(m_addTextAction));
+        panel->addLargeWidget(makeLargeBtn(m_addTextAction));
 
         auto makeElementAction = [&](const std::string& prefix, const std::string& type,
                                      QIcon icon, const QString& label) -> QAction* {
@@ -390,7 +478,7 @@ void MainWindow::setupRibbon()
                     if (els[ei].id == newId)
                         { m_editorScene->setSelection({SelectionId::Level::Element, gi, ei}); break; }
             });
-            gl->insertWidget(gl->count()-1, makeLargeBtn(act));
+            panel->addLargeWidget(makeLargeBtn(act));
             return act;
         };
 
@@ -400,12 +488,7 @@ void MainWindow::setupRibbon()
 
     // ── Scene tab — always visible, holds scene name + canvas dimensions ────────
     {
-        auto* scenePage = new QWidget;
-        auto* sceneLayout = new QHBoxLayout(scenePage);
-        sceneLayout->setContentsMargins(0, 0, 0, 0);
-        sceneLayout->setSpacing(0);
-        sceneLayout->addStretch();
-        m_ribbon->addTab(scenePage, "Scene");
+        auto* sceneCat = m_ribbon->addCategoryPage("Scene");
 
         auto sceneLabel = [](const QString& text) -> QLabel* {
             auto* lbl = new QLabel(text);
@@ -414,27 +497,26 @@ void MainWindow::setupRibbon()
             return lbl;
         };
 
-        auto makeSceneGroup = [&](const QString& name) -> QGridLayout* {
-            auto* grp = new Nedrysoft::Ribbon::RibbonGroup(scenePage);
-            grp->setGroupName(name);
-            grp->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-            auto* gl = new QGridLayout(grp);
-            gl->setContentsMargins(4, 2, 4, 2);
+        auto makeScenePanel = [&](const QString& name) -> QGridLayout* {
+            auto* panel = sceneCat->addPanel(name);
+            auto* container = new QWidget;
+            auto* gl = new QGridLayout(container);
+            gl->setContentsMargins(0, 0, 0, 0);
             gl->setSpacing(4);
-            sceneLayout->insertWidget(sceneLayout->count() - 1, grp);
+            panel->addLargeWidget(padded(container));
             return gl;
         };
 
-        {   // Info group: scene name
-            auto* gl = makeSceneGroup("Info");
+        {   // Info panel: scene name
+            auto* gl = makeScenePanel("Info");
             m_sceneNameEdit = new QLineEdit;
             m_sceneNameEdit->setFixedWidth(160);
             gl->addWidget(sceneLabel("Name"), 0, 0, 2, 1);
             gl->addWidget(m_sceneNameEdit, 0, 1, 2, 1, Qt::AlignVCenter);
         }
 
-        {   // Canvas group: preset + W × H
-            auto* gl = makeSceneGroup("Canvas");
+        {   // Canvas panel: preset + W × H
+            auto* gl = makeScenePanel("Canvas");
             m_scenePresetCombo = new QComboBox;
             m_scenePresetCombo->setFixedWidth(180);
             for (const auto& p : kScenePresets)
@@ -511,12 +593,90 @@ void MainWindow::setupRibbon()
         updateSceneRibbon();
     }
 
+    // ── View tab ──────────────────────────────────────────────────────────────
+    auto* viewCat = m_ribbon->addCategoryPage("View");
+
+    {   // Zoom panel
+        auto* panel = viewCat->addPanel("Zoom");
+        auto* zoomInAct = new QAction(themedIcon(Icons16::Action_ZoomIn), "Zoom In", this);
+        zoomInAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Equal));
+        connect(zoomInAct, &QAction::triggered, m_canvas, &CanvasWidget::zoomIn);
+        addAction(zoomInAct);
+
+        auto* zoomOutAct = new QAction(themedIcon(Icons16::Action_ZoomOut), "Zoom Out", this);
+        zoomOutAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
+        connect(zoomOutAct, &QAction::triggered, m_canvas, &CanvasWidget::zoomOut);
+        addAction(zoomOutAct);
+
+        auto* fitAct = new QAction(themedIcon(Icons16::Action_ZoomFit), "Fit", this);
+        fitAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+        connect(fitAct, &QAction::triggered, m_canvas, &CanvasWidget::fitToWindow);
+        addAction(fitAct);
+
+        panel->addLargeWidget(makeLargeBtn(zoomInAct));
+        panel->addLargeWidget(makeSmallStack({zoomOutAct, fitAct}));
+    }
+
+    {   // Snapping panel
+        auto* panel = viewCat->addPanel("Snapping");
+        auto* snapAct = new QAction(themedIcon(Icons16::Misc_Grid), "Snapping", this);
+        snapAct->setCheckable(true);
+        snapAct->setChecked(true);
+        snapAct->setShortcut(Qt::Key_Semicolon);
+        connect(snapAct, &QAction::toggled, m_canvas, &CanvasWidget::setSnapping);
+        addAction(snapAct);
+        panel->addLargeWidget(makeLargeBtn(snapAct));
+    }
+
+    {   // Guides panel
+        auto* panel = viewCat->addPanel("Guides");
+
+        auto addGuideToggle = [&](const QString& label, CanvasWidget::GuideFlag flag, bool on) {
+            auto* btn = new QToolButton;
+            btn->setText(label);
+            btn->setIcon(themedIcon(Icons16::Misc_Rulers));
+            btn->setCheckable(true);
+            btn->setChecked(on);
+            btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+            btn->setIconSize({16, 16});
+            btn->setMinimumHeight(22);
+            btn->setAutoRaise(true);
+            btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+            connect(btn, &QToolButton::toggled, this, [this, flag](bool checked) {
+                CanvasWidget::GuideFlags f = m_canvas->guides();
+                if (checked) f |= flag; else f &= ~flag;
+                m_canvas->setGuides(f);
+            });
+            return btn;
+        };
+
+        auto* col = new QWidget;
+        auto* cl  = new QVBoxLayout(col);
+        cl->setContentsMargins(0, 0, 0, 0);
+        cl->setSpacing(2);
+        cl->addWidget(addGuideToggle("Rule of Thirds",    CanvasWidget::GuideRuleOfThirds, true));
+        cl->addWidget(addGuideToggle("Center Lines",      CanvasWidget::GuideCenterLines,  true));
+        cl->addWidget(addGuideToggle("Title Safe (90%)",  CanvasWidget::GuideTitleSafe,    false));
+        cl->addWidget(addGuideToggle("Action Safe (80%)", CanvasWidget::GuideActionSafe,   false));
+        panel->addLargeWidget(padded(col));
+    }
+
+    // ── Help tab ──────────────────────────────────────────────────────────────
+    {
+        auto* helpCat = m_ribbon->addCategoryPage("Help");
+        auto* panel   = helpCat->addPanel("Help");
+        panel->addLargeWidget(makeLargeBtn(m_shortcutsAction));
+        panel->addLargeWidget(makeLargeBtn(m_aboutAction));
+    }
+
     // Contextual Graphic + Element + Style + Text tabs created by RibbonFormatSection
     m_formatSection = new RibbonFormatSection(m_doc, m_ribbon, this);
-    m_ribbon->tabBar()->setTabVisible(m_formatSection->graphicTabIndex(), false);
-    m_ribbon->tabBar()->setTabVisible(m_formatSection->elementTabIndex(), false);
-    m_ribbon->tabBar()->setTabVisible(m_formatSection->styleTabIndex(),   false);
-    m_ribbon->tabBar()->setTabVisible(m_formatSection->textTabIndex(),    false);
+    m_ribbon->hideCategory(m_formatSection->graphicCategory());
+    m_ribbon->hideCategory(m_formatSection->elementCategory());
+    m_ribbon->hideCategory(m_formatSection->styleCategory());
+    m_ribbon->hideCategory(m_formatSection->textCategory());
+    m_ribbon->hideCategory(m_formatSection->imageCategory());
+    m_ribbon->hideCategory(m_formatSection->qrCategory());
 
     connect(m_formatSection, &RibbonFormatSection::deleteGraphicRequested, this, [this]() {
         const SelectionId sel = m_editorScene->selection();
@@ -538,182 +698,25 @@ void MainWindow::setupRibbon()
 
 void MainWindow::setupMenuBar()
 {
-    // File
-    auto* fileMenu = menuBar()->addMenu("&File");
+    // All actions created in setupRibbon(). This function only wires the
+    // application button popup for file operations.
+    auto* appMenu = new QMenu(this);
+    appMenu->addAction(m_newAction);
+    appMenu->addAction(m_openAction);
+    appMenu->addSeparator();
+    appMenu->addAction(m_saveAction);
+    appMenu->addAction(m_saveAsAction);
+    appMenu->addSeparator();
+    appMenu->addAction(m_shortcutsAction);
+    appMenu->addAction(m_aboutAction);
+    appMenu->addSeparator();
+    appMenu->addAction(m_exitAction);
 
-    auto* newAct = fileMenu->addAction("&New");
-    newAct->setShortcut(QKeySequence::New);
-    connect(newAct, &QAction::triggered, this, &MainWindow::onNew);
-
-    auto* openAct = fileMenu->addAction("&Open...");
-    openAct->setShortcut(QKeySequence::Open);
-    connect(openAct, &QAction::triggered, this, &MainWindow::onOpen);
-
-    fileMenu->addSeparator();
-
-    auto* saveAct = fileMenu->addAction("&Save");
-    saveAct->setShortcut(QKeySequence::Save);
-    connect(saveAct, &QAction::triggered, this, &MainWindow::onSave);
-
-    auto* saveAsAct = fileMenu->addAction("Save &As...");
-    saveAsAct->setShortcut(QKeySequence::SaveAs);
-    connect(saveAsAct, &QAction::triggered, this, &MainWindow::onSaveAs);
-
-    fileMenu->addSeparator();
-
-    auto* exitAct = fileMenu->addAction("E&xit");
-    exitAct->setShortcut(QKeySequence::Quit);
-    connect(exitAct, &QAction::triggered, this, &QWidget::close);
-
-    // Edit
-    auto* editMenu = menuBar()->addMenu("&Edit");
-
-    m_undoAction = m_doc->undoStack()->createUndoAction(this, "&Undo");
-    m_undoAction->setShortcut(QKeySequence::Undo);
-    editMenu->addAction(m_undoAction);
-
-    m_redoAction = m_doc->undoStack()->createRedoAction(this, "&Redo");
-    m_redoAction->setShortcuts({QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z),
-                                QKeySequence(Qt::CTRL | Qt::Key_Y)});
-    editMenu->addAction(m_redoAction);
-
-    editMenu->addSeparator();
-
-    m_cutAction->setShortcut(QKeySequence::Cut);
-    editMenu->addAction(m_cutAction);
-
-    m_copyAction->setShortcut(QKeySequence::Copy);
-    editMenu->addAction(m_copyAction);
-
-    m_pasteAction->setShortcut(QKeySequence::Paste);
-    editMenu->addAction(m_pasteAction);
-
-    m_pasteInPlaceAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V));
-    editMenu->addAction(m_pasteInPlaceAction);
-
-    // View
-    auto* viewMenu = menuBar()->addMenu("&View");
-
-    auto* snapAct = viewMenu->addAction("Snapping");
-    snapAct->setCheckable(true);
-    snapAct->setChecked(true);
-    snapAct->setShortcut(QKeySequence(Qt::Key_Semicolon));
-    connect(snapAct, &QAction::toggled, m_canvas, &CanvasWidget::setSnapping);
-
-    viewMenu->addSeparator();
-
-    auto* zoomInAct  = viewMenu->addAction("Zoom In",      m_canvas, &CanvasWidget::zoomIn);
-    auto* zoomOutAct = viewMenu->addAction("Zoom Out",     m_canvas, &CanvasWidget::zoomOut);
-    auto* fitAct     = viewMenu->addAction("Fit to Window",m_canvas, &CanvasWidget::fitToWindow);
-    zoomInAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Equal));
-    zoomOutAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
-    fitAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
-
-    viewMenu->addSeparator();
-
-    auto* guidesMenu = viewMenu->addMenu("Guides");
-    auto makeGuide = [&](const QString& label, CanvasWidget::GuideFlag flag, bool on) {
-        auto* act = guidesMenu->addAction(label);
-        act->setCheckable(true);
-        act->setChecked(on);
-        connect(act, &QAction::toggled, this, [this, flag](bool checked) {
-            CanvasWidget::GuideFlags f = m_canvas->guides();
-            if (checked) f |= flag; else f &= ~flag;
-            m_canvas->setGuides(f);
-        });
-    };
-    makeGuide("Rule of Thirds",   CanvasWidget::GuideRuleOfThirds, true);
-    makeGuide("Center Lines",     CanvasWidget::GuideCenterLines,  true);
-    makeGuide("Title Safe (90%)", CanvasWidget::GuideTitleSafe,    false);
-    makeGuide("Action Safe (80%)",CanvasWidget::GuideActionSafe,   false);
-
-    // Help
-    auto* helpMenu = menuBar()->addMenu("&Help");
-
-    auto* shortcutsAct = helpMenu->addAction("Keyboard &Shortcuts...");
-    shortcutsAct->setShortcut(QKeySequence(Qt::Key_F1));
-    connect(shortcutsAct, &QAction::triggered, this, [this]() {
-        auto* dlg = new QDialog(this);
-        dlg->setWindowTitle("Keyboard Shortcuts");
-        dlg->resize(500, 520);
-        auto* browser = new QTextBrowser(dlg);
-        browser->setHtml(
-            "<style>"
-            "body { font-family: sans-serif; font-size: 13px; margin: 8px; }"
-            "h3 { margin-top: 14px; margin-bottom: 2px; color: #555; font-size: 12px;"
-            "     text-transform: uppercase; letter-spacing: 1px; }"
-            "table { border-collapse: collapse; width: 100%; margin-bottom: 4px; }"
-            "td { padding: 3px 6px; border-bottom: 1px solid #eee; }"
-            "td:first-child { font-family: monospace; font-weight: bold;"
-            "                 white-space: nowrap; color: #333; width: 200px; }"
-            "</style>"
-            "<h3>File</h3>"
-            "<table>"
-            "<tr><td>Ctrl+N</td><td>New scene</td></tr>"
-            "<tr><td>Ctrl+O</td><td>Open scene file</td></tr>"
-            "<tr><td>Ctrl+S</td><td>Save</td></tr>"
-            "<tr><td>Ctrl+Shift+S</td><td>Save As</td></tr>"
-            "<tr><td>Ctrl+Q</td><td>Quit</td></tr>"
-            "</table>"
-            "<h3>Edit</h3>"
-            "<table>"
-            "<tr><td>Ctrl+Z</td><td>Undo</td></tr>"
-            "<tr><td>Ctrl+Shift+Z &nbsp;/&nbsp; Ctrl+Y</td><td>Redo</td></tr>"
-            "<tr><td>Ctrl+C</td><td>Copy selected graphic or element</td></tr>"
-            "<tr><td>Ctrl+X</td><td>Cut selected graphic or element</td></tr>"
-            "<tr><td>Ctrl+V</td><td>Paste (offset +10 px)</td></tr>"
-            "<tr><td>Ctrl+Shift+V</td><td>Paste in place</td></tr>"
-            "</table>"
-            "<h3>View</h3>"
-            "<table>"
-            "<tr><td>Ctrl+=</td><td>Zoom in</td></tr>"
-            "<tr><td>Ctrl+−</td><td>Zoom out</td></tr>"
-            "<tr><td>Ctrl+0</td><td>Fit canvas to window</td></tr>"
-            "<tr><td>;</td><td>Toggle snapping</td></tr>"
-            "</table>"
-            "<h3>Canvas</h3>"
-            "<table>"
-            "<tr><td>Click</td><td>Select element or graphic</td></tr>"
-            "<tr><td>Drag element</td><td>Move element</td></tr>"
-            "<tr><td>Drag handle</td><td>Resize element</td></tr>"
-            "<tr><td>Shift + drag corner</td><td>Resize proportionally</td></tr>"
-            "<tr><td>Ctrl + drag corner</td><td>Resize from center</td></tr>"
-            "<tr><td>← ↑ → ↓</td><td>Nudge element / graphic 1 px</td></tr>"
-            "<tr><td>Shift + ← ↑ → ↓</td><td>Nudge element / graphic 10 px</td></tr>"
-            "<tr><td>Middle mouse drag</td><td>Pan canvas</td></tr>"
-            "<tr><td>Scroll wheel</td><td>Zoom canvas</td></tr>"
-            "</table>"
-            "<h3>Insert (requires a graphic selected)</h3>"
-            "<table>"
-            "<tr><td>Insert tab → Graphic</td><td>Add new graphic layer</td></tr>"
-            "<tr><td>Insert tab → Rectangle</td><td>Add rectangle element</td></tr>"
-            "<tr><td>Insert tab → Text</td><td>Add text element</td></tr>"
-            "<tr><td>Insert tab → Image</td><td>Add image element</td></tr>"
-            "<tr><td>Insert tab → QR Code</td><td>Add QR code element</td></tr>"
-            "</table>"
-            "<h3>Misc</h3>"
-            "<table>"
-            "<tr><td>F1</td><td>Show this shortcuts reference</td></tr>"
-            "</table>"
-        );
-        auto* layout = new QVBoxLayout(dlg);
-        layout->addWidget(browser);
-        auto* btns = new QDialogButtonBox(QDialogButtonBox::Close, dlg);
-        connect(btns, &QDialogButtonBox::rejected, dlg, &QDialog::accept);
-        layout->addWidget(btns);
-        dlg->exec();
-    });
-
-    helpMenu->addSeparator();
-
-    auto* aboutAct = helpMenu->addAction("&About...");
-    connect(aboutAct, &QAction::triggered, this, [this]() {
-        QMessageBox::about(this, "About obs-graphics Scene Editor",
-            "<b>obs-graphics Scene Editor</b> &mdash; version 0.1<br><br>"
-            "A standalone desktop editor for authoring animated broadcast graphics scenes.<br>"
-            "Scenes are saved as JSON and consumed by the <i>obs-graphics</i> OBS Studio plugin.<br><br>"
-            "Built with Qt 6 and Cairo.");
-    });
+    if (auto* appBtn = qobject_cast<QToolButton*>(m_ribbon->applicationButton())) {
+        appBtn->setText("File");
+        appBtn->setPopupMode(QToolButton::InstantPopup);
+        appBtn->setMenu(appMenu);
+    }
 }
 
 // ── File operations ───────────────────────────────────────────────────────────
@@ -827,13 +830,16 @@ void MainWindow::onSelectionChanged(SelectionId id)
         m_formatSection->setSelection(gi, ei);
         m_timingEditor->loadGraphic(id.graphicIndex);
 
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->graphicTabIndex(), false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->elementTabIndex(), true);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->styleTabIndex(),   true);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->textTabIndex(),  isText);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->imageTabIndex(), isImage);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->qrTabIndex(),    isQr);
-        m_ribbon->setCurrentIndex(m_formatSection->elementTabIndex());
+        m_ribbon->hideCategory(m_formatSection->graphicCategory());
+        m_ribbon->showCategory(m_formatSection->elementCategory());
+        m_ribbon->showCategory(m_formatSection->styleCategory());
+        isText  ? m_ribbon->showCategory(m_formatSection->textCategory())
+                : m_ribbon->hideCategory(m_formatSection->textCategory());
+        isImage ? m_ribbon->showCategory(m_formatSection->imageCategory())
+                : m_ribbon->hideCategory(m_formatSection->imageCategory());
+        isQr    ? m_ribbon->showCategory(m_formatSection->qrCategory())
+                : m_ribbon->hideCategory(m_formatSection->qrCategory());
+        m_ribbon->setCurrentIndex(m_ribbon->categoryIndex(m_formatSection->elementCategory()));
 
     } else if (id.level == SelectionId::Level::Graphic) {
         const Scene& s = m_doc->scene();
@@ -843,22 +849,22 @@ void MainWindow::onSelectionChanged(SelectionId id)
         m_formatSection->setGraphicSelection(gid);
         m_timingEditor->loadGraphic(id.graphicIndex);
 
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->graphicTabIndex(), true);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->elementTabIndex(), false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->styleTabIndex(),   false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->textTabIndex(),    false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->imageTabIndex(),   false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->qrTabIndex(),      false);
-        m_ribbon->setCurrentIndex(m_formatSection->graphicTabIndex());
+        m_ribbon->showCategory(m_formatSection->graphicCategory());
+        m_ribbon->hideCategory(m_formatSection->elementCategory());
+        m_ribbon->hideCategory(m_formatSection->styleCategory());
+        m_ribbon->hideCategory(m_formatSection->textCategory());
+        m_ribbon->hideCategory(m_formatSection->imageCategory());
+        m_ribbon->hideCategory(m_formatSection->qrCategory());
+        m_ribbon->setCurrentIndex(m_ribbon->categoryIndex(m_formatSection->graphicCategory()));
 
     } else {
         m_formatSection->clearSelection();
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->graphicTabIndex(), false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->elementTabIndex(), false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->styleTabIndex(),   false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->textTabIndex(),    false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->imageTabIndex(),   false);
-        m_ribbon->tabBar()->setTabVisible(m_formatSection->qrTabIndex(),      false);
+        m_ribbon->hideCategory(m_formatSection->graphicCategory());
+        m_ribbon->hideCategory(m_formatSection->elementCategory());
+        m_ribbon->hideCategory(m_formatSection->styleCategory());
+        m_ribbon->hideCategory(m_formatSection->textCategory());
+        m_ribbon->hideCategory(m_formatSection->imageCategory());
+        m_ribbon->hideCategory(m_formatSection->qrCategory());
 
         m_timingEditor->clear();
     }

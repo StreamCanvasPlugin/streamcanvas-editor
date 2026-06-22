@@ -86,9 +86,12 @@ CPMAddPackage(
 )
 
 CPMAddPackage(
-    NAME Ribbon
-    GITHUB_REPOSITORY obs-graphics/qt-ribbon
+    NAME SARibbon
+    GITHUB_REPOSITORY czyt1988/SARibbon
     GIT_TAG master
+    OPTIONS
+        "SARIBBON_BUILD_EXAMPLES OFF"
+        "SARIBBON_BUILD_STATIC_LIBS ON"
 )
 
 CPMAddPackage(
@@ -102,13 +105,30 @@ if (nlohmann_json_ADDED)
   target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
 endif()
 
+# Resolve app version from the latest git tag; fall back to project version.
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE APP_GIT_TAG
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+endif()
+if(NOT APP_GIT_TAG OR APP_GIT_TAG STREQUAL "")
+    set(APP_GIT_TAG "${PROJECT_VERSION}")
+endif()
+message(STATUS "App version: ${APP_GIT_TAG}")
+
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${APP_GIT_TAG}")
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Svg
     engine
     qlementine-icons
-    Ribbon::Ribbon
+    SARibbonBar
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.

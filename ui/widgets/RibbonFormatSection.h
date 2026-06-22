@@ -6,7 +6,8 @@
 #include <string>
 
 class SceneDocument;
-namespace Nedrysoft { namespace Ribbon { class RibbonWidget; } }
+class SARibbonBar;
+class SARibbonCategory;
 class QDoubleSpinBox;
 class QSpinBox;
 class QLineEdit;
@@ -19,20 +20,19 @@ class ColorPicker;
 class PaintEditor;
 class PaintPickerWidget;
 
-// Creates and manages the contextual "Graphic", "Element", "Style", and "Text" ribbon tabs.
-// Graphic tab is visible when a graphic is selected. Element/Style/Text tabs are visible
-// when an element is selected (Text only for text elements).
+// Creates and manages the contextual "Graphic", "Element", "Style", "Text", "Image", and
+// "QR Code" ribbon categories. Categories shown/hidden in MainWindow::onSelectionChanged.
 class RibbonFormatSection : public QObject {
     Q_OBJECT
 public:
-    explicit RibbonFormatSection(SceneDocument* doc, Nedrysoft::Ribbon::RibbonWidget* ribbon, QObject* parent = nullptr);
+    explicit RibbonFormatSection(SceneDocument* doc, SARibbonBar* ribbon, QObject* parent = nullptr);
 
-    int graphicTabIndex() const { return m_graphicTabIdx; }
-    int elementTabIndex() const { return m_elemTabIdx; }
-    int styleTabIndex()   const { return m_styleTabIdx; }
-    int textTabIndex()    const { return m_textTabIdx; }
-    int imageTabIndex()   const { return m_imageTabIdx; }
-    int qrTabIndex()      const { return m_qrTabIdx; }
+    SARibbonCategory* graphicCategory() const { return m_graphicCategory; }
+    SARibbonCategory* elementCategory() const { return m_elemCategory; }
+    SARibbonCategory* styleCategory()   const { return m_styleCategory; }
+    SARibbonCategory* textCategory()    const { return m_textCategory; }
+    SARibbonCategory* imageCategory()   const { return m_imageCategory; }
+    SARibbonCategory* qrCategory()      const { return m_qrCategory; }
 
     void setGraphicSelection(const std::string& gi);
     void setSelection(const std::string& gi, const std::string& ei);
@@ -91,12 +91,12 @@ private slots:
     void onContentChanged();
 
 private:
-    void buildGraphicTab(Nedrysoft::Ribbon::RibbonWidget* ribbon);
-    void buildElementTab(Nedrysoft::Ribbon::RibbonWidget* ribbon);
-    void buildStyleTab(Nedrysoft::Ribbon::RibbonWidget* ribbon);
-    void buildTextTab(Nedrysoft::Ribbon::RibbonWidget* ribbon);
-    void buildImageTab(Nedrysoft::Ribbon::RibbonWidget* ribbon);
-    void buildQrTab(Nedrysoft::Ribbon::RibbonWidget* ribbon);
+    void buildGraphicTab(SARibbonBar* ribbon);
+    void buildElementTab(SARibbonBar* ribbon);
+    void buildStyleTab(SARibbonBar* ribbon);
+    void buildTextTab(SARibbonBar* ribbon);
+    void buildImageTab(SARibbonBar* ribbon);
+    void buildQrTab(SARibbonBar* ribbon);
     void openContentEditor(const QString& title);
 
     QPixmap  makePaintSwatch(const Paint& paint, QSize size = QSize(36, 20));
@@ -110,12 +110,12 @@ private:
     std::string    m_elementId;
     bool           m_updating{false};
 
-    int m_graphicTabIdx{-1};
-    int m_elemTabIdx{-1};
-    int m_styleTabIdx{-1};
-    int m_textTabIdx{-1};
-    int m_imageTabIdx{-1};
-    int m_qrTabIdx{-1};
+    SARibbonCategory* m_graphicCategory{nullptr};
+    SARibbonCategory* m_elemCategory{nullptr};
+    SARibbonCategory* m_styleCategory{nullptr};
+    SARibbonCategory* m_textCategory{nullptr};
+    SARibbonCategory* m_imageCategory{nullptr};
+    SARibbonCategory* m_qrCategory{nullptr};
 
     // Graphic tab
     QLineEdit* m_graphicIdEdit{nullptr};
