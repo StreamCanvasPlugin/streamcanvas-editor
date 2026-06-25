@@ -2,6 +2,7 @@
 #include "icons.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QPalette>
 
 int main(int argc, char* argv[])
@@ -51,6 +52,8 @@ int main(int argc, char* argv[])
 
     a.setPalette(dark);
     // ─────────────────────────────────────────────────────────────────────────
+
+    QApplication::setWindowIcon(QIcon(":/icons/app.png"));
 
     initIcons();
     MainWindow w;

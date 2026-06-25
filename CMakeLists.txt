@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(editor VERSION 0.1 LANGUAGES C CXX)
+project(obs-graphics-editor VERSION 0.1 LANGUAGES C CXX)
 
 include(cmake/CPM.cmake)
 
@@ -131,6 +131,18 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     SARibbonBar
 )
 
+# ── Windows: embed ICO into the executable via a resource script ──────────────
+if(WIN32)
+    target_sources(${PROJECT_NAME} PRIVATE resources/app.rc)
+endif()
+
+# ── macOS: embed ICNS into the app bundle ─────────────────────────────────────
+if(APPLE)
+    set(MACOS_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app.icns)
+    target_sources(${PROJECT_NAME} PRIVATE ${MACOS_ICON_FILE})
+    set_source_files_properties(${MACOS_ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+endif()
+
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.
@@ -141,6 +153,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     ${BUNDLE_ID_OPTION}
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    MACOSX_BUNDLE_ICON_FILE app.icns
     MACOSX_BUNDLE TRUE
     WIN32_EXECUTABLE TRUE
 )
@@ -151,6 +164,18 @@ install(TARGETS ${PROJECT_NAME}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+# ── Linux: install desktop entry and icon for AppImage / system packaging ─────
+if(UNIX AND NOT APPLE)
+    install(FILES packaging/obs-graphics-editor.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES resources/icons/app.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+        RENAME obs-graphics-editor.png)
+    install(FILES resources/icons/app.svg
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+        RENAME obs-graphics-editor.svg)
+endif()
 
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(${PROJECT_NAME})

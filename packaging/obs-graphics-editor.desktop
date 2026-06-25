@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OBS Graphics Editor
+GenericName=Broadcast Graphics Editor
+Comment=Author animated broadcast graphics scenes for OBS
+Exec=editor
+Icon=obs-graphics-editor
+Categories=Graphics;AudioVideo;
+Keywords=OBS;broadcast;graphics;overlay;scene;
+StartupWMClass=obs-graphics-editor

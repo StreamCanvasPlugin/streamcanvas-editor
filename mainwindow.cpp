@@ -13,8 +13,11 @@
 #include <SARibbonCategory.h>
 #include <SARibbonPanel.h>
 #include <SARibbonBar.h>
+#include <SAFramelessHelper.h>
+#include <SARibbonSystemButtonBar.h>
 
 #include <algorithm>
+#include <qcheckbox.h>
 #include <string>
 
 #include <QAction>
@@ -78,10 +81,31 @@ MainWindow::MainWindow(QWidget* parent)
       m_editorScene(new EditorScene(m_doc, this)),
       m_canvas(new CanvasWidget(m_doc, m_editorScene, this))
 {
+#ifdef Q_OS_LINUX
+    // SAFramelessHelper sets Qt::FramelessWindowHint so it can render its own
+    // title bar, but that prevents KWin from tiling/snapping the window on
+    // Wayland. Remove it before first show so the compositor stays in control.
+    if (auto* helper = framelessHelper()) {
+        helper->removeFrom(this);
+    }
+    setWindowFlags(windowFlags() & ~Qt::FramelessWindowHint);
+#endif
+
     showMaximized();
 
     setRibbonTheme(SARibbonTheme::RibbonThemeDark2);
     m_ribbon = ribbonBar();
+
+#ifdef Q_OS_LINUX
+    // Collapse ribbon title bar row and hide window buttons;
+    // native KDE decorations take over both roles on Wayland.
+    m_ribbon->setTitleBarHeight(0);
+    m_ribbon->setTitleVisible(false);
+    m_ribbon->setTitleIconVisible(false);
+    if (auto* sysBar = windowButtonBar()) {
+        sysBar->hide();
+    }
+#endif
 
     setupRibbon();
 
@@ -318,15 +342,15 @@ void MainWindow::setupRibbon()
     // ── Home tab ───────────────────────────────────────────────────────────────
     auto* homeCat = m_ribbon->addCategoryPage("Home");
 
-    {   // Edit panel (Undo / Redo)
-        auto* panel = homeCat->addPanel("Edit");
-        panel->addLargeWidget(makeSmallStack({m_undoAction, m_redoAction}));
-    }
-
     {   // File panel
         auto* panel = homeCat->addPanel("File");
         panel->addLargeWidget(makeLargeBtn(m_newAction));
         panel->addLargeWidget(makeSmallStack({m_openAction, m_saveAction}));
+    }
+
+    {   // Edit panel (Undo / Redo)
+        auto* panel = homeCat->addPanel("Edit");
+        panel->addLargeWidget(makeSmallStack({m_undoAction, m_redoAction}));
     }
 
     {   // Clipboard panel
@@ -632,17 +656,11 @@ void MainWindow::setupRibbon()
         auto* panel = viewCat->addPanel("Guides");
 
         auto addGuideToggle = [&](const QString& label, CanvasWidget::GuideFlag flag, bool on) {
-            auto* btn = new QToolButton;
+            auto* btn = new QCheckBox;
             btn->setText(label);
-            btn->setIcon(themedIcon(Icons16::Misc_Rulers));
             btn->setCheckable(true);
             btn->setChecked(on);
-            btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-            btn->setIconSize({16, 16});
-            btn->setMinimumHeight(22);
-            btn->setAutoRaise(true);
-            btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-            connect(btn, &QToolButton::toggled, this, [this, flag](bool checked) {
+            connect(btn, &QCheckBox::toggled, this, [this, flag](bool checked) {
                 CanvasWidget::GuideFlags f = m_canvas->guides();
                 if (checked) f |= flag; else f &= ~flag;
                 m_canvas->setGuides(f);

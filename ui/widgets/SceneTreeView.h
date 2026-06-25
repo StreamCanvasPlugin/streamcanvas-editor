@@ -14,6 +14,7 @@ public:
     explicit SceneTreeView(SceneDocument* doc, EditorScene* editorScene, QWidget* parent = nullptr);
 
 protected:
+    bool event(QEvent* e) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
 
 private slots:

@@ -8,6 +8,7 @@
 #include <QContextMenuEvent>
 #include <QHeaderView>
 #include <QItemSelectionModel>
+#include <QKeyEvent>
 #include <QMenu>
 
 SceneTreeView::SceneTreeView(SceneDocument* doc, EditorScene* editorScene, QWidget* parent)
@@ -70,6 +71,22 @@ void SceneTreeView::onEditorSelectionChanged(SelectionId id)
     }
 
     m_syncingSelection = false;
+}
+
+bool SceneTreeView::event(QEvent* e)
+{
+    // Don't claim clipboard shortcuts as ShortcutOverride — let the window-level
+    // QActions handle them rather than the default QAbstractItemView text-copy behavior.
+    if (e->type() == QEvent::ShortcutOverride) {
+        auto* ke = static_cast<QKeyEvent*>(e);
+        if (ke->matches(QKeySequence::Copy) ||
+            ke->matches(QKeySequence::Cut)  ||
+            ke->matches(QKeySequence::Paste)) {
+            ke->ignore();
+            return true;
+        }
+    }
+    return QTreeView::event(e);
 }
 
 void SceneTreeView::contextMenuEvent(QContextMenuEvent* event)
