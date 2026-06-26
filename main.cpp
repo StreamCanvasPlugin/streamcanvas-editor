@@ -57,6 +57,7 @@ int main(int argc, char* argv[])
 
     initIcons();
     MainWindow w;
+    w.resize(1280, 720);
     w.show();
     return QApplication::exec();
 }

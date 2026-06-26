@@ -805,11 +805,12 @@ void MainWindow::updateToolBarState(SelectionId id)
 {
     bool hasGraphic = (id.level == SelectionId::Level::Graphic ||
                        id.level == SelectionId::Level::Element);
+    bool graphicSelected = (id.level == SelectionId::Level::Graphic);
 
-    if (m_addRectAction)   m_addRectAction->setEnabled(hasGraphic);
-    if (m_addTextAction)   m_addTextAction->setEnabled(hasGraphic);
-    if (m_addImageAction)  m_addImageAction->setEnabled(hasGraphic);
-    if (m_addQrCodeAction) m_addQrCodeAction->setEnabled(hasGraphic);
+    if (m_addRectAction)   m_addRectAction->setEnabled(graphicSelected);
+    if (m_addTextAction)   m_addTextAction->setEnabled(graphicSelected);
+    if (m_addImageAction)  m_addImageAction->setEnabled(graphicSelected);
+    if (m_addQrCodeAction) m_addQrCodeAction->setEnabled(graphicSelected);
 
     bool hasSelection = (id.level == SelectionId::Level::Graphic ||
                          id.level == SelectionId::Level::Element);

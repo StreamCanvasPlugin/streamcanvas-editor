@@ -52,6 +52,7 @@ private:
 
     // image page
     QLineEdit* m_imagePathForPaint{nullptr};
+    QComboBox* m_paintScaleMode{nullptr};
 
     bool m_updating{false}; // prevent recursion
     BrandColorSwatchGrid* m_brandGrid{nullptr};

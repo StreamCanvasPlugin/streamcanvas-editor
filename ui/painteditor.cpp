@@ -10,6 +10,24 @@
 #include <QVBoxLayout>
 #include <QEvent>
 
+// ScaleMode combo display order: None, Contain, Cover, Fit Height, Fit Width, Stretch
+static const ScaleMode kScaleModeOrder[] = {
+    ScaleMode::None, ScaleMode::Contain, ScaleMode::Cover,
+    ScaleMode::FitHeight, ScaleMode::FitWidth, ScaleMode::Stretch
+};
+static const QStringList kScaleModeLabels = {
+    "None", "Contain", "Cover", "Fit Height", "Fit Width", "Stretch"
+};
+static int scaleModeToComboIndex(ScaleMode m) {
+    for (int i = 0; i < (int)std::size(kScaleModeOrder); ++i)
+        if (kScaleModeOrder[i] == m) return i;
+    return 0;
+}
+static ScaleMode comboIndexToScaleMode(int i) {
+    if (i >= 0 && i < (int)std::size(kScaleModeOrder)) return kScaleModeOrder[i];
+    return ScaleMode::None;
+}
+
 PaintEditor::PaintEditor(SceneDocument* doc, QWidget* parent) : QWidget(parent)
 {
     auto* layout = new QGridLayout(this);
@@ -137,9 +155,15 @@ PaintEditor::PaintEditor(SceneDocument* doc, QWidget* parent) : QWidget(parent)
         browseBtn->setText("…");
         browseBtn->setToolTip("Browse for image file");
 
-        gl->addWidget(new QLabel("Path"), 0, 0);
-        gl->addWidget(m_imagePathForPaint, 0, 1);
-        gl->addWidget(browseBtn, 0, 2);
+        m_paintScaleMode = new QComboBox;
+        m_paintScaleMode->addItems(kScaleModeLabels);
+        m_paintScaleMode->installEventFilter(this);
+
+        gl->addWidget(new QLabel("Path"),   0, 0);
+        gl->addWidget(m_imagePathForPaint,  0, 1);
+        gl->addWidget(browseBtn,            0, 2);
+        gl->addWidget(new QLabel("Scale"),  1, 0);
+        gl->addWidget(m_paintScaleMode,     1, 1, 1, 2);
 
         m_mainSelector->addWidget(page);
 
@@ -151,6 +175,9 @@ PaintEditor::PaintEditor(SceneDocument* doc, QWidget* parent) : QWidget(parent)
                 this, "Select Image", QString(), "PNG Images (*.png);;All Files (*)");
             if (path.isEmpty()) return;
             m_imagePathForPaint->setText(path);
+            emitPaint();
+        });
+        connect(m_paintScaleMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() {
             emitPaint();
         });
     }
@@ -224,6 +251,7 @@ Paint PaintEditor::getPaint() const
     } break;
     case 4: // Image
         paint = Paint::Image(m_imagePathForPaint->text().toStdString());
+        paint.imageScaleMode = comboIndexToScaleMode(m_paintScaleMode->currentIndex());
         break;
     }
 
@@ -295,6 +323,7 @@ void PaintEditor::setPaint(const Paint& paint)
     } break;
     case Paint::Type::Image:
         m_imagePathForPaint->setText(QString::fromStdString(paint.imagePath));
+        m_paintScaleMode->setCurrentIndex(scaleModeToComboIndex(paint.imageScaleMode));
         break;
     }
 

@@ -89,6 +89,26 @@ static FontWeight indexToWeight(int i)
     }
 }
 
+// ── ScaleMode combo helpers ────────────────────────────────────────────────────
+// Display order: None, Contain, Cover, Fit Height, Fit Width, Stretch
+static const ScaleMode kScaleModeOrder[] = {
+    ScaleMode::None, ScaleMode::Contain, ScaleMode::Cover,
+    ScaleMode::FitHeight, ScaleMode::FitWidth, ScaleMode::Stretch
+};
+static const QStringList kScaleModeLabels = {
+    "None", "Contain", "Cover", "Fit Height", "Fit Width", "Stretch"
+};
+
+static int scaleModeToComboIndex(ScaleMode m) {
+    for (int i = 0; i < (int)std::size(kScaleModeOrder); ++i)
+        if (kScaleModeOrder[i] == m) return i;
+    return 0;
+}
+static ScaleMode comboIndexToScaleMode(int i) {
+    if (i >= 0 && i < (int)std::size(kScaleModeOrder)) return kScaleModeOrder[i];
+    return ScaleMode::None;
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────────
 
 QPixmap RibbonFormatSection::makePaintSwatch(const Paint& paint, QSize size)
@@ -113,6 +133,15 @@ QPixmap RibbonFormatSection::makePaintSwatch(const Paint& paint, QSize size)
         p.fillRect(size.width() / 2, size.height() / 2, size.width() / 2, size.height() / 2,
                    QColor(220, 220, 220));
         p.fillRect(px.rect(), c);
+    } else if (paint.type == Paint::Type::Image) {
+        QPixmap img(QString::fromStdString(paint.imagePath));
+        if (!img.isNull()) {
+            p.drawPixmap(px.rect(), img.scaled(size, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+        } else {
+            p.fillRect(px.rect(), QColor(60, 60, 80));
+            p.setPen(QColor(150, 150, 200));
+            p.drawText(px.rect(), Qt::AlignCenter, "IMG");
+        }
     } else {
         QLinearGradient grad(0, size.height() / 2.0, size.width(), size.height() / 2.0);
         for (const auto& stop : paint.stops) {
@@ -840,7 +869,7 @@ void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
         browseBtn->setToolTip("Browse for image file");
 
         m_scaleMode = new QComboBox;
-        m_scaleMode->addItems({"Stretch", "Contain", "Cover", "Fit Width", "Fit Height", "None"});
+        m_scaleMode->addItems(kScaleModeLabels);
         m_scaleMode->setToolTip("Scale mode");
         m_scaleMode->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
@@ -1150,7 +1179,7 @@ void RibbonFormatSection::onDocumentChanged()
     // Image properties
     if (el->type == ElementType::Image) {
         m_imagePathEdit->setText(QString::fromStdString(el->imagePath));
-        m_scaleMode->setCurrentIndex(static_cast<int>(el->imageScaleMode));
+        m_scaleMode->setCurrentIndex(scaleModeToComboIndex(el->imageScaleMode));
     }
 
     // QR content — restore cursor same as text
@@ -1499,8 +1528,9 @@ void RibbonFormatSection::onImagePathChanged()
 void RibbonFormatSection::onScaleModeChanged(int index)
 {
     if (m_updating || m_graphicId.empty()) return;
+    const ScaleMode mode = comboIndexToScaleMode(index);
     m_doc->undoStack()->push(new SetElementFieldCmd<ScaleMode>(
-        m_doc, m_graphicId, m_elementId, static_cast<ScaleMode>(index),
+        m_doc, m_graphicId, m_elementId, mode,
         [](Element& e) -> ScaleMode& { return e.imageScaleMode; }, "scale_mode"));
 }
 
