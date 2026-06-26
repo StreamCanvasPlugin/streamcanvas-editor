@@ -8,7 +8,7 @@ version: 2.1
 #   - There is no path-ignore equivalent for markdown files; all pushes trigger builds.
 
 orbs:
-  windows: circleci/windows@6.0
+  windows: circleci/windows@5.1.1
 
 executors:
   linux:
@@ -140,7 +140,6 @@ jobs:
   build-windows:
     executor:
       name: windows/server-2022
-      shell: powershell.exe
     steps:
       - checkout
       - run:
