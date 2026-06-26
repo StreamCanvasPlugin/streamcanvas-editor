@@ -54,14 +54,8 @@ jobs:
             DESTDIR=AppDir cmake --install build --prefix /usr
 
             mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
-            cat > AppDir/usr/share/applications/editor.desktop << 'DESKTOP'
-[Desktop Entry]
-Name=OBS Graphics Editor
-Exec=editor
-Icon=editor
-Type=Application
-Categories=Graphics;AudioVideo;
-DESKTOP
+            printf '[Desktop Entry]\nName=OBS Graphics Editor\nExec=editor\nIcon=editor\nType=Application\nCategories=Graphics;AudioVideo;\n' \
+              > AppDir/usr/share/applications/editor.desktop
 
             convert -size 256x256 xc:'#1a1a2e' \
               -fill '#e94560' -draw 'rectangle 64,64 192,192' \
