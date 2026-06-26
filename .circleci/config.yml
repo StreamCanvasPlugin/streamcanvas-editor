@@ -1,11 +1,12 @@
 version: 2.1
 
 # Notes:
-#   - macOS and Windows jobs require CircleCI's paid plan.
+#   - Windows jobs require CircleCI's paid plan.
 #   - Set GITHUB_TOKEN in CircleCI project settings for the create-release job.
 #   - Enable "Only build pull requests" in CircleCI project settings to replicate
 #     the GH Actions behavior of building only on PRs targeting master/main.
 #   - There is no path-ignore equivalent for markdown files; all pushes trigger builds.
+#   - macOS build is intentionally omitted for now (x64 vs arm64 packaging TBD).
 
 orbs:
   windows: circleci/windows@5.1.1
@@ -80,66 +81,11 @@ jobs:
           path: artifacts
           destination: releases
 
-  build-macos:
-    macos:
-      xcode: "16.2.0"
-    resource_class: macos.m1.medium.gen1
-    steps:
-      - checkout
-      - run:
-          name: Init Submodules
-          command: git submodule update --init --recursive
-      - run:
-          name: Install Dependencies
-          command: brew install cairo pango lua pkgconf ninja cmake
-      - restore_cache:
-          keys:
-            - qt-6.8.3-macos-v1
-      - run:
-          name: Install Qt
-          command: |
-            if [ ! -d "$HOME/Qt/6.8.3/macos" ]; then
-              pip3 install aqtinstall
-              aqt install-qt mac desktop 6.8.3 -O "$HOME/Qt"
-            fi
-            echo 'export PATH="$HOME/Qt/6.8.3/macos/bin:$PATH"' >> "$BASH_ENV"
-      - save_cache:
-          key: qt-6.8.3-macos-v1
-          paths:
-            - ~/Qt/6.8.3/macos
-      - run:
-          name: Build
-          command: |
-            CONFIG=$([ -n "$CIRCLE_TAG" ] && echo Release || echo RelWithDebInfo)
-            export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$(brew --prefix)/share/pkgconfig"
-            cmake -B build -G Ninja \
-              -DCMAKE_BUILD_TYPE="$CONFIG" \
-              -DCMAKE_PREFIX_PATH="$(brew --prefix);$HOME/Qt/6.8.3/macos"
-            cmake --build build --parallel
-      - run:
-          name: Package (DMG)
-          command: |
-            if [ -z "$CIRCLE_TAG" ]; then
-              echo "Not a tag — skipping DMG packaging"
-              exit 0
-            fi
-            "$HOME/Qt/6.8.3/macos/bin/macdeployqt" build/editor.app -dmg
-            mkdir -p artifacts
-            mv build/editor.dmg artifacts/editor-${CIRCLE_TAG}-macos.dmg
-      - run:
-          name: Prepare Workspace
-          command: mkdir -p artifacts
-      - persist_to_workspace:
-          root: .
-          paths:
-            - artifacts
-      - store_artifacts:
-          path: artifacts
-          destination: releases
-
   build-windows:
     executor:
       name: windows/server-2022
+    environment:
+      VCPKG_ROOT: C:\vcpkg
     steps:
       - checkout
       - run:
@@ -147,7 +93,7 @@ jobs:
           command: git submodule update --init --recursive
       - run:
           name: Install pkg-config
-          command: choco install pkgconfiglite -y
+          command: choco install pkgconfiglite -y --no-progress
       - restore_cache:
           keys:
             - qt-6.8.3-windows-v1
@@ -164,8 +110,38 @@ jobs:
             - ~/Qt/6.8.3/msvc2022_64
       - restore_cache:
           keys:
+            - vcpkg-tool-v1
+      - run:
+          name: Bootstrap vcpkg
+          command: |
+            # CircleCI's Windows image does not reliably ship vcpkg
+            # (VCPKG_INSTALLATION_ROOT may be unset), so clone + bootstrap it
+            # ourselves into $VCPKG_ROOT.
+            if (-not (Test-Path "$env:VCPKG_ROOT\vcpkg.exe")) {
+              git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+              & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+            }
+            & "$env:VCPKG_ROOT\vcpkg.exe" version
+      - save_cache:
+          key: vcpkg-tool-v1
+          paths:
+            - C:\vcpkg
+      - restore_cache:
+          keys:
             - vcpkg-x64-windows-{{ checksum "vcpkg.json" }}
             - vcpkg-x64-windows-
+      - run:
+          name: Install vcpkg dependencies
+          no_output_timeout: 30m
+          command: |
+            & "$env:VCPKG_ROOT\vcpkg.exe" install `
+              --triplet x64-windows `
+              --x-manifest-root="$PWD" `
+              --x-install-root="$PWD\build\vcpkg_installed"
+      - save_cache:
+          key: vcpkg-x64-windows-{{ checksum "vcpkg.json" }}
+          paths:
+            - build/vcpkg_installed
       - run:
           name: Configure
           command: |
@@ -174,12 +150,10 @@ jobs:
             $env:Qt6_DIR = "$env:USERPROFILE\Qt\6.8.3\msvc2022_64\lib\cmake\Qt6"
             cmake -B build `
               -G "Visual Studio 17 2022" -A x64 `
-              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
-              -DVCPKG_TARGET_TRIPLET=x64-windows
-      - save_cache:
-          key: vcpkg-x64-windows-{{ checksum "vcpkg.json" }}
-          paths:
-            - build/vcpkg_installed
+              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+              -DVCPKG_TARGET_TRIPLET=x64-windows `
+              -DVCPKG_INSTALLED_DIR="$PWD\build\vcpkg_installed" `
+              -DVCPKG_MANIFEST_INSTALL=OFF
       - run:
           name: Build
           command: |
@@ -244,7 +218,6 @@ jobs:
             echo "### Checksums" > CHECKSUMS.txt
             shopt -s nullglob
             for file in ~/workspace/artifacts/*.AppImage \
-                        ~/workspace/artifacts/*.dmg \
                         ~/workspace/artifacts/*.zip; do
               echo "    ${file##*/}: $(sha256sum "$file" | cut -d ' ' -f 1)" >> CHECKSUMS.txt
             done
@@ -259,7 +232,6 @@ jobs:
             shopt -s nullglob
             ARTIFACTS=(
               ~/workspace/artifacts/*.AppImage
-              ~/workspace/artifacts/*.dmg
               ~/workspace/artifacts/*.zip
             )
             gh release create "$CIRCLE_TAG" \
@@ -282,15 +254,6 @@ workflows:
                 - /release\/.*/
             tags:
               only: /.*/
-      - build-macos:
-          filters:
-            branches:
-              only:
-                - master
-                - main
-                - /release\/.*/
-            tags:
-              only: /.*/
       - build-windows:
           filters:
             branches:
@@ -303,7 +266,6 @@ workflows:
       - create-release:
           requires:
             - build-ubuntu
-            - build-macos
             - build-windows
           filters:
             branches:
