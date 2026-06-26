@@ -1,31 +1,319 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine.
-# See: https://circleci.com/docs/reference/configuration-reference
 version: 2.1
 
-# Define a job to be invoked later in a workflow.
-# See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#jobs-overview & https://circleci.com/docs/reference/configuration-reference/#jobs
-jobs:
-  say-hello:
-    # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
-    # See: https://circleci.com/docs/guides/execution-managed/executor-intro/ & https://circleci.com/docs/reference/configuration-reference/#executor-job
-    docker:
-      # Specify the version you desire here
-      # See: https://circleci.com/developer/images/image/cimg/base
-      - image: cimg/base:current
+# Notes:
+#   - macOS and Windows jobs require CircleCI's paid plan.
+#   - Set GITHUB_TOKEN in CircleCI project settings for the create-release job.
+#   - Enable "Only build pull requests" in CircleCI project settings to replicate
+#     the GH Actions behavior of building only on PRs targeting master/main.
+#   - There is no path-ignore equivalent for markdown files; all pushes trigger builds.
 
-    # Add steps to the job
-    # See: https://circleci.com/docs/guides/orchestrate/jobs-steps/#steps-overview & https://circleci.com/docs/reference/configuration-reference/#steps
+orbs:
+  windows: circleci/windows@6.0
+
+executors:
+  linux:
+    machine:
+      image: ubuntu-2404:current
+
+jobs:
+  build-ubuntu:
+    executor: linux
     steps:
-      # Checkout the code as the first step.
       - checkout
       - run:
-          name: "Say hello"
-          command: "echo Hello, World!"
+          name: Init Submodules
+          command: git submodule update --init --recursive
+      - run:
+          name: Install Dependencies
+          command: |
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends \
+              cmake ninja-build pkg-config \
+              qt6-base-dev qt6-base-private-dev qt6-svg-dev \
+              libcairo2-dev libpango1.0-dev liblua5.4-dev \
+              libgl1-mesa-dev libxkbcommon-dev libxcb-cursor-dev \
+              imagemagick
+      - run:
+          name: Build
+          command: |
+            CONFIG=$([ -n "$CIRCLE_TAG" ] && echo Release || echo RelWithDebInfo)
+            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE="$CONFIG"
+            cmake --build build --parallel
+      - run:
+          name: Package (AppImage)
+          command: |
+            if [ -z "$CIRCLE_TAG" ]; then
+              echo "Not a tag — skipping AppImage packaging"
+              exit 0
+            fi
 
-# Orchestrate jobs using workflows
-# See: https://circleci.com/docs/guides/orchestrate/workflows/ & https://circleci.com/docs/reference/configuration-reference/#workflows
+            wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+            wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+            chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+
+            DESTDIR=AppDir cmake --install build --prefix /usr
+
+            mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+            cat > AppDir/usr/share/applications/editor.desktop << 'DESKTOP'
+[Desktop Entry]
+Name=OBS Graphics Editor
+Exec=editor
+Icon=editor
+Type=Application
+Categories=Graphics;AudioVideo;
+DESKTOP
+
+            convert -size 256x256 xc:'#1a1a2e' \
+              -fill '#e94560' -draw 'rectangle 64,64 192,192' \
+              AppDir/usr/share/icons/hicolor/256x256/apps/editor.png
+
+            QMAKE=$(which qmake6 2>/dev/null || which qmake) \
+            ./linuxdeploy-x86_64.AppImage \
+              --appdir AppDir \
+              --plugin qt \
+              --output appimage
+
+            mkdir -p artifacts
+            mv OBS_Graphics_Editor*.AppImage artifacts/editor-${CIRCLE_TAG}-linux-x86_64.AppImage
+      - run:
+          name: Prepare Workspace
+          command: mkdir -p artifacts
+      - persist_to_workspace:
+          root: .
+          paths:
+            - artifacts
+      - store_artifacts:
+          path: artifacts
+          destination: releases
+
+  build-macos:
+    macos:
+      xcode: "16.2.0"
+    resource_class: macos.m1.medium.gen1
+    steps:
+      - checkout
+      - run:
+          name: Init Submodules
+          command: git submodule update --init --recursive
+      - run:
+          name: Install Dependencies
+          command: brew install cairo pango lua pkgconf ninja cmake
+      - restore_cache:
+          keys:
+            - qt-6.8.3-macos-v1
+      - run:
+          name: Install Qt
+          command: |
+            if [ ! -d "$HOME/Qt/6.8.3/macos" ]; then
+              pip3 install aqtinstall
+              aqt install-qt mac desktop 6.8.3 -O "$HOME/Qt"
+            fi
+            echo 'export PATH="$HOME/Qt/6.8.3/macos/bin:$PATH"' >> "$BASH_ENV"
+      - save_cache:
+          key: qt-6.8.3-macos-v1
+          paths:
+            - ~/Qt/6.8.3/macos
+      - run:
+          name: Build
+          command: |
+            CONFIG=$([ -n "$CIRCLE_TAG" ] && echo Release || echo RelWithDebInfo)
+            export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$(brew --prefix)/share/pkgconfig"
+            cmake -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE="$CONFIG" \
+              -DCMAKE_PREFIX_PATH="$(brew --prefix);$HOME/Qt/6.8.3/macos"
+            cmake --build build --parallel
+      - run:
+          name: Package (DMG)
+          command: |
+            if [ -z "$CIRCLE_TAG" ]; then
+              echo "Not a tag — skipping DMG packaging"
+              exit 0
+            fi
+            "$HOME/Qt/6.8.3/macos/bin/macdeployqt" build/editor.app -dmg
+            mkdir -p artifacts
+            mv build/editor.dmg artifacts/editor-${CIRCLE_TAG}-macos.dmg
+      - run:
+          name: Prepare Workspace
+          command: mkdir -p artifacts
+      - persist_to_workspace:
+          root: .
+          paths:
+            - artifacts
+      - store_artifacts:
+          path: artifacts
+          destination: releases
+
+  build-windows:
+    executor:
+      name: windows/server-2022
+      shell: powershell.exe
+    steps:
+      - checkout
+      - run:
+          name: Init Submodules
+          command: git submodule update --init --recursive
+      - run:
+          name: Install pkg-config
+          command: choco install pkgconfiglite -y
+      - restore_cache:
+          keys:
+            - qt-6.8.3-windows-v1
+      - run:
+          name: Install Qt
+          command: |
+            pip install aqtinstall
+            if (-not (Test-Path "$env:USERPROFILE\Qt\6.8.3\msvc2022_64")) {
+              aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O "$env:USERPROFILE\Qt"
+            }
+      - save_cache:
+          key: qt-6.8.3-windows-v1
+          paths:
+            - ~/Qt/6.8.3/msvc2022_64
+      - restore_cache:
+          keys:
+            - vcpkg-x64-windows-{{ checksum "vcpkg.json" }}
+            - vcpkg-x64-windows-
+      - run:
+          name: Configure
+          command: |
+            $vcpkgInstalled = "$PWD\build\vcpkg_installed\x64-windows"
+            $env:PKG_CONFIG_PATH = "$vcpkgInstalled\lib\pkgconfig"
+            $env:Qt6_DIR = "$env:USERPROFILE\Qt\6.8.3\msvc2022_64\lib\cmake\Qt6"
+            cmake -B build `
+              -G "Visual Studio 17 2022" -A x64 `
+              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+              -DVCPKG_TARGET_TRIPLET=x64-windows
+      - save_cache:
+          key: vcpkg-x64-windows-{{ checksum "vcpkg.json" }}
+          paths:
+            - build/vcpkg_installed
+      - run:
+          name: Build
+          command: |
+            $config = if ($env:CIRCLE_TAG) { "Release" } else { "RelWithDebInfo" }
+            cmake --build build --config $config --parallel
+      - run:
+          name: Package (ZIP)
+          command: |
+            if (-not $env:CIRCLE_TAG) {
+              Write-Output "Not a tag — skipping ZIP packaging"
+              exit 0
+            }
+            $config = "Release"
+            $tag = $env:CIRCLE_TAG
+            $stagingDir = "editor-windows-stage"
+            New-Item -ItemType Directory -Path $stagingDir
+
+            Copy-Item "build\$config\editor.exe" $stagingDir\
+            & "$env:USERPROFILE\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe" `
+              --release --no-translations --no-system-d3d-compiler "$stagingDir\editor.exe"
+
+            $vcpkgBin = "build\vcpkg_installed\x64-windows\bin"
+            if (Test-Path $vcpkgBin) {
+              Copy-Item "$vcpkgBin\*.dll" $stagingDir\
+            }
+
+            New-Item -ItemType Directory -Path artifacts -Force
+            Compress-Archive -Path $stagingDir `
+              -DestinationPath "artifacts\editor-$tag-windows-x64.zip"
+      - run:
+          name: Prepare Workspace
+          command: New-Item -ItemType Directory -Path artifacts -Force
+      - persist_to_workspace:
+          root: .
+          paths:
+            - artifacts
+      - store_artifacts:
+          path: artifacts
+          destination: releases
+
+  create-release:
+    executor: linux
+    steps:
+      - attach_workspace:
+          at: ~/workspace
+      - run:
+          name: Install GitHub CLI
+          command: |
+            type gh >/dev/null 2>&1 || {
+              sudo apt-get update -qq && sudo apt-get install -y gh
+            }
+      - run:
+          name: Validate Tag
+          command: |
+            if ! echo "$CIRCLE_TAG" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-beta[0-9]*|-rc[0-9]*)?$'; then
+              echo "Tag '$CIRCLE_TAG' does not match a release version format — skipping"
+              circleci-agent step halt
+            fi
+      - run:
+          name: Generate Checksums
+          command: |
+            echo "### Checksums" > CHECKSUMS.txt
+            shopt -s nullglob
+            for file in ~/workspace/artifacts/*.AppImage \
+                        ~/workspace/artifacts/*.dmg \
+                        ~/workspace/artifacts/*.zip; do
+              echo "    ${file##*/}: $(sha256sum "$file" | cut -d ' ' -f 1)" >> CHECKSUMS.txt
+            done
+            cat CHECKSUMS.txt
+      - run:
+          name: Create GitHub Release
+          command: |
+            PRERELEASE_FLAG=""
+            if echo "$CIRCLE_TAG" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-(beta|rc)'; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+            shopt -s nullglob
+            ARTIFACTS=(
+              ~/workspace/artifacts/*.AppImage
+              ~/workspace/artifacts/*.dmg
+              ~/workspace/artifacts/*.zip
+            )
+            gh release create "$CIRCLE_TAG" \
+              --repo "$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME" \
+              --title "OBS Graphics Editor $CIRCLE_TAG" \
+              --notes-file CHECKSUMS.txt \
+              --draft \
+              $PRERELEASE_FLAG \
+              "${ARTIFACTS[@]}"
+
 workflows:
-  say-hello-workflow: # This is the name of the workflow, feel free to change it to better match your workflow.
-    # Inside the workflow, you define the jobs you want to run.
+  build:
     jobs:
-      - say-hello
+      - build-ubuntu:
+          filters:
+            branches:
+              only:
+                - master
+                - main
+                - /release\/.*/
+            tags:
+              only: /.*/
+      - build-macos:
+          filters:
+            branches:
+              only:
+                - master
+                - main
+                - /release\/.*/
+            tags:
+              only: /.*/
+      - build-windows:
+          filters:
+            branches:
+              only:
+                - master
+                - main
+                - /release\/.*/
+            tags:
+              only: /.*/
+      - create-release:
+          requires:
+            - build-ubuntu
+            - build-macos
+            - build-windows
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /[0-9]+\.[0-9]+\.[0-9]+.*/
