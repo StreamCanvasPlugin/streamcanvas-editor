@@ -1,0 +1,934 @@
+{
+    "name": "Corporate / Webinar",
+    "width": 1920,
+    "height": 1080,
+    "brand_colors": [
+        [0.06, 0.12, 0.26, 1.0],
+        [0.08, 0.52, 0.92, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.96, 0.80, 0.14, 1.0],
+        [0.14, 0.22, 0.42, 1.0],
+        [0.88, 0.92, 0.98, 1.0],
+        [0.35, 0.55, 0.78, 1.0],
+        [0.06, 0.08, 0.16, 1.0],
+        [0.60, 0.68, 0.78, 1.0],
+        [0.20, 0.72, 0.52, 1.0]
+    ],
+    "graphics": [
+        {
+            "id": "speaker_lower_third",
+            "z_order": 0,
+            "elements": [
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 60.0,
+                    "y": 870.0,
+                    "w": 840.0,
+                    "h": 144.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.06, 0.12, 0.26, 0.97],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 6.0,
+                        "blur": 18.0,
+                        "color": [0.0, 0.0, 0.0, 0.60]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.05,
+                        "duration": 0.32,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "blue_left_bar",
+                    "type": "rectangle",
+                    "x": 60.0,
+                    "y": 870.0,
+                    "w": 6.0,
+                    "h": 144.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.52, 0.92, 1.0],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.12,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.32,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "speaker_name",
+                    "type": "text",
+                    "x": 86.0,
+                    "y": 880.0,
+                    "w": 794.0,
+                    "h": 64.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Dr. Sarah Chen",
+                    "font_family": "Sans",
+                    "font_size": 50.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 2.0,
+                        "blur": 5.0,
+                        "color": [0.0, 0.0, 0.0, 0.40]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.22,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "divider_line",
+                    "type": "rectangle",
+                    "x": 86.0,
+                    "y": 950.0,
+                    "w": 794.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.16],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.28,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "speaker_title",
+                    "type": "text",
+                    "x": 86.0,
+                    "y": 956.0,
+                    "w": 794.0,
+                    "h": 32.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.60, 0.78, 0.96, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Chief Innovation Officer",
+                    "font_family": "Sans",
+                    "font_size": 24.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.34,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "company_name",
+                    "type": "text",
+                    "x": 86.0,
+                    "y": 990.0,
+                    "w": 794.0,
+                    "h": 30.0,
+                    "rotation": 0.0,
+                    "opacity": 0.75,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.96, 0.80, 0.14, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Apex Technologies, Inc.",
+                    "font_family": "Sans",
+                    "font_size": 20.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.40,
+                        "duration": 0.26,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "slide_title",
+            "z_order": 1,
+            "elements": [
+                {
+                    "id": "overlay",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "w": 1920.0,
+                    "h": 1080.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.0, 0.0, 0.0, 0.70],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.06,
+                        "duration": 0.36,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 200.0,
+                    "y": 260.0,
+                    "w": 1520.0,
+                    "h": 560.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.06, 0.12, 0.26, 0.98],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 12.0,
+                        "blur": 40.0,
+                        "color": [0.0, 0.0, 0.0, 0.72]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.08,
+                        "duration": 0.48,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.38,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "blue_top_bar",
+                    "type": "rectangle",
+                    "x": 200.0,
+                    "y": 260.0,
+                    "w": 1520.0,
+                    "h": 6.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0,  "color": [0.08, 0.52, 0.92, 1.0]},
+                            {"offset": 0.50, "color": [0.08, 0.52, 0.92, 1.0]},
+                            {"offset": 1.0,  "color": [0.08, 0.52, 0.92, 0.15]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.18,
+                        "duration": 0.46,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.36,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "section_label",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 290.0,
+                    "w": 1520.0,
+                    "h": 44.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.52, 0.92, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "SESSION 2",
+                    "font_family": "Sans",
+                    "font_size": 20.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.28,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "slide_heading",
+                    "type": "text",
+                    "x": 240.0,
+                    "y": 356.0,
+                    "w": 1440.0,
+                    "h": 180.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "The Future of AI in Enterprise",
+                    "font_family": "Sans",
+                    "font_size": 84.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 3.0,
+                        "blur": 8.0,
+                        "color": [0.0, 0.0, 0.0, 0.45]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.34,
+                        "duration": 0.38,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bottom_rule",
+                    "type": "rectangle",
+                    "x": 200.0,
+                    "y": 556.0,
+                    "w": 1520.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.52, 0.92, 0.35],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.44,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "slide_subtitle",
+                    "type": "text",
+                    "x": 240.0,
+                    "y": 570.0,
+                    "w": 1440.0,
+                    "h": 50.0,
+                    "rotation": 0.0,
+                    "opacity": 0.78,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "How machine learning is transforming business operations in 2026",
+                    "font_family": "Sans",
+                    "font_size": 30.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.50,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "company_tag",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 632.0,
+                    "w": 1520.0,
+                    "h": 38.0,
+                    "rotation": 0.0,
+                    "opacity": 0.65,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.96, 0.80, 0.14, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "APEX GLOBAL SUMMIT 2026  ·  San Francisco, CA",
+                    "font_family": "Sans",
+                    "font_size": 22.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.58,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "cta_bar",
+            "z_order": 2,
+            "elements": [
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 1022.0,
+                    "w": 1920.0,
+                    "h": 58.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.06, 0.12, 0.26, 0.98],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.06,
+                        "duration": 0.32,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "top_line",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 1022.0,
+                    "w": 1920.0,
+                    "h": 2.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0,  "color": [0.08, 0.52, 0.92, 1.0]},
+                            {"offset": 0.40, "color": [0.96, 0.80, 0.14, 1.0]},
+                            {"offset": 0.80, "color": [0.08, 0.52, 0.92, 1.0]},
+                            {"offset": 1.0,  "color": [0.08, 0.52, 0.92, 0.20]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.0,
+                        "duration": 0.38,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.30,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "logo_area_bg",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 1022.0,
+                    "w": 240.0,
+                    "h": 58.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.52, 0.92, 1.0],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.06,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.26,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "logo_text",
+                    "type": "text",
+                    "x": 0.0,
+                    "y": 1022.0,
+                    "w": 240.0,
+                    "h": 58.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "APEX",
+                    "font_family": "Sans",
+                    "font_size": 28.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.20,
+                        "duration": 0.24,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "separator",
+                    "type": "rectangle",
+                    "x": 244.0,
+                    "y": 1034.0,
+                    "w": 1.5,
+                    "h": 34.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.25],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_down",
+                        "delay": 0.26,
+                        "duration": 0.20,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.16,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "cta_text",
+                    "type": "text",
+                    "x": 258.0,
+                    "y": 1022.0,
+                    "w": 1638.0,
+                    "h": 58.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.88],
+                    "stroke_width": 0.0,
+                    "text": "apexsummit2026.com  |  Questions? Use the Q&A panel  |  #ApexSummit2026  |  @ApexTech",
+                    "font_family": "Sans",
+                    "font_size": 22.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.30,
+                        "duration": 0.26,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "qa_card",
+            "z_order": 3,
+            "elements": [
+                {
+                    "id": "overlay",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "w": 1920.0,
+                    "h": 1080.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.0, 0.0, 0.0, 0.65],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.42,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.06,
+                        "duration": 0.38,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 300.0,
+                    "y": 280.0,
+                    "w": 1320.0,
+                    "h": 520.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.06, 0.12, 0.26, 0.98],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 12.0,
+                        "blur": 40.0,
+                        "color": [0.0, 0.0, 0.0, 0.70]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.08,
+                        "duration": 0.46,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.36,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "blue_top_bar",
+                    "type": "rectangle",
+                    "x": 300.0,
+                    "y": 280.0,
+                    "w": 1320.0,
+                    "h": 6.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.52, 0.92, 1.0],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.18,
+                        "duration": 0.44,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.34,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "qa_label",
+                    "type": "text",
+                    "x": 300.0,
+                    "y": 308.0,
+                    "w": 1320.0,
+                    "h": 48.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.52, 0.92, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Q&A SESSION",
+                    "font_family": "Sans",
+                    "font_size": 22.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.28,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "question_text",
+                    "type": "text",
+                    "x": 340.0,
+                    "y": 376.0,
+                    "w": 1240.0,
+                    "h": 200.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "How is your company preparing teams for AI-augmented workflows?",
+                    "font_family": "Sans",
+                    "font_size": 54.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 3.0,
+                        "blur": 8.0,
+                        "color": [0.0, 0.0, 0.0, 0.45]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.36,
+                        "duration": 0.38,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "divider_rule",
+                    "type": "rectangle",
+                    "x": 300.0,
+                    "y": 592.0,
+                    "w": 1320.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.08, 0.52, 0.92, 0.30],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.44,
+                        "duration": 0.34,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.26,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "asker_info",
+                    "type": "text",
+                    "x": 340.0,
+                    "y": 606.0,
+                    "w": 1240.0,
+                    "h": 40.0,
+                    "rotation": 0.0,
+                    "opacity": 0.65,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.60, 0.78, 0.96, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "From the audience  ·  Submit your questions via the Q&A panel",
+                    "font_family": "Sans",
+                    "font_size": 22.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.52,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        }
+    ]
+}

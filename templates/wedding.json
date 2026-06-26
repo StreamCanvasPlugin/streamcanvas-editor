@@ -1,0 +1,808 @@
+{
+    "name": "Wedding & Events",
+    "width": 1920,
+    "height": 1080,
+    "brand_colors": [
+        [0.06, 0.06, 0.10, 1.0],
+        [0.90, 0.76, 0.40, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.95, 0.92, 0.84, 1.0],
+        [0.60, 0.52, 0.32, 1.0],
+        [0.14, 0.12, 0.10, 1.0],
+        [0.82, 0.68, 0.80, 1.0],
+        [0.90, 0.82, 0.72, 1.0],
+        [0.38, 0.30, 0.22, 1.0],
+        [0.72, 0.88, 0.82, 1.0]
+    ],
+    "graphics": [
+        {
+            "id": "speaker_lower_third",
+            "z_order": 0,
+            "elements": [
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 80.0,
+                    "y": 874.0,
+                    "w": 740.0,
+                    "h": 136.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 0.0,
+                        "y1": 1.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.06, 0.05, 0.10, 0.96]},
+                            {"offset": 1.0, "color": [0.04, 0.03, 0.07, 0.96]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 6.0,
+                        "blur": 20.0,
+                        "color": [0.0, 0.0, 0.0, 0.55]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.0,
+                        "duration": 0.45,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.05,
+                        "duration": 0.36,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "gold_bar",
+                    "type": "rectangle",
+                    "x": 80.0,
+                    "y": 874.0,
+                    "w": 2.0,
+                    "h": 136.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 0.0,
+                        "y1": 1.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.98, 0.90, 0.55, 0.0]},
+                            {"offset": 0.3, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 0.7, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 1.0, "color": [0.70, 0.58, 0.18, 0.0]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.14,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.36,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "speaker_role",
+                    "type": "text",
+                    "x": 102.0,
+                    "y": 884.0,
+                    "w": 698.0,
+                    "h": 36.0,
+                    "rotation": 0.0,
+                    "opacity": 0.80,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.92, 0.80, 0.42, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "BEST MAN",
+                    "font_family": "Sans",
+                    "font_size": 18.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.26,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "speaker_name",
+                    "type": "text",
+                    "x": 102.0,
+                    "y": 924.0,
+                    "w": 698.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Michael Thompson",
+                    "font_family": "Serif",
+                    "font_size": 50.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 2.0,
+                        "blur": 5.0,
+                        "color": [0.0, 0.0, 0.0, 0.40]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.32,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "couple_card",
+            "z_order": 1,
+            "elements": [
+                {
+                    "id": "overlay",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "w": 1920.0,
+                    "h": 1080.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.0, 0.0, 0.0, 0.60],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.55,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.06,
+                        "duration": 0.50,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 280.0,
+                    "y": 230.0,
+                    "w": 1360.0,
+                    "h": 620.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 2.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 0.0,
+                        "y1": 1.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.07, 0.06, 0.11, 0.97]},
+                            {"offset": 0.5, "color": [0.05, 0.04, 0.09, 0.97]},
+                            {"offset": 1.0, "color": [0.03, 0.02, 0.06, 0.97]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 14.0,
+                        "blur": 48.0,
+                        "color": [0.0, 0.0, 0.0, 0.75]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.10,
+                        "duration": 0.55,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.44,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "top_gold_line",
+                    "type": "rectangle",
+                    "x": 280.0,
+                    "y": 230.0,
+                    "w": 1360.0,
+                    "h": 2.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0,  "color": [0.92, 0.80, 0.42, 0.0]},
+                            {"offset": 0.15, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 0.85, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 1.0,  "color": [0.92, 0.80, 0.42, 0.0]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.22,
+                        "duration": 0.52,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "together_label",
+                    "type": "text",
+                    "x": 280.0,
+                    "y": 256.0,
+                    "w": 1360.0,
+                    "h": 40.0,
+                    "rotation": 0.0,
+                    "opacity": 0.72,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.92, 0.80, 0.42, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "CELEBRATING THE UNION OF",
+                    "font_family": "Sans",
+                    "font_size": 18.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.34,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "couple_names",
+                    "type": "text",
+                    "x": 320.0,
+                    "y": 316.0,
+                    "w": 1280.0,
+                    "h": 190.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Emma & James",
+                    "font_family": "Serif",
+                    "font_size": 140.0,
+                    "font_weight": "normal",
+                    "font_italic": true,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 4.0,
+                        "blur": 14.0,
+                        "color": [0.0, 0.0, 0.0, 0.50]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.40,
+                        "duration": 0.45,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.32,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "ornament_left",
+                    "type": "rectangle",
+                    "x": 380.0,
+                    "y": 524.0,
+                    "w": 380.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.92, 0.80, 0.42, 0.0]},
+                            {"offset": 1.0, "color": [0.92, 0.80, 0.42, 0.50]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.52,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "ornament_right",
+                    "type": "rectangle",
+                    "x": 1160.0,
+                    "y": 524.0,
+                    "w": 380.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.92, 0.80, 0.42, 0.50]},
+                            {"offset": 1.0, "color": [0.92, 0.80, 0.42, 0.0]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_left",
+                        "delay": 0.52,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_right",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "wedding_date",
+                    "type": "text",
+                    "x": 280.0,
+                    "y": 544.0,
+                    "w": 1360.0,
+                    "h": 50.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.92, 0.80, 0.42, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "September 14, 2026",
+                    "font_family": "Serif",
+                    "font_size": 34.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.56,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "venue",
+                    "type": "text",
+                    "x": 280.0,
+                    "y": 612.0,
+                    "w": 1360.0,
+                    "h": 40.0,
+                    "rotation": 0.0,
+                    "opacity": 0.60,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Grand Pavilion · Rosewood Estate",
+                    "font_family": "Sans",
+                    "font_size": 24.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.62,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bottom_gold_line",
+                    "type": "rectangle",
+                    "x": 280.0,
+                    "y": 848.0,
+                    "w": 1360.0,
+                    "h": 2.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0,  "color": [0.92, 0.80, 0.42, 0.0]},
+                            {"offset": 0.15, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 0.85, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 1.0,  "color": [0.92, 0.80, 0.42, 0.0]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.24,
+                        "duration": 0.52,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "toast_card",
+            "z_order": 2,
+            "elements": [
+                {
+                    "id": "overlay",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "w": 1920.0,
+                    "h": 1080.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.0, 0.0, 0.0, 0.72],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.50,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.06,
+                        "duration": 0.45,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 360.0,
+                    "y": 310.0,
+                    "w": 1200.0,
+                    "h": 460.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 2.0,
+                    "fill": [0.05, 0.04, 0.09, 0.97],
+                    "stroke": [0.92, 0.80, 0.42, 0.35],
+                    "stroke_width": 1.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 12.0,
+                        "blur": 40.0,
+                        "color": [0.0, 0.0, 0.0, 0.75]
+                    },
+                    "anim_in": {
+                        "type": "scale_in",
+                        "delay": 0.10,
+                        "duration": 0.50,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.38,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "top_accent",
+                    "type": "rectangle",
+                    "x": 360.0,
+                    "y": 310.0,
+                    "w": 1200.0,
+                    "h": 2.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0,  "color": [0.92, 0.80, 0.42, 0.0]},
+                            {"offset": 0.20, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 0.80, "color": [0.92, 0.80, 0.42, 1.0]},
+                            {"offset": 1.0,  "color": [0.92, 0.80, 0.42, 0.0]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.26,
+                        "duration": 0.46,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.34,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "toast_label",
+                    "type": "text",
+                    "x": 360.0,
+                    "y": 338.0,
+                    "w": 1200.0,
+                    "h": 40.0,
+                    "rotation": 0.0,
+                    "opacity": 0.75,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.92, 0.80, 0.42, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "A TOAST TO THE COUPLE",
+                    "font_family": "Sans",
+                    "font_size": 18.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.36,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "toast_names",
+                    "type": "text",
+                    "x": 400.0,
+                    "y": 396.0,
+                    "w": 1120.0,
+                    "h": 160.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Emma & James",
+                    "font_family": "Serif",
+                    "font_size": 116.0,
+                    "font_weight": "normal",
+                    "font_italic": true,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 4.0,
+                        "blur": 12.0,
+                        "color": [0.92, 0.80, 0.42, 0.20]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.44,
+                        "duration": 0.40,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.30,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bottom_rule",
+                    "type": "rectangle",
+                    "x": 360.0,
+                    "y": 676.0,
+                    "w": 1200.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.92, 0.80, 0.42, 0.25],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.52,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "wishes",
+                    "type": "text",
+                    "x": 360.0,
+                    "y": 692.0,
+                    "w": 1200.0,
+                    "h": 56.0,
+                    "rotation": 0.0,
+                    "opacity": 0.65,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Wishing you a lifetime of love and happiness",
+                    "font_family": "Serif",
+                    "font_size": 30.0,
+                    "font_weight": "normal",
+                    "font_italic": true,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.58,
+                        "duration": 0.32,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        }
+    ]
+}

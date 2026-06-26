@@ -1,0 +1,1002 @@
+{
+    "name": "Sports Package",
+    "width": 1920,
+    "height": 1080,
+    "brand_colors": [
+        [0.06, 0.08, 0.18, 1.0],
+        [0.88, 0.12, 0.18, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [0.55, 0.18, 0.82, 1.0],
+        [0.07, 0.50, 0.22, 1.0],
+        [0.95, 0.75, 0.10, 1.0],
+        [0.0, 0.48, 0.86, 1.0],
+        [0.90, 0.36, 0.06, 1.0],
+        [0.18, 0.18, 0.22, 1.0],
+        [0.72, 0.72, 0.78, 1.0]
+    ],
+    "graphics": [
+        {
+            "id": "score_bug",
+            "z_order": 0,
+            "elements": [
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 40.0,
+                    "y": 988.0,
+                    "w": 500.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 4.0,
+                    "fill": [0.05, 0.07, 0.15, 0.97],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 4.0,
+                        "blur": 14.0,
+                        "color": [0.0, 0.0, 0.0, 0.60]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.0,
+                        "duration": 0.38,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.04,
+                        "duration": 0.30,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "live_bg",
+                    "type": "rectangle",
+                    "x": 40.0,
+                    "y": 988.0,
+                    "w": 100.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.88, 0.12, 0.18, 1.0],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.10,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.30,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "live_text",
+                    "type": "text",
+                    "x": 40.0,
+                    "y": 988.0,
+                    "w": 100.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "● LIVE",
+                    "font_family": "Sans",
+                    "font_size": 18.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "none",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.22,
+                        "duration": 0.24,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "team1_bg",
+                    "type": "rectangle",
+                    "x": 140.0,
+                    "y": 988.0,
+                    "w": 130.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.55, 0.18, 0.82, 0.90],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.14,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.30,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "team1_name",
+                    "type": "text",
+                    "x": 140.0,
+                    "y": 988.0,
+                    "w": 130.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "LAK",
+                    "font_family": "Sans",
+                    "font_size": 28.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.26,
+                        "duration": 0.24,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "score",
+                    "type": "text",
+                    "x": 270.0,
+                    "y": 988.0,
+                    "w": 140.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "3 – 2",
+                    "font_family": "Sans",
+                    "font_size": 30.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "none",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 2.0,
+                        "blur": 5.0,
+                        "color": [0.0, 0.0, 0.0, 0.40]
+                    },
+                    "anim_in": {
+                        "type": "scale_in",
+                        "delay": 0.30,
+                        "duration": 0.30,
+                        "easing": "ease_out_back"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "team2_bg",
+                    "type": "rectangle",
+                    "x": 410.0,
+                    "y": 988.0,
+                    "w": 130.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.07, 0.50, 0.22, 0.90],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.18,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.30,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "team2_name",
+                    "type": "text",
+                    "x": 410.0,
+                    "y": 988.0,
+                    "w": 130.0,
+                    "h": 68.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "CEL",
+                    "font_family": "Sans",
+                    "font_size": 28.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.30,
+                        "duration": 0.24,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "player_lower_third",
+            "z_order": 1,
+            "elements": [
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 40.0,
+                    "y": 870.0,
+                    "w": 760.0,
+                    "h": 128.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.05, 0.07, 0.15, 0.96],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 5.0,
+                        "blur": 16.0,
+                        "color": [0.0, 0.0, 0.0, 0.60]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.05,
+                        "duration": 0.32,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "accent_bar",
+                    "type": "rectangle",
+                    "x": 40.0,
+                    "y": 870.0,
+                    "w": 7.0,
+                    "h": 128.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.88, 0.12, 0.18, 1.0],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.12,
+                        "duration": 0.26,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.32,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "player_name",
+                    "type": "text",
+                    "x": 66.0,
+                    "y": 880.0,
+                    "w": 714.0,
+                    "h": 60.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "LeBron James",
+                    "font_family": "Sans",
+                    "font_size": 46.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 1.0,
+                        "offset_y": 2.0,
+                        "blur": 5.0,
+                        "color": [0.0, 0.0, 0.0, 0.45]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.22,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "divider_line",
+                    "type": "rectangle",
+                    "x": 66.0,
+                    "y": 944.0,
+                    "w": 714.0,
+                    "h": 1.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.16],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.28,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "stat_line",
+                    "type": "text",
+                    "x": 66.0,
+                    "y": 950.0,
+                    "w": 714.0,
+                    "h": 36.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.88, 0.75, 0.35, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "30 PTS · 8 REB · 6 AST  |  #23 · Forward",
+                    "font_family": "Sans",
+                    "font_size": 24.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "left",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.34,
+                        "duration": 0.26,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "match_intro",
+            "z_order": 2,
+            "elements": [
+                {
+                    "id": "overlay",
+                    "type": "rectangle",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "w": 1920.0,
+                    "h": 1080.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 0.0,
+                    "fill": [0.0, 0.0, 0.0, 0.72],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.40,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.06,
+                        "duration": 0.36,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 160.0,
+                    "y": 240.0,
+                    "w": 1600.0,
+                    "h": 600.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": [0.05, 0.07, 0.15, 0.97],
+                    "stroke_width": 0.0,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 12.0,
+                        "blur": 40.0,
+                        "color": [0.0, 0.0, 0.0, 0.75]
+                    },
+                    "anim_in": {
+                        "type": "slide_up",
+                        "delay": 0.08,
+                        "duration": 0.48,
+                        "easing": "ease_out_cubic"
+                    },
+                    "anim_out": {
+                        "type": "slide_down",
+                        "delay": 0.0,
+                        "duration": 0.38,
+                        "easing": "ease_in_cubic"
+                    }
+                },
+                {
+                    "id": "red_top_bar",
+                    "type": "rectangle",
+                    "x": 160.0,
+                    "y": 240.0,
+                    "w": 1600.0,
+                    "h": 7.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0,  "color": [0.88, 0.12, 0.18, 1.0]},
+                            {"offset": 0.5,  "color": [0.88, 0.12, 0.18, 1.0]},
+                            {"offset": 1.0,  "color": [0.88, 0.12, 0.18, 0.12]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.18,
+                        "duration": 0.46,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.36,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "sport_badge",
+                    "type": "text",
+                    "x": 160.0,
+                    "y": 268.0,
+                    "w": 1600.0,
+                    "h": 38.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.88, 0.12, 0.18, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "NBA · REGULAR SEASON",
+                    "font_family": "Sans",
+                    "font_size": 20.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.28,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "team1",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 330.0,
+                    "w": 1520.0,
+                    "h": 112.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Los Angeles Lakers",
+                    "font_family": "Sans",
+                    "font_size": 90.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 4.0,
+                        "blur": 10.0,
+                        "color": [0.0, 0.0, 0.0, 0.50]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.34,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.26,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "vs_divider",
+                    "type": "rectangle",
+                    "x": 860.0,
+                    "y": 458.0,
+                    "w": 200.0,
+                    "h": 2.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 0.25],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.40,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.22,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "vs_text",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 462.0,
+                    "w": 1520.0,
+                    "h": 56.0,
+                    "rotation": 0.0,
+                    "opacity": 0.70,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "vs",
+                    "font_family": "Sans",
+                    "font_size": 36.0,
+                    "font_weight": "normal",
+                    "font_italic": true,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.38,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "team2",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 528.0,
+                    "w": 1520.0,
+                    "h": 112.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "Boston Celtics",
+                    "font_family": "Sans",
+                    "font_size": 90.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 4.0,
+                        "blur": 10.0,
+                        "color": [0.0, 0.0, 0.0, 0.50]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.42,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.26,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "bottom_rule",
+                    "type": "rectangle",
+                    "x": 160.0,
+                    "y": 658.0,
+                    "w": 1600.0,
+                    "h": 2.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [0.88, 0.12, 0.18, 0.35],
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.48,
+                        "duration": 0.36,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.28,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "match_info",
+                    "type": "text",
+                    "x": 200.0,
+                    "y": 672.0,
+                    "w": 1520.0,
+                    "h": 38.0,
+                    "rotation": 0.0,
+                    "opacity": 0.80,
+                    "z_order": 3,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "TD Garden · Boston, MA  |  June 26, 2026  |  8:00 PM ET",
+                    "font_family": "Sans",
+                    "font_size": 24.0,
+                    "font_weight": "normal",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.54,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        },
+        {
+            "id": "stat_callout",
+            "z_order": 3,
+            "elements": [
+                {
+                    "id": "bg",
+                    "type": "rectangle",
+                    "x": 1548.0,
+                    "y": 828.0,
+                    "w": 332.0,
+                    "h": 188.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 0,
+                    "corner_radius": 6.0,
+                    "fill": [0.05, 0.07, 0.15, 0.97],
+                    "stroke": [0.88, 0.12, 0.18, 0.40],
+                    "stroke_width": 1.5,
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 6.0,
+                        "blur": 20.0,
+                        "color": [0.0, 0.0, 0.0, 0.65]
+                    },
+                    "anim_in": {
+                        "type": "slide_left",
+                        "delay": 0.0,
+                        "duration": 0.38,
+                        "easing": "ease_out_back"
+                    },
+                    "anim_out": {
+                        "type": "slide_right",
+                        "delay": 0.04,
+                        "duration": 0.30,
+                        "easing": "ease_in_back"
+                    }
+                },
+                {
+                    "id": "top_bar",
+                    "type": "rectangle",
+                    "x": 1548.0,
+                    "y": 828.0,
+                    "w": 332.0,
+                    "h": 5.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 1,
+                    "corner_radius": 0.0,
+                    "fill": {
+                        "type": "linear",
+                        "x0": 0.0,
+                        "y0": 0.0,
+                        "x1": 1.0,
+                        "y1": 0.0,
+                        "stops": [
+                            {"offset": 0.0, "color": [0.88, 0.12, 0.18, 1.0]},
+                            {"offset": 1.0, "color": [0.88, 0.12, 0.18, 0.0]}
+                        ]
+                    },
+                    "stroke_width": 0.0,
+                    "anim_in": {
+                        "type": "wipe_right",
+                        "delay": 0.18,
+                        "duration": 0.30,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "wipe_left",
+                        "delay": 0.0,
+                        "duration": 0.24,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "stat_label",
+                    "type": "text",
+                    "x": 1562.0,
+                    "y": 846.0,
+                    "w": 304.0,
+                    "h": 34.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.88, 0.12, 0.18, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "LEADING SCORER",
+                    "font_family": "Sans",
+                    "font_size": 17.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "text_transform": "uppercase",
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.22,
+                        "duration": 0.26,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "stat_player",
+                    "type": "text",
+                    "x": 1562.0,
+                    "y": 886.0,
+                    "w": 304.0,
+                    "h": 58.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [1.0, 1.0, 1.0, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "LeBron James",
+                    "font_family": "Sans",
+                    "font_size": 36.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": true,
+                    "ellipsize": "end",
+                    "wrap": "word",
+                    "shadow": {
+                        "enabled": true,
+                        "offset_x": 0.0,
+                        "offset_y": 2.0,
+                        "blur": 5.0,
+                        "color": [0.0, 0.0, 0.0, 0.45]
+                    },
+                    "anim_in": {
+                        "type": "fade",
+                        "delay": 0.30,
+                        "duration": 0.28,
+                        "easing": "ease_out"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.20,
+                        "easing": "ease_in"
+                    }
+                },
+                {
+                    "id": "stat_value",
+                    "type": "text",
+                    "x": 1562.0,
+                    "y": 950.0,
+                    "w": 304.0,
+                    "h": 54.0,
+                    "rotation": 0.0,
+                    "opacity": 1.0,
+                    "z_order": 2,
+                    "corner_radius": 0.0,
+                    "fill": [0.88, 0.75, 0.35, 1.0],
+                    "stroke_width": 0.0,
+                    "text": "30 PTS",
+                    "font_family": "Sans",
+                    "font_size": 44.0,
+                    "font_weight": "bold",
+                    "font_italic": false,
+                    "text_align_x": "center",
+                    "text_align_y": "middle",
+                    "auto_scale": false,
+                    "ellipsize": "none",
+                    "wrap": "word",
+                    "anim_in": {
+                        "type": "scale_in",
+                        "delay": 0.36,
+                        "duration": 0.28,
+                        "easing": "ease_out_back"
+                    },
+                    "anim_out": {
+                        "type": "fade",
+                        "delay": 0.0,
+                        "duration": 0.18,
+                        "easing": "ease_in"
+                    }
+                }
+            ]
+        }
+    ]
+}
