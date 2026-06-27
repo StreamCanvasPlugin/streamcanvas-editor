@@ -93,7 +93,7 @@ jobs:
           command: git submodule update --init --recursive
       - run:
           name: Install pkg-config
-          command: choco install pkgconfiglite -y --no-progress
+          command: choco install pkgconfiglite cmake -y --no-progress
       - restore_cache:
           keys:
             - qt-6.8.3-windows-v1
