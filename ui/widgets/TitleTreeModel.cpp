@@ -179,7 +179,7 @@ QVariant TitleTreeModel::data(const QModelIndex& index, int role) const
             if (dynamic_cast<const ImageElement*>(el))
                 return themedIcon(Icons16::File_Picture);
             if (dynamic_cast<const QrElement*>(el))
-                return themedIcon(Icons16::Hardware_Scanner);
+                return qrCodeIcon();
             return themedIcon(Icons16::Shape_Square);
         }
     }

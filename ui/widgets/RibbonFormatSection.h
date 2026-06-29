@@ -77,6 +77,8 @@ private slots:
     void onEllipsizeChanged(int idx);
     void onWrapChanged(int idx);
     void onTextTransformChanged(int idx);
+    void onLineSpacingChanged(double v);
+    void onCharSpacingChanged(double v);
 
     // Image tab slots
     void onImagePathChanged();
@@ -178,10 +180,14 @@ private:
     QCheckBox*   m_autoScale{nullptr};
 
     // Text group
-    QComboBox*   m_ellipsize{nullptr};
-    QComboBox*   m_wrap{nullptr};
-    QComboBox*   m_textTransform{nullptr};
-    QToolButton* m_textBtn{nullptr};
+    QComboBox*      m_ellipsize{nullptr};
+    QComboBox*      m_wrap{nullptr};
+    QComboBox*      m_textTransform{nullptr};
+    QToolButton*    m_textBtn{nullptr};
+
+    // Spacing group
+    QDoubleSpinBox* m_lineSpacing{nullptr};
+    QDoubleSpinBox* m_charSpacing{nullptr};
 
     // Shared text content editor
     QDialog*        m_contentDialog{nullptr};

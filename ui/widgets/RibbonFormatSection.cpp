@@ -660,6 +660,33 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
         connect(m_textTransform, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onTextTransformChanged);
         connect(m_textBtn, &QToolButton::clicked, this, [this]() { openContentEditor("Edit Text"); });
     }
+
+    // ── Spacing group ──────────────────────────────────────────────────────────
+    {
+        auto* gl = addGroup(m_textCategory, "Spacing");
+        auto* container = new QWidget;
+        auto* grid = new QGridLayout(container);
+        grid->setContentsMargins(0, 0, 0, 0);
+        grid->setHorizontalSpacing(4);
+        grid->setVerticalSpacing(3);
+
+        m_lineSpacing = makeSpinBox(-999.0, 999.0, 1, " px", 72);
+        m_lineSpacing->setSingleStep(1.0);
+        m_charSpacing = makeSpinBox(-999.0, 999.0, 1, " px", 72);
+        m_charSpacing->setSingleStep(0.5);
+
+        grid->addWidget(makeRibbonLabel("Line ↕ "), 0, 0); grid->addWidget(m_lineSpacing, 0, 1);
+        grid->addWidget(makeRibbonLabel("Char ↔ "), 1, 0); grid->addWidget(m_charSpacing, 1, 1);
+        grid->setColumnStretch(1, 1);
+
+        gl->addWidget(container, 0, 0);
+        gl->setColumnStretch(0, 1);
+
+        connect(m_lineSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, &RibbonFormatSection::onLineSpacingChanged);
+        connect(m_charSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                this, &RibbonFormatSection::onCharSpacingChanged);
+    }
 }
 
 void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
@@ -922,6 +949,8 @@ void RibbonFormatSection::onDocumentChanged()
             cursor.setPosition(m_contentSavedCursor);
             m_contentEdit->setTextCursor(cursor);
         }
+        m_lineSpacing->setValue(static_cast<double>(te->textStyle.lineSpacing));
+        m_charSpacing->setValue(static_cast<double>(te->textStyle.charSpacing));
     }
 
     if (const auto* ie = dynamic_cast<const ImageElement*>(el)) {
@@ -1258,6 +1287,24 @@ void RibbonFormatSection::onTextTransformChanged(int index)
         m_doc, m_elementId, kMap[index],
         [](VisualElement& e) -> TextTransform& { return static_cast<TextElement&>(e).textStyle.transform; },
         "text_transform"));
+}
+
+void RibbonFormatSection::onLineSpacingChanged(double v)
+{
+    if (m_updating || m_elementId.empty()) return;
+    m_doc->undoStack()->push(new SetElementFieldCmd<float>(
+        m_doc, m_elementId, static_cast<float>(v),
+        [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.lineSpacing; },
+        "line_spacing", ElemMergeTag::LineSpacing));
+}
+
+void RibbonFormatSection::onCharSpacingChanged(double v)
+{
+    if (m_updating || m_elementId.empty()) return;
+    m_doc->undoStack()->push(new SetElementFieldCmd<float>(
+        m_doc, m_elementId, static_cast<float>(v),
+        [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.charSpacing; },
+        "char_spacing", ElemMergeTag::CharSpacing));
 }
 
 void RibbonFormatSection::onContentChanged()

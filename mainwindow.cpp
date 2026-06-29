@@ -174,6 +174,7 @@ MainWindow::MainWindow(QWidget* parent)
             });
 
     connect(m_doc, &TitleDocument::modifiedChanged, this, &MainWindow::setWindowModified);
+    connect(m_doc, &TitleDocument::documentChanged, this, &MainWindow::updateWindowTitle);
     connect(m_doc, &TitleDocument::filePathChanged, this, [this](const QString& path) {
         updateWindowTitle();
         statusBar()->showMessage(path.isEmpty() ? "Untitled" : path);
@@ -719,9 +720,13 @@ void MainWindow::onSaveAs()
     QString path = QFileDialog::getSaveFileName(this, "Save Title As", QString(),
                                                 "OBS Graphics Title (*.ogt);;All Files (*)");
     if (path.isEmpty()) return;
+    if (!path.endsWith(".ogt", Qt::CaseInsensitive))
+        path += ".ogt";
     if (!m_doc->saveAs(path))
         QMessageBox::warning(this, "Save Failed",
                              QString("Could not save file:\n%1").arg(path));
+    else
+        updateWindowTitle();
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)

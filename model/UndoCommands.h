@@ -70,8 +70,10 @@ enum : int {
     Rotation = 1005,
     Opacity  = 1006,
     StrokeW  = 1007,
-    ShearX   = 1008,
-    ShearY   = 1009,
+    ShearX      = 1008,
+    ShearY      = 1009,
+    LineSpacing = 1010,
+    CharSpacing = 1011,
 };
 }
 
