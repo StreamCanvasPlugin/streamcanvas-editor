@@ -90,6 +90,7 @@ static void insertElementFromJson(Title& t, const json& ej)
                 el->childrenPadding[k] = ej["children_padding"][k].get<float>();
         }
     }
+    el->clipChildren = ej.value("clip_children", false);
 
     if (ej.contains("shadow") && ej["shadow"].is_object()) {
         const auto& sh = ej["shadow"];
@@ -565,10 +566,6 @@ void RemoveElementCmd::undo()
             }
         }
     });
-    // Restore mask ref if present
-    const std::string maskId = m_snapshot.value("mask", "");
-    if (!maskId.empty())
-        m_doc->setElementMaskRef(m_ei, maskId);
 }
 
 void RemoveElementCmd::redo()
@@ -610,3 +607,48 @@ void MoveElementCmd::doMove(int from, int to)
 
 void MoveElementCmd::undo() { doMove(m_to, m_from); }
 void MoveElementCmd::redo() { doMove(m_from, m_to); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SetElementParentCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetElementParentCmd::SetElementParentCmd(TitleDocument* doc, std::string elementId,
+                                         std::string newParentId, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc),
+      m_elementId(std::move(elementId)), m_newParentId(std::move(newParentId))
+{
+    setText("Set element parent");
+
+    // Capture current parent id
+    const Title& t = m_doc->title();
+    for (const auto& e : t.elements) {
+        if (e->GetId() == m_elementId) {
+            IElement* p = e->GetParent();
+            if (p && p->GetId() != "__root")
+                m_oldParentId = p->GetId();
+            break;
+        }
+    }
+}
+
+void SetElementParentCmd::doReparent(const std::string& fromId, const std::string& toId)
+{
+    m_doc->applyMutation([&](Title& t) {
+        IElement* el     = nullptr;
+        IElement* from   = t.GetRoot();
+        IElement* to     = t.GetRoot();
+
+        for (const auto& e : t.elements) {
+            if (e->GetId() == m_elementId) el   = e.get();
+            if (!fromId.empty() && e->GetId() == fromId) from = e.get();
+            if (!toId.empty()   && e->GetId() == toId)   to   = e.get();
+        }
+        if (!el || !from || !to || from == to) return;
+
+        from->RemoveChild(el);
+        to->AddChild(el);
+    });
+}
+
+void SetElementParentCmd::undo() { doReparent(m_newParentId, m_oldParentId); }
+void SetElementParentCmd::redo() { doReparent(m_oldParentId, m_newParentId); }

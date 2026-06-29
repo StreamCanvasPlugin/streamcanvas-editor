@@ -36,9 +36,15 @@ public:
 private:
     TitleDocument* m_doc;
 
-    // Returns title.elements indices [1..] sorted descending by zOrder (highest = row 0)
-    QVector<int> sortedElementIndices() const;
-    int sortedElementRow(int ei) const;  // ei = index into title.elements
+    // Returns indices into title.elements of direct children of parentEi
+    // (parentEi == -1 means root). Sorted descending by zOrder (highest = row 0).
+    QVector<int> childrenOf(int parentEi) const;
+
+    // Row of element at ei among its parent's children.
+    int rowOfElement(int ei) const;
+
+    // ei of the element's parent in title.elements, or -1 if parent is root.
+    int parentEiOf(int ei) const;
 
     static constexpr quintptr LEVEL_SCENE   = 0;
     static constexpr quintptr LEVEL_ELEMENT = 2;

@@ -56,7 +56,7 @@ private slots:
     void onStrokeWidthChanged(double v);
     void onCornerRadiusChanged();
     void onIdEditingFinished();
-    void onMaskChanged(int idx);
+    void onClipChildrenToggled(bool checked);
     void onParentChanged(int idx);
     void onFitToChildrenToggled(bool checked);
     void onChildrenPaddingChanged();
@@ -150,7 +150,7 @@ private:
     QLineEdit* m_idEdit{nullptr};
 
     // Layout group
-    QComboBox* m_maskCombo{nullptr};
+    QCheckBox* m_clipChildrenCheck{nullptr};
     QComboBox* m_parentCombo{nullptr};
     QCheckBox* m_fitCheck{nullptr};
     QWidget*   m_paddingContainer{nullptr};

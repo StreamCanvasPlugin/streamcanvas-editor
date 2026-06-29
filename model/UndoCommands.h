@@ -307,6 +307,25 @@ private:
     int            m_savedPosition;
 };
 
+// ── Structural: Set Element Parent ───────────────────────────────────────────
+
+class SetElementParentCmd : public QUndoCommand {
+public:
+    SetElementParentCmd(TitleDocument* doc, std::string elementId,
+                        std::string newParentId,   // empty string = root
+                        QUndoCommand* parent = nullptr);
+    void undo() override;
+    void redo() override;
+
+private:
+    TitleDocument* m_doc;
+    std::string    m_elementId;
+    std::string    m_oldParentId;
+    std::string    m_newParentId;
+
+    void doReparent(const std::string& fromId, const std::string& toId);
+};
+
 // ── Structural: Move Element ──────────────────────────────────────────────────
 
 class MoveElementCmd : public QUndoCommand {

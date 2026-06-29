@@ -174,15 +174,6 @@ bool TitleDocument::load(const QString& path)
         return false;
     }
 
-    // Rebuild mask refs from JSON (mask pointers are already set by Title::Load,
-    // but we need our logical map so applyMutation can call resolveMaskPointers)
-    m_maskRefs.clear();
-    for (size_t i = 1; i < m_title.elements.size(); ++i) {
-        auto* ve = dynamic_cast<VisualElement*>(m_title.elements[i].get());
-        if (ve && ve->mask)
-            m_maskRefs[ve->GetId()] = ve->mask->GetId();
-    }
-
     // Load brand colors from metadata, fall back to defaults
     if (m_title.metadata.contains("brand_colors") && m_title.metadata["brand_colors"].is_array()) {
         m_brandColors.clear();
@@ -279,17 +270,6 @@ QList<QColor> TitleDocument::defaultBrandColors()
     };
 }
 
-void TitleDocument::setElementMaskRef(const std::string& elementId, const std::string& maskId)
-{
-    if (maskId.empty())
-        m_maskRefs.erase(elementId);
-    else
-        m_maskRefs[elementId] = maskId;
-    resolveMaskPointers();
-    setModified(true);
-    emit documentChanged();
-}
-
 void TitleDocument::reset()
 {
     m_title = Title{};
@@ -297,7 +277,6 @@ void TitleDocument::reset()
     m_title.width = 1920;
     m_title.height = 1080;
     m_brandColors = defaultBrandColors();
-    m_maskRefs.clear();
     m_filePath.clear();
     m_undoStack.clear();
     setModified(false);
@@ -349,8 +328,8 @@ nlohmann::json TitleDocument::elementToJson(const VisualElement& el)
                                                  el.shadow.color[2], el.shadow.color[3]})}};
     }
 
-    if (el.mask)
-        j["mask"] = el.mask->GetId();
+    if (el.clipChildren)
+        j["clip_children"] = true;
     if (el.GetParent() && el.GetParent()->GetId() != "__root")
         j["parent"] = el.GetParent()->GetId();
 
@@ -393,35 +372,12 @@ nlohmann::json TitleDocument::elementToJson(const VisualElement& el)
 void TitleDocument::applyMutation(std::function<void(Title&)> fn)
 {
     fn(m_title);
-    resolveMaskPointers();
     applyFitToChildren();
     setModified(true);
     emit documentChanged();
 }
 
 // private
-
-void TitleDocument::resolveMaskPointers()
-{
-    // Clear all mask pointers, then rebuild from m_maskRefs
-    for (size_t i = 1; i < m_title.elements.size(); ++i) {
-        auto* ve = dynamic_cast<VisualElement*>(m_title.elements[i].get());
-        if (ve) ve->mask = nullptr;
-    }
-
-    for (auto& [eid, maskId] : m_maskRefs) {
-        VisualElement* el = nullptr;
-        VisualElement* maskEl = nullptr;
-        for (size_t i = 1; i < m_title.elements.size(); ++i) {
-            auto* ve = dynamic_cast<VisualElement*>(m_title.elements[i].get());
-            if (!ve) continue;
-            if (ve->GetId() == eid)    el     = ve;
-            if (ve->GetId() == maskId) maskEl = ve;
-        }
-        if (el && maskEl)
-            el->mask = maskEl;
-    }
-}
 
 void TitleDocument::applyFitToChildren()
 {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <functional>
-#include <map>
 #include <string>
 
 #include <QColor>
@@ -39,9 +38,6 @@ public:
     // Reset to an empty title, clearing file path and undo stack
     void reset();
 
-    // Update the mask ID ref for one element and re-resolve mask pointers.
-    void setElementMaskRef(const std::string& elementId, const std::string& maskId);
-
     // All mutations go through here; fn may freely modify m_title
     void applyMutation(std::function<void(Title&)> fn);
 
@@ -68,10 +64,6 @@ private:
     bool m_modified{false};
     QList<QColor> m_brandColors;
 
-    // elementId → maskId (parent-child tree managed by engine via IElement)
-    std::map<std::string, std::string> m_maskRefs;
-
-    void resolveMaskPointers();
     void applyFitToChildren();
     void setModified(bool modified);
 };

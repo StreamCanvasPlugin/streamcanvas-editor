@@ -287,10 +287,8 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
     // ── Layout group ───────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_elemCategory, "Layout");
-        m_maskCombo = new QComboBox;
-        m_maskCombo->setFixedWidth(100);
-        gl->addWidget(makeRibbonLabel("Mask "),   0, 0);
-        gl->addWidget(m_maskCombo,                0, 1);
+        m_clipChildrenCheck = new QCheckBox("Clip Children");
+        gl->addWidget(m_clipChildrenCheck,        0, 0, 1, 2);
         m_parentCombo = new QComboBox;
         m_parentCombo->setFixedWidth(100);
         gl->addWidget(makeRibbonLabel("Parent "), 1, 0);
@@ -319,7 +317,7 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
         fcl->addWidget(m_paddingContainer);
         gl->addWidget(fitContainer, 0, 2, 2, 1);
 
-        connect(m_maskCombo,   QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onMaskChanged);
+        connect(m_clipChildrenCheck, &QCheckBox::toggled, this, &RibbonFormatSection::onClipChildrenToggled);
         connect(m_parentCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onParentChanged);
         connect(m_fitCheck,    &QCheckBox::toggled,                                 this, &RibbonFormatSection::onFitToChildrenToggled);
         auto connectPad = [this](QDoubleSpinBox* s) {
@@ -791,19 +789,9 @@ void RibbonFormatSection::populateRefCombos()
         const VisualElement& el = m_doc->getElement(m_elementId);
         const Title& t = m_doc->title();
 
-        m_maskCombo->blockSignals(true);
-        m_maskCombo->clear();
-        m_maskCombo->addItem("None", QString());
-        int maskIdx = 0;
-        for (int i = 1; i < (int)t.elements.size(); ++i) {
-            const std::string& eid = t.elements[i]->GetId();
-            if (eid == m_elementId) continue;
-            m_maskCombo->addItem(QString::fromStdString(eid), QString::fromStdString(eid));
-            if (el.mask && el.mask->GetId() == eid)
-                maskIdx = m_maskCombo->count() - 1;
-        }
-        m_maskCombo->setCurrentIndex(maskIdx);
-        m_maskCombo->blockSignals(false);
+        m_clipChildrenCheck->blockSignals(true);
+        m_clipChildrenCheck->setChecked(el.clipChildren);
+        m_clipChildrenCheck->blockSignals(false);
 
         m_parentCombo->blockSignals(true);
         m_parentCombo->clear();
@@ -1065,32 +1053,19 @@ void RibbonFormatSection::onIdEditingFinished()
     emit elementIdChanged(m_elementId);
 }
 
-void RibbonFormatSection::onMaskChanged(int)
+void RibbonFormatSection::onClipChildrenToggled(bool checked)
 {
     if (m_updating || m_elementId.empty()) return;
-    std::string maskId = m_maskCombo->currentData().toString().toStdString();
-    m_doc->setElementMaskRef(m_elementId, maskId);
+    m_doc->undoStack()->push(new SetElementFieldCmd<bool>(
+        m_doc, m_elementId, checked,
+        [](VisualElement& e) -> bool& { return e.clipChildren; }, "clipChildren"));
 }
 
 void RibbonFormatSection::onParentChanged(int)
 {
     if (m_updating || m_elementId.empty()) return;
     std::string newParentId = m_parentCombo->currentData().toString().toStdString();
-    const std::string ei = m_elementId;
-    m_doc->applyMutation([ei, newParentId](Title& t) {
-        try {
-            VisualElement& el = t.GetById(ei);
-            IElement* curParent = el.GetParent();
-            IElement* newParent = t.GetRoot();
-            if (!newParentId.empty()) {
-                for (auto& e : t.elements)
-                    if (e->GetId() == newParentId) { newParent = e.get(); break; }
-            }
-            if (curParent == newParent) return;
-            if (curParent) curParent->RemoveChild(&el);
-            newParent->AddChild(&el);
-        } catch (...) {}
-    });
+    m_doc->undoStack()->push(new SetElementParentCmd(m_doc, m_elementId, newParentId));
 }
 
 void RibbonFormatSection::onFitToChildrenToggled(bool checked)

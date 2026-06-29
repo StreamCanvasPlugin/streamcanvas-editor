@@ -4,7 +4,6 @@
 #include <QIcon>
 #include <QIODevice>
 #include <algorithm>
-#include <numeric>
 
 #include "engine/element_image.h"
 #include "engine/element_qr.h"
@@ -23,34 +22,60 @@ TitleTreeModel::TitleTreeModel(TitleDocument* doc, QObject* parent)
     });
 }
 
-// ── Z-Order sort helpers ──────────────────────────────────────────────────────
+// ── Tree helpers ──────────────────────────────────────────────────────────────
 
-QVector<int> TitleTreeModel::sortedElementIndices() const
+QVector<int> TitleTreeModel::childrenOf(int parentEi) const
 {
     const Title& t = m_doc->title();
-    int n = static_cast<int>(t.elements.size());
-    // Skip index 0 (root); collect 1..n-1
-    QVector<int> idx;
-    idx.reserve(n - 1);
-    for (int i = 1; i < n; ++i)
-        idx.push_back(i);
-    // Descending: highest zOrder → row 0 (topmost in the layer list)
-    std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) {
+    const IElement* parentEl = (parentEi == -1) ? t.GetRoot()
+                                                 : t.elements[parentEi].get();
+    if (!parentEl) return {};
+
+    QVector<int> result;
+    for (const IElement* child : parentEl->GetChildren()) {
+        for (int i = 1; i < static_cast<int>(t.elements.size()); ++i) {
+            if (t.elements[i].get() == child) {
+                result.push_back(i);
+                break;
+            }
+        }
+    }
+
+    std::stable_sort(result.begin(), result.end(), [&](int a, int b) {
         const auto* va = dynamic_cast<const VisualElement*>(t.elements[a].get());
         const auto* vb = dynamic_cast<const VisualElement*>(t.elements[b].get());
         int za = va ? va->zOrder : 0;
         int zb = vb ? vb->zOrder : 0;
         return za > zb;
     });
-    return idx;
+    return result;
 }
 
-int TitleTreeModel::sortedElementRow(int ei) const
+int TitleTreeModel::rowOfElement(int ei) const
 {
-    auto sorted = sortedElementIndices();
-    for (int r = 0; r < sorted.size(); ++r)
-        if (sorted[r] == ei)
-            return r;
+    const Title& t = m_doc->title();
+    if (ei < 1 || ei >= static_cast<int>(t.elements.size())) return -1;
+    IElement* parentEl = t.elements[ei]->GetParent();
+    int parentEi = -1;
+    if (parentEl && parentEl != t.GetRoot()) {
+        for (int i = 1; i < static_cast<int>(t.elements.size()); ++i) {
+            if (t.elements[i].get() == parentEl) { parentEi = i; break; }
+        }
+    }
+    QVector<int> siblings = childrenOf(parentEi);
+    for (int r = 0; r < siblings.size(); ++r)
+        if (siblings[r] == ei) return r;
+    return -1;
+}
+
+int TitleTreeModel::parentEiOf(int ei) const
+{
+    const Title& t = m_doc->title();
+    if (ei < 1 || ei >= static_cast<int>(t.elements.size())) return -1;
+    IElement* p = t.elements[ei]->GetParent();
+    if (!p || p == t.GetRoot()) return -1;
+    for (int i = 1; i < static_cast<int>(t.elements.size()); ++i)
+        if (t.elements[i].get() == p) return i;
     return -1;
 }
 
@@ -62,18 +87,23 @@ QModelIndex TitleTreeModel::index(int row, int column, const QModelIndex& parent
         return {};
 
     if (!parent.isValid()) {
-        // Root level: only the title node
         if (row == 0)
-            return createIndex(row, column, makeId(LEVEL_SCENE, -1));
+            return createIndex(0, column, makeId(LEVEL_SCENE, -1));
         return {};
     }
 
     quintptr pid = parent.internalId();
     if (levelOf(pid) == LEVEL_SCENE) {
-        auto sorted = sortedElementIndices();
-        if (row >= sorted.size())
-            return {};
-        return createIndex(row, column, makeId(LEVEL_ELEMENT, sorted[row]));
+        QVector<int> kids = childrenOf(-1);
+        if (row >= kids.size()) return {};
+        return createIndex(row, column, makeId(LEVEL_ELEMENT, kids[row]));
+    }
+
+    if (levelOf(pid) == LEVEL_ELEMENT) {
+        int pei = eiOf(pid);
+        QVector<int> kids = childrenOf(pei);
+        if (row >= kids.size()) return {};
+        return createIndex(row, column, makeId(LEVEL_ELEMENT, kids[row]));
     }
 
     return {};
@@ -81,29 +111,34 @@ QModelIndex TitleTreeModel::index(int row, int column, const QModelIndex& parent
 
 QModelIndex TitleTreeModel::parent(const QModelIndex& child) const
 {
-    if (!child.isValid())
-        return {};
+    if (!child.isValid()) return {};
 
     quintptr id = child.internalId();
-    if (levelOf(id) == LEVEL_SCENE)
-        return {};
+    if (levelOf(id) == LEVEL_SCENE) return {};
 
-    // All elements are children of the title node
-    return createIndex(0, 0, makeId(LEVEL_SCENE, -1));
+    int ei = eiOf(id);
+    int pei = parentEiOf(ei);
+
+    if (pei == -1)
+        return createIndex(0, 0, makeId(LEVEL_SCENE, -1));
+
+    int grandRow = rowOfElement(pei);
+    if (grandRow < 0) grandRow = 0;
+    return createIndex(grandRow, 0, makeId(LEVEL_ELEMENT, pei));
 }
 
 int TitleTreeModel::rowCount(const QModelIndex& parent) const
 {
-    if (!parent.isValid())
-        return 1; // just the title node
+    if (!parent.isValid()) return 1;
 
     quintptr id = parent.internalId();
-    if (levelOf(id) == LEVEL_SCENE) {
-        const Title& t = m_doc->title();
-        return std::max(0, static_cast<int>(t.elements.size()) - 1); // exclude root
-    }
+    if (levelOf(id) == LEVEL_SCENE)
+        return childrenOf(-1).size();
 
-    return 0; // elements have no children in the tree
+    if (levelOf(id) == LEVEL_ELEMENT)
+        return childrenOf(eiOf(id)).size();
+
+    return 0;
 }
 
 int TitleTreeModel::columnCount(const QModelIndex& /*parent*/) const
@@ -113,8 +148,7 @@ int TitleTreeModel::columnCount(const QModelIndex& /*parent*/) const
 
 QVariant TitleTreeModel::data(const QModelIndex& index, int role) const
 {
-    if (!index.isValid())
-        return {};
+    if (!index.isValid()) return {};
 
     quintptr id = index.internalId();
     quintptr level = levelOf(id);
@@ -126,8 +160,7 @@ QVariant TitleTreeModel::data(const QModelIndex& index, int role) const
         if (level == LEVEL_ELEMENT) {
             int ei = eiOf(id);
             const Title& t = m_doc->title();
-            if (ei < 1 || ei >= static_cast<int>(t.elements.size()))
-                return {};
+            if (ei < 1 || ei >= static_cast<int>(t.elements.size())) return {};
             return QString::fromStdString(t.elements[ei]->GetId());
         }
     }
@@ -139,8 +172,7 @@ QVariant TitleTreeModel::data(const QModelIndex& index, int role) const
         if (level == LEVEL_ELEMENT) {
             int ei = eiOf(id);
             const Title& t = m_doc->title();
-            if (ei < 1 || ei >= static_cast<int>(t.elements.size()))
-                return {};
+            if (ei < 1 || ei >= static_cast<int>(t.elements.size())) return {};
             const IElement* el = t.elements[ei].get();
             if (dynamic_cast<const TextElement*>(el))
                 return themedIcon(Icons16::File_Font);
@@ -161,9 +193,9 @@ Qt::ItemFlags TitleTreeModel::flags(const QModelIndex& index) const
         return Qt::ItemIsDropEnabled;
 
     quintptr id = index.internalId();
-    Qt::ItemFlags f = Qt::ItemIsSelectable | Qt::ItemIsEnabled;
+    Qt::ItemFlags f = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDropEnabled;
     if (levelOf(id) == LEVEL_ELEMENT)
-        f |= Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
+        f |= Qt::ItemIsDragEnabled;
 
     return f;
 }
@@ -180,8 +212,7 @@ QStringList TitleTreeModel::mimeTypes() const
 
 QMimeData* TitleTreeModel::mimeData(const QModelIndexList& indexes) const
 {
-    if (indexes.isEmpty())
-        return nullptr;
+    if (indexes.isEmpty()) return nullptr;
 
     auto* mime = new QMimeData;
     QByteArray bytes;
@@ -199,81 +230,116 @@ QMimeData* TitleTreeModel::mimeData(const QModelIndexList& indexes) const
 bool TitleTreeModel::dropMimeData(const QMimeData* data, Qt::DropAction action,
                                   int row, int /*column*/, const QModelIndex& parent)
 {
-    if (action != Qt::MoveAction)
-        return false;
-    if (!data->hasFormat("application/x-obs-title-node"))
-        return false;
+    if (action != Qt::MoveAction) return false;
+    if (!data->hasFormat("application/x-obs-title-node")) return false;
 
     QByteArray encoded = data->data("application/x-obs-title-node");
-    if (encoded.size() < 8)
-        return false;
+    if (encoded.size() < 8) return false;
 
     quintptr srcId = 0;
     for (int i = 0; i < 8; ++i)
         srcId = (srcId << 8) | static_cast<unsigned char>(encoded[i]);
 
-    if (levelOf(srcId) != LEVEL_ELEMENT)
-        return false;
+    if (levelOf(srcId) != LEVEL_ELEMENT) return false;
 
     int srcEi = eiOf(srcId);
-    auto sorted = sortedElementIndices();
-    int n = sorted.size();
-    if (n < 2)
-        return false;
-
-    int srcRow = sortedElementRow(srcEi);
-    if (srcRow < 0)
-        return false;
-
-    int destRow = row;
-    if (destRow < 0) {
-        if (parent.isValid() && levelOf(parent.internalId()) == LEVEL_ELEMENT)
-            destRow = sortedElementRow(eiOf(parent.internalId()));
-        else
-            destRow = n - 1;
-    }
-    destRow = std::clamp(destRow, 0, n - 1);
-
-    if (destRow == srcRow)
-        return false;
-
-    // Build new zOrder assignment
-    QVector<int> newOrder = sorted;
-    newOrder.remove(srcRow);
-    int insertPos = (destRow > srcRow) ? destRow - 1 : destRow;
-    insertPos = std::clamp(insertPos, 0, n - 1);
-    newOrder.insert(insertPos, srcEi);
-
     const Title& t = m_doc->title();
-    auto* macro = new QUndoCommand("reorder element");
+    if (srcEi < 1 || srcEi >= static_cast<int>(t.elements.size())) return false;
+
+    const std::string srcId_str = t.elements[srcEi]->GetId();
+
+    // ── Determine destination parent ──────────────────────────────────────────
+    // row == -1 means drop ON the parent item (reparent to it).
+    // row >= 0 means drop BETWEEN children of parent (reorder / cross-reparent).
+
+    int destParentEi = -1;  // -1 = root
+    if (parent.isValid()) {
+        quintptr pid = parent.internalId();
+        if (levelOf(pid) == LEVEL_ELEMENT)
+            destParentEi = eiOf(pid);
+        // LEVEL_SCENE → destParentEi stays -1 (root)
+    }
+
+    const std::string destParentId = (destParentEi == -1)
+        ? "" : t.elements[destParentEi]->GetId();
+
+    // Prevent dropping an element onto itself or onto one of its own descendants
+    {
+        IElement* probe = (destParentEi == -1) ? t.GetRoot() : t.elements[destParentEi].get();
+        while (probe) {
+            if (probe == t.elements[srcEi].get()) return false;
+            probe = probe->GetParent();
+        }
+    }
+
+    auto* macro = new QUndoCommand(row == -1 ? "reparent element" : "reorder element");
+
+    // ── Reparent if parent changes ────────────────────────────────────────────
+    const int curParentEi = parentEiOf(srcEi);
+    const bool needsReparent = (curParentEi != destParentEi);
+
+    if (row == -1) {
+        // Drop ON: just reparent (append to dest's children)
+        if (!needsReparent) { delete macro; return false; }
+        m_doc->undoStack()->push(
+            new SetElementParentCmd(m_doc, srcId_str, destParentId));
+        return true;
+    }
+
+    // Drop BETWEEN rows — may need reparent + zOrder assignment.
+    if (needsReparent) {
+        new SetElementParentCmd(m_doc, srcId_str, destParentId, macro);
+    }
+
+    // After (potential) reparent all siblings share destParentEi.
+    // Re-fetch children in the order they *will* be after reparenting.
+    QVector<int> siblings = childrenOf(destParentEi);
+    if (needsReparent) {
+        // srcEi may not be in the list yet if reparent hasn't run; add it.
+        if (!siblings.contains(srcEi))
+            siblings.append(srcEi);
+    }
+
+    int n = siblings.size();
+    if (n < 1) { delete macro; return false; }
+
+    // Remove src from its current position in the list (if already there)
+    int srcRow = -1;
+    for (int r = 0; r < n; ++r) if (siblings[r] == srcEi) { srcRow = r; break; }
+    if (srcRow >= 0) siblings.remove(srcRow);
+
+    int insertPos = std::clamp(row, 0, static_cast<int>(siblings.size()));
+    siblings.insert(insertPos, srcEi);
+
+    n = siblings.size();
     for (int r = 0; r < n; ++r) {
-        int ei = newOrder[r];
+        int ei = siblings[r];
         int newZ = n - 1 - r;
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
         if (ve && ve->zOrder != newZ) {
-            const std::string eid = t.elements[ei]->GetId();
             new SetElementFieldCmd<int>(
-                m_doc, eid, newZ,
+                m_doc, t.elements[ei]->GetId(), newZ,
                 [](VisualElement& e) -> int& { return e.zOrder; },
                 "zOrder", -1, macro);
         }
     }
+
+    if (macro->childCount() == 0) { delete macro; return false; }
     m_doc->undoStack()->push(macro);
     return true;
 }
 
+// ── Selection helpers ─────────────────────────────────────────────────────────
+
 SelectionId TitleTreeModel::selectionIdFor(const QModelIndex& index) const
 {
-    if (!index.isValid())
-        return SelectionId{};
+    if (!index.isValid()) return SelectionId{};
 
     quintptr id = index.internalId();
-    quintptr level = levelOf(id);
-
-    if (level == LEVEL_SCENE)
+    if (levelOf(id) == LEVEL_SCENE)
         return SelectionId{SelectionId::Level::Title, -1};
 
-    if (level == LEVEL_ELEMENT)
+    if (levelOf(id) == LEVEL_ELEMENT)
         return SelectionId{SelectionId::Level::Element, eiOf(id)};
 
     return SelectionId{};
@@ -286,10 +352,10 @@ QModelIndex TitleTreeModel::indexForSelection(const SelectionId& sel) const
         return createIndex(0, 0, makeId(LEVEL_SCENE, -1));
 
     case SelectionId::Level::Element: {
-        int row = sortedElementRow(sel.elementIndex);
-        if (row < 0)
-            return {};
-        return createIndex(row, 0, makeId(LEVEL_ELEMENT, sel.elementIndex));
+        int ei = sel.elementIndex;
+        int row = rowOfElement(ei);
+        if (row < 0) return {};
+        return createIndex(row, 0, makeId(LEVEL_ELEMENT, ei));
     }
 
     default:
