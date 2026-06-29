@@ -215,7 +215,7 @@ private:
 
 class SetElementAnimCmd : public QUndoCommand {
 public:
-    enum class Target { AnimIn, AnimOut };
+    enum class Target { AnimIn, AnimOut, DataAnimIn, DataAnimOut };
 
     SetElementAnimCmd(TitleDocument* doc, std::string ei, Target target,
                       const AnimationDef& after, QUndoCommand* parent = nullptr);

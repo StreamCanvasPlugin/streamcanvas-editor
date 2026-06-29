@@ -51,7 +51,7 @@ public:
 
     void startAnimationPreview(bool playIn);
     void stopAnimationPreview();
-    void previewAtTime(bool isIn, double t);
+    void previewAtTime(bool isIn, bool isData, double t);
 
     // Guides
     void setGuides(GuideFlags flags);

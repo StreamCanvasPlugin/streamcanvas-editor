@@ -4,7 +4,6 @@
 
 class TitleDocument;
 class AnimationTimingEditor;
-class ScrubRuler;
 class QDoubleSpinBox;
 class QTabBar;
 class QGridLayout;
@@ -24,9 +23,10 @@ public:
     void load();
     void clear();
     bool isIn() const;
+    bool isDataAnim() const;
 
 signals:
-    void animationChanged(int elementIndex, bool isIn,
+    void animationChanged(int elementIndex, bool isIn, bool isData,
                           AnimationType type, Easing easing, float delay, float duration);
     void scrubTimeChanged(float t);
     void previewStopped();
@@ -58,6 +58,5 @@ private:
     QTimer*         m_playTimer;
     QWidget*        m_content;
     QGridLayout*    m_grid;
-    ScrubRuler*     m_ruler;
     QList<AnimationTimingEditor*> m_editors;
 };

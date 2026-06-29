@@ -367,13 +367,22 @@ SetElementAnimCmd::SetElementAnimCmd(TitleDocument* doc, std::string ei,
                                      Target target, const AnimationDef& after, QUndoCommand* parent)
     : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_target(target), m_after(after)
 {
-    setText(target == Target::AnimIn ? "Set anim in" : "Set anim out");
+    setText(target == Target::AnimIn      ? "Set anim in"
+          : target == Target::AnimOut     ? "Set anim out"
+          : target == Target::DataAnimIn  ? "Set data anim in"
+                                          : "Set data anim out");
     try { m_before = animRef(m_doc->getElement(m_ei)); } catch (...) {}
 }
 
 AnimationDef& SetElementAnimCmd::animRef(VisualElement& el) const
 {
-    return (m_target == Target::AnimIn) ? el.inAnimation : el.outAnimation;
+    switch (m_target) {
+        case Target::AnimIn:      return el.inAnimation;
+        case Target::AnimOut:     return el.outAnimation;
+        case Target::DataAnimIn:  return el.dataInAnimation;
+        case Target::DataAnimOut: return el.dataOutAnimation;
+    }
+    return el.inAnimation;
 }
 
 void SetElementAnimCmd::undo()

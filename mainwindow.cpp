@@ -26,6 +26,9 @@
 #include <QAction>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QShowEvent>
+#include <QSplitter>
+#include <QTimer>
 #include <QComboBox>
 #include <QDir>
 #include <QDialog>
@@ -93,7 +96,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     showMaximized();
 
-    setRibbonTheme(SARibbonTheme::RibbonThemeDark2);
+    setRibbonTheme(SARibbonTheme::RibbonThemeDark);
     m_ribbon = ribbonBar();
 
 #ifdef Q_OS_LINUX
@@ -126,22 +129,29 @@ MainWindow::MainWindow(QWidget* parent)
     addDockWidget(Qt::BottomDockWidgetArea, timingDock);
 
     connect(m_timingEditor, &GraphicTimingEditor::animationChanged,
-            [this](int elementIndex, bool isIn, AnimationType type, Easing easing,
+            [this](int elementIndex, bool isIn, bool isData, AnimationType type, Easing easing,
                    float delay, float duration) {
         const Title& t = m_doc->title();
         if (elementIndex < 1 || elementIndex >= (int)t.elements.size()) return;
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[elementIndex].get());
         if (!ve) return;
         const std::string ei = ve->GetId();
-        AnimationDef def = isIn ? ve->inAnimation : ve->outAnimation;
+        AnimationDef def;
+        SetElementAnimCmd::Target target;
+        if (isData) {
+            def = isIn ? ve->dataInAnimation : ve->dataOutAnimation;
+            target = isIn ? SetElementAnimCmd::Target::DataAnimIn : SetElementAnimCmd::Target::DataAnimOut;
+        } else {
+            def = isIn ? ve->inAnimation : ve->outAnimation;
+            target = isIn ? SetElementAnimCmd::Target::AnimIn : SetElementAnimCmd::Target::AnimOut;
+        }
         def.type = type; def.easing = easing; def.delay = delay; def.duration = duration;
-        auto target = isIn ? SetElementAnimCmd::Target::AnimIn : SetElementAnimCmd::Target::AnimOut;
         m_doc->undoStack()->push(new SetElementAnimCmd(m_doc, ei, target, def));
     });
 
     connect(m_timingEditor, &GraphicTimingEditor::scrubTimeChanged,
             [this](float t) {
-        m_canvas->previewAtTime(m_timingEditor->isIn(), double(t));
+        m_canvas->previewAtTime(m_timingEditor->isIn(), m_timingEditor->isDataAnim(), double(t));
     });
 
     connect(m_timingEditor, &GraphicTimingEditor::previewStopped,
@@ -730,6 +740,20 @@ bool MainWindow::maybeSave()
         QMessageBox::Save);
     if (result == QMessageBox::Save) { onSave(); return !m_doc->isModified(); }
     return result == QMessageBox::Discard;
+}
+
+void MainWindow::showEvent(QShowEvent* event)
+{
+    SARibbonMainWindow::showEvent(event);
+    QTimer::singleShot(0, this, [this]() {
+        for (auto* splitter : findChildren<QSplitter*>()) {
+            for (int i = 1; i < splitter->count(); ++i) {
+                auto* h = splitter->handle(i);
+                h->setCursor(splitter->orientation() == Qt::Horizontal
+                    ? Qt::SplitHCursor : Qt::SplitVCursor);
+            }
+        }
+    });
 }
 
 void MainWindow::updateWindowTitle()

@@ -23,6 +23,7 @@
 #include <QUrl>
 #include <QWheelEvent>
 
+#include "engine/animation.h"
 #include "engine/element_image.h"
 #include "engine/element_qr.h"
 #include "engine/element_rectangle.h"
@@ -416,8 +417,6 @@ void CanvasWidget::drawSnapLines(QPainter& p, const QRectF& lb)
 void CanvasWidget::drawElementOutlines(QPainter& p)
 {
     const SelectionId sel = m_editorState->selection();
-    if (sel.level != SelectionId::Level::Element) return;
-
     const Title& t = m_doc->title();
     p.save();
     p.setRenderHint(QPainter::Antialiasing, false);
@@ -548,7 +547,7 @@ void CanvasWidget::stopAnimationPreview()
     renderStaticTitle();
 }
 
-void CanvasWidget::previewAtTime(bool isIn, double t)
+void CanvasWidget::previewAtTime(bool isIn, bool isData, double t)
 {
     if (m_animTimer) {
         m_animTimer->stop();
@@ -561,6 +560,22 @@ void CanvasWidget::previewAtTime(bool isIn, double t)
         m_doc->title().Save(tmpPath.toStdString());
         m_previewTitle = std::make_unique<Title>(Title::Load(tmpPath.toStdString()));
         QFile::remove(tmpPath);
+    }
+
+    if (isData) {
+        // timer=9999: ensures all main in/out animations evaluate as fully done
+        // so elements render at full opacity before data anim is overlaid.
+        m_previewTitle->state = TitleState::Visible;
+        m_previewTitle->timer = 9999.0;
+        for (int i = 1; i < (int)m_previewTitle->elements.size(); ++i) {
+            auto* ve = dynamic_cast<VisualElement*>(m_previewTitle->elements[i].get());
+            if (!ve) continue;
+            const AnimationDef& def = isIn ? ve->dataInAnimation : ve->dataOutAnimation;
+            if (def.type != AnimationType::None)
+                ve->SetDataPreviewTime(!isIn, t);
+        }
+        renderPreviewTitle();
+        return;
     }
 
     m_previewTitle->timer = t;
