@@ -9,8 +9,38 @@
 #include "engine/element_rectangle.h"
 #include "engine/element_text.h"
 #include "engine/spatial.h"
+#include "engine/types.hpp"
 
 using json = nlohmann::json;
+
+static Paint parsePaint(const json& v)
+{
+    if (v.is_null()) return Paint{};
+    if (v.is_array() && v.size() >= 3) {
+        double a = v.size() >= 4 ? (double)v[3] : 1.0;
+        return Paint::Solid(v[0], v[1], v[2], a);
+    }
+    if (v.is_string())
+        return Paint::Image(v.get<std::string>());
+    if (v.is_object()) {
+        std::string type = v.value("type", "");
+        if (type == "image") return Paint::Image(v.value("path", ""));
+        Paint p = (type == "radial")
+            ? Paint::Radial(v.value("cx0", 0.0), v.value("cy0", 0.0), v.value("r0", 0.0),
+                            v.value("cx1", 0.0), v.value("cy1", 0.0), v.value("r1", 1.0))
+            : Paint::Linear(v.value("x0", 0.0), v.value("y0", 0.0),
+                            v.value("x1", 1.0), v.value("y1", 0.0));
+        if (v.contains("stops") && v["stops"].is_array()) {
+            for (const auto& s : v["stops"]) {
+                const auto& c = s.at("color");
+                double a = c.size() >= 4 ? (double)c[3] : 1.0;
+                p.AddStop(s.value("offset", 0.0), c[0], c[1], c[2], a);
+            }
+        }
+        return p;
+    }
+    return Paint{};
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // insertElementFromJson — re-parse a single element JSON blob into the title.
@@ -38,6 +68,9 @@ static void insertElementFromJson(Title& t, const json& ej)
     el->zOrder      = ej.value("z_order", 0);
     el->opacity     = static_cast<float>(ej.value("opacity", 1.0));
     el->strokeWidth = static_cast<float>(ej.value("stroke_width", 0.0));
+
+    if (ej.contains("fill"))   el->fill   = parsePaint(ej["fill"]);
+    if (ej.contains("stroke")) el->stroke = parsePaint(ej["stroke"]);
 
     if (ej.contains("corner_radius")) {
         const auto& cr = ej["corner_radius"];

@@ -118,7 +118,7 @@ void TitleTreeView::contextMenuEvent(QContextMenuEvent* event)
         addElem("image_", "image", {{"w", 200}, {"h", 200}, {"scale_mode", "contain"}});
     });
     menu.addAction("Add QR Code", this, [this, addElem]() {
-        addElem("qr_", "qr_code", {{"w", 200}, {"h", 200}});
+        addElem("qr_", "qr_code", {{"w", 200}, {"h", 200}, {"fill", {0.0, 0.0, 0.0, 1.0}}});
     });
 
     menu.addSeparator();

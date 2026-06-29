@@ -48,7 +48,7 @@ public:
     // Expose title name mutation (used by SetTitleNameCmd)
     void setTitleName(const QString& name);
 
-    // Brand colors (editor-only, session-only — not persisted to .ogt)
+    // Brand colors — persisted in title.metadata["brand_colors"]
     QList<QColor> brandColors() const { return m_brandColors; }
     void setBrandColors(const QList<QColor>& colors);
     static QList<QColor> defaultBrandColors();

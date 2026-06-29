@@ -450,7 +450,7 @@ void MainWindow::setupRibbon()
             const int zOrder = std::max(0, (int)m_doc->title().elements.size() - 1);
             using json = nlohmann::json;
             json j = {{"id", newId}, {"type", "qr_code"}, {"x", 100}, {"y", 100},
-                      {"w", 200}, {"h", 200}, {"z_order", zOrder}};
+                      {"w", 200}, {"h", 200}, {"z_order", zOrder}, {"fill", {0.0, 0.0, 0.0, 1.0}}};
             m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
             selectNewElem(newId);
         });

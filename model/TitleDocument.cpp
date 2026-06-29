@@ -183,6 +183,21 @@ bool TitleDocument::load(const QString& path)
             m_maskRefs[ve->GetId()] = ve->mask->GetId();
     }
 
+    // Load brand colors from metadata, fall back to defaults
+    if (m_title.metadata.contains("brand_colors") && m_title.metadata["brand_colors"].is_array()) {
+        m_brandColors.clear();
+        for (const auto& c : m_title.metadata["brand_colors"]) {
+            if (c.is_string()) {
+                QColor color(QString::fromStdString(c.get<std::string>()));
+                if (color.isValid()) m_brandColors.append(color);
+            }
+        }
+        if (m_brandColors.isEmpty())
+            m_brandColors = defaultBrandColors();
+    } else {
+        m_brandColors = defaultBrandColors();
+    }
+
     m_filePath = path;
     m_undoStack.clear();
     setModified(false);
@@ -239,6 +254,10 @@ void TitleDocument::setTitleName(const QString& name)
 void TitleDocument::setBrandColors(const QList<QColor>& colors)
 {
     m_brandColors = colors;
+    nlohmann::json arr = nlohmann::json::array();
+    for (const QColor& c : colors)
+        arr.push_back(c.name().toStdString());
+    m_title.metadata["brand_colors"] = arr;
     setModified(true);
     emit documentChanged();
 }
@@ -277,6 +296,7 @@ void TitleDocument::reset()
     m_title.id = "new_title";
     m_title.width = 1920;
     m_title.height = 1080;
+    m_brandColors = defaultBrandColors();
     m_maskRefs.clear();
     m_filePath.clear();
     m_undoStack.clear();
