@@ -1,28 +1,27 @@
 #include "GraphicTimingEditor.h"
 #include "AnimationTimingEditor.h"
 #include "ScrubRuler.h"
-#include "model/SceneDocument.h"
-#include "engine/element.h"
-#include "engine/graphic.h"
+#include "model/TitleDocument.h"
+#include "engine/title.h"
+#include "engine/visual_element.h"
 
-#include <QTabBar>
 #include <QDoubleSpinBox>
-#include <QScrollArea>
 #include <QGridLayout>
-#include <QLabel>
 #include <QHBoxLayout>
-#include <QVBoxLayout>
+#include <QLabel>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSlider>
+#include <QTabBar>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <cmath>
 
 static constexpr int kNameColWidth = 120;
 
-GraphicTimingEditor::GraphicTimingEditor(SceneDocument* doc, QWidget* parent)
+GraphicTimingEditor::GraphicTimingEditor(TitleDocument* doc, QWidget* parent)
     : QWidget{parent}, m_doc{doc}
 {
-    // --- transport button (play/stop toggle) ---
     m_playBtn = new QPushButton("▶");
     m_playBtn->setFixedSize(26, 26);
 
@@ -36,7 +35,6 @@ GraphicTimingEditor::GraphicTimingEditor(SceneDocument* doc, QWidget* parent)
     m_timeLabel->setFixedWidth(52);
     m_timeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    // --- tab bar + spinbox ---
     m_tabBar = new QTabBar;
     m_tabBar->addTab("In");
     m_tabBar->addTab("Out");
@@ -61,7 +59,6 @@ GraphicTimingEditor::GraphicTimingEditor(SceneDocument* doc, QWidget* parent)
     toolbar->addWidget(new QLabel("Max. Duration:"));
     toolbar->addWidget(m_maxDurSpin);
 
-    // --- scrub ruler + element grid ---
     m_ruler = new ScrubRuler;
 
     m_content = new QWidget;
@@ -84,7 +81,6 @@ GraphicTimingEditor::GraphicTimingEditor(SceneDocument* doc, QWidget* parent)
     root->addLayout(toolbar);
     root->addWidget(scroll);
 
-    // --- timer ---
     m_playTimer = new QTimer(this);
     m_playTimer->setInterval(16);
 
@@ -102,15 +98,12 @@ GraphicTimingEditor::GraphicTimingEditor(SceneDocument* doc, QWidget* parent)
 
 // ── public ──────────────────────────────────────────────────────────────────
 
-void GraphicTimingEditor::loadGraphic(int graphicIndex)
+void GraphicTimingEditor::load()
 {
     onStop();
-    m_graphicIndex = graphicIndex;
-
     m_maxDurSpin->blockSignals(true);
     m_maxDurSpin->setValue(double(computeAutoMaxDuration()));
     m_maxDurSpin->blockSignals(false);
-
     m_ruler->setMaxDuration(float(m_maxDurSpin->value()));
     rebuild();
 }
@@ -118,7 +111,6 @@ void GraphicTimingEditor::loadGraphic(int graphicIndex)
 void GraphicTimingEditor::clear()
 {
     onStop();
-    m_graphicIndex = -1;
     rebuild();
 }
 
@@ -127,14 +119,11 @@ void GraphicTimingEditor::clear()
 void GraphicTimingEditor::onTabChanged(int)
 {
     onStop();
-    if (m_graphicIndex < 0) return;
-
     m_maxDurSpin->blockSignals(true);
     m_maxDurSpin->setValue(double(computeAutoMaxDuration()));
     m_maxDurSpin->blockSignals(false);
-
     m_ruler->setMaxDuration(float(m_maxDurSpin->value()));
-    rebuild(); // recreates lambdas with the correct isIn() capture
+    rebuild();
 }
 
 void GraphicTimingEditor::onMaxDurationChanged(double value)
@@ -183,15 +172,12 @@ bool GraphicTimingEditor::isIn() const
 
 float GraphicTimingEditor::computeAutoMaxDuration() const
 {
-    if (m_graphicIndex < 0) return 1.0f;
-
-    const Scene& s = m_doc->scene();
-    if (m_graphicIndex >= (int)s.graphics.size()) return 1.0f;
-
-    const Graphic& g = s.graphics[m_graphicIndex];
+    const Title& t = m_doc->title();
     float maxEnd = 0.1f;
-    for (const Element& el : g.elements) {
-        const AnimationDef& def = isIn() ? el.inAnimation : el.outAnimation;
+    for (int i = 1; i < (int)t.elements.size(); ++i) {
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        const AnimationDef& def = isIn() ? ve->inAnimation : ve->outAnimation;
         maxEnd = qMax(maxEnd, def.delay + def.duration);
     }
     return std::ceil(maxEnd * 2.0f) / 2.0f;
@@ -207,7 +193,6 @@ void GraphicTimingEditor::setScrubTimeOnAll(float t)
 
 void GraphicTimingEditor::rebuild()
 {
-    // Clear grid, preserving the ruler widget
     while (QLayoutItem* item = m_grid->takeAt(0)) {
         QWidget* w = item->widget();
         if (w && w != m_ruler)
@@ -216,30 +201,25 @@ void GraphicTimingEditor::rebuild()
     }
     m_editors.clear();
 
-    // Ruler always at row 0
     m_grid->addWidget(m_ruler, 0, 1);
 
-    if (m_graphicIndex < 0) return;
+    const Title& t = m_doc->title();
+    const float maxD = float(m_maxDurSpin->value());
+    const bool in = isIn();
 
-    const Scene& s = m_doc->scene();
-    if (m_graphicIndex >= (int)s.graphics.size()) return;
+    for (int i = 1; i < (int)t.elements.size(); ++i) {
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
 
-    const Graphic& g   = s.graphics[m_graphicIndex];
-    const float    maxD = float(m_maxDurSpin->value());
-    const bool     in   = isIn();
-
-    for (int i = 0; i < (int)g.elements.size(); ++i) {
-        const Element& el = g.elements[i];
-
-        auto* label = new QLabel(QString::fromStdString(el.id));
+        auto* label = new QLabel(QString::fromStdString(ve->GetId()));
         label->setFixedWidth(kNameColWidth);
         label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
         auto* editor = new AnimationTimingEditor;
         editor->setMaxDuration(maxD);
-        editor->load(in ? el.inAnimation : el.outAnimation);
+        editor->load(in ? ve->inAnimation : ve->outAnimation);
 
-        const int row = i + 1;
+        const int row = static_cast<int>(m_editors.size()) + 1;
         connect(editor, &AnimationTimingEditor::animationChanged,
                 this, [this, i, in](AnimationType type, Easing easing, float delay, float duration) {
             emit animationChanged(i, in, type, easing, delay, duration);

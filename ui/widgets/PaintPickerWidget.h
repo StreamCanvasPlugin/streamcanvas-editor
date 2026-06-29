@@ -5,7 +5,7 @@
 
 class BrandColorSwatchGrid;
 class ColorPicker;
-class SceneDocument;
+class TitleDocument;
 
 // Compact paint picker embedded in the fill/stroke dropdown menu.
 // Solid colors are picked inline via a ColorPicker.
@@ -13,7 +13,7 @@ class SceneDocument;
 class PaintPickerWidget : public QWidget {
     Q_OBJECT
 public:
-    explicit PaintPickerWidget(SceneDocument* doc, QWidget* parent = nullptr);
+    explicit PaintPickerWidget(TitleDocument* doc, QWidget* parent = nullptr);
 
     // Syncs the inline ColorPicker to the current element's paint (called on aboutToShow).
     void setPaint(const Paint& paint);

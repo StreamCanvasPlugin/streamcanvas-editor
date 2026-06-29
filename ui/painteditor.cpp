@@ -1,6 +1,6 @@
 #include "painteditor.h"
 #include "ui/widgets/BrandColorSwatchGrid.h"
-#include "model/SceneDocument.h"
+#include "model/TitleDocument.h"
 #include <QFileDialog>
 #include <QFrame>
 #include <QGridLayout>
@@ -28,7 +28,7 @@ static ScaleMode comboIndexToScaleMode(int i) {
     return ScaleMode::None;
 }
 
-PaintEditor::PaintEditor(SceneDocument* doc, QWidget* parent) : QWidget(parent)
+PaintEditor::PaintEditor(TitleDocument* doc, QWidget* parent) : QWidget(parent)
 {
     auto* layout = new QGridLayout(this);
     layout->setColumnStretch(0, 0);

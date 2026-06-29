@@ -3,11 +3,13 @@
 #include <SARibbonBar.h>
 #include <SARibbonCategory.h>
 #include <SARibbonPanel.h>
-#include "engine/element.h"
-#include "engine/graphic.h"
-#include "engine/scene.h"
+#include "engine/element_image.h"
+#include "engine/element_qr.h"
+#include "engine/element_text.h"
+#include "engine/title.h"
+#include "engine/visual_element.h"
 #include "icons.h"
-#include "model/SceneDocument.h"
+#include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 #include "ui/painteditor.h"
 
@@ -40,7 +42,7 @@
 
 #include "../UiUtils.h"
 
-// Renders each font family item in its own typeface (lazy — only when visible).
+// Renders each font family item in its own typeface.
 class FontItemDelegate : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -49,8 +51,7 @@ public:
         QStyleOptionViewItem o = opt;
         initStyleOption(&o, idx);
         const QString family = idx.data(Qt::UserRole).toString();
-        if (!family.isEmpty())
-            o.font.setFamily(family);
+        if (!family.isEmpty()) o.font.setFamily(family);
         QStyledItemDelegate::paint(p, o, idx);
     }
 };
@@ -89,8 +90,6 @@ static FontWeight indexToWeight(int i)
     }
 }
 
-// ── ScaleMode combo helpers ────────────────────────────────────────────────────
-// Display order: None, Contain, Cover, Fit Height, Fit Width, Stretch
 static const ScaleMode kScaleModeOrder[] = {
     ScaleMode::None, ScaleMode::Contain, ScaleMode::Cover,
     ScaleMode::FitHeight, ScaleMode::FitWidth, ScaleMode::Stretch
@@ -99,12 +98,14 @@ static const QStringList kScaleModeLabels = {
     "None", "Contain", "Cover", "Fit Height", "Fit Width", "Stretch"
 };
 
-static int scaleModeToComboIndex(ScaleMode m) {
+static int scaleModeToComboIndex(ScaleMode m)
+{
     for (int i = 0; i < (int)std::size(kScaleModeOrder); ++i)
         if (kScaleModeOrder[i] == m) return i;
     return 0;
 }
-static ScaleMode comboIndexToScaleMode(int i) {
+static ScaleMode comboIndexToScaleMode(int i)
+{
     if (i >= 0 && i < (int)std::size(kScaleModeOrder)) return kScaleModeOrder[i];
     return ScaleMode::None;
 }
@@ -123,15 +124,13 @@ QPixmap RibbonFormatSection::makePaintSwatch(const Paint& paint, QSize size)
         p.setPen(QPen(QColor(200, 60, 60), 2));
         p.drawLine(px.rect().topLeft(), px.rect().bottomRight());
     } else if (paint.type == Paint::Type::Solid) {
-        QColor c(
-            static_cast<int>(paint.params[0] * 255),
-            static_cast<int>(paint.params[1] * 255),
-            static_cast<int>(paint.params[2] * 255),
-            static_cast<int>(paint.params[3] * 255));
+        QColor c(static_cast<int>(paint.params[0] * 255),
+                 static_cast<int>(paint.params[1] * 255),
+                 static_cast<int>(paint.params[2] * 255),
+                 static_cast<int>(paint.params[3] * 255));
         p.fillRect(px.rect(), QColor(180, 180, 180));
         p.fillRect(0, 0, size.width() / 2, size.height() / 2, QColor(220, 220, 220));
-        p.fillRect(size.width() / 2, size.height() / 2, size.width() / 2, size.height() / 2,
-                   QColor(220, 220, 220));
+        p.fillRect(size.width() / 2, size.height() / 2, size.width() / 2, size.height() / 2, QColor(220, 220, 220));
         p.fillRect(px.rect(), c);
     } else if (paint.type == Paint::Type::Image) {
         QPixmap img(QString::fromStdString(paint.imagePath));
@@ -145,11 +144,8 @@ QPixmap RibbonFormatSection::makePaintSwatch(const Paint& paint, QSize size)
     } else {
         QLinearGradient grad(0, size.height() / 2.0, size.width(), size.height() / 2.0);
         for (const auto& stop : paint.stops) {
-            QColor sc(
-                static_cast<int>(stop.r * 255),
-                static_cast<int>(stop.g * 255),
-                static_cast<int>(stop.b * 255),
-                static_cast<int>(stop.a * 255));
+            QColor sc(static_cast<int>(stop.r * 255), static_cast<int>(stop.g * 255),
+                      static_cast<int>(stop.b * 255), static_cast<int>(stop.a * 255));
             grad.setColorAt(stop.offset, sc);
         }
         p.fillRect(px.rect(), grad);
@@ -161,44 +157,39 @@ QPixmap RibbonFormatSection::makePaintSwatch(const Paint& paint, QSize size)
 
 void RibbonFormatSection::updateFillSwatch()
 {
-    if (!m_fillBtn || m_graphicId.empty() || m_elementId.empty())
-        return;
+    if (!m_fillBtn || m_elementId.empty()) return;
     try {
-        const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
+        const VisualElement& el = m_doc->getElement(m_elementId);
         m_fillBtn->setIcon(makePaintSwatch(el.fill, m_fillBtn->iconSize()));
     } catch (...) {}
 }
 
 void RibbonFormatSection::updateStrokeSwatch()
 {
-    if (!m_strokeBtn || m_graphicId.empty() || m_elementId.empty())
-        return;
+    if (!m_strokeBtn || m_elementId.empty()) return;
     try {
-        const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
+        const VisualElement& el = m_doc->getElement(m_elementId);
         m_strokeBtn->setIcon(makePaintSwatch(el.stroke, m_strokeBtn->iconSize()));
     } catch (...) {}
 }
 
 // ── construction ───────────────────────────────────────────────────────────────
 
-RibbonFormatSection::RibbonFormatSection(SceneDocument* doc, SARibbonBar* ribbon, QObject* parent)
+RibbonFormatSection::RibbonFormatSection(TitleDocument* doc, SARibbonBar* ribbon, QObject* parent)
     : QObject(parent), m_doc(doc)
 {
-    buildGraphicTab(ribbon);
     buildElementTab(ribbon);
     buildStyleTab(ribbon);
     buildTextTab(ribbon);
     buildImageTab(ribbon);
     buildQrTab(ribbon);
 
-    connect(m_doc, &SceneDocument::documentChanged, this, &RibbonFormatSection::onDocumentChanged);
+    connect(m_doc, &TitleDocument::documentChanged, this, &RibbonFormatSection::onDocumentChanged);
 }
 
-// ── helper: create a panel on a category and return its container grid layout ──
 static QGridLayout* addGroup(SARibbonCategory* category, const QString& name)
 {
     auto* panel = category->addPanel(name);
-    // Outer container provides uniform padding around the grid content.
     auto* outer = new QWidget;
     auto* ol = new QHBoxLayout(outer);
     ol->setContentsMargins(5, 5, 5, 5);
@@ -212,45 +203,6 @@ static QGridLayout* addGroup(SARibbonCategory* category, const QString& name)
     return gl;
 }
 
-// ── Graphic tab ────────────────────────────────────────────────────────────────
-
-void RibbonFormatSection::buildGraphicTab(SARibbonBar* ribbon)
-{
-    m_graphicCategory = ribbon->addCategoryPage("Graphic");
-
-    // ── Info group ─────────────────────────────────────────────────────────────
-    {
-        auto* gl = addGroup(m_graphicCategory, "Info");
-
-        m_graphicIdEdit = new QLineEdit;
-        m_graphicIdEdit->setFixedWidth(120);
-        m_graphicIdEdit->setPlaceholderText("ID");
-
-        gl->addWidget(makeRibbonLabel("ID "), 0, 0, 2, 1);
-        gl->addWidget(m_graphicIdEdit,  0, 1, 2, 1);
-
-        connect(m_graphicIdEdit, &QLineEdit::editingFinished,
-                this, &RibbonFormatSection::onGraphicIdEditingFinished);
-    }
-
-    // ── Actions group ──────────────────────────────────────────────────────────
-    {
-        auto* gl = addGroup(m_graphicCategory, "Actions");
-
-        auto* deleteAct = new QAction(themedIcon(Icons16::Action_Trash), "Delete", nullptr);
-        auto* deleteBtn = new QToolButton;
-        deleteBtn->setDefaultAction(deleteAct);
-        deleteBtn->setIconSize({32, 32});
-        deleteBtn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-        deleteBtn->setMinimumHeight(56);
-        deleteBtn->setAutoRaise(true);
-
-        gl->addWidget(deleteBtn, 0, 0, 2, 1, Qt::AlignCenter);
-
-        connect(deleteAct, &QAction::triggered, this, &RibbonFormatSection::deleteGraphicRequested);
-    }
-}
-
 // ── Element tab ────────────────────────────────────────────────────────────────
 
 void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
@@ -260,37 +212,29 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
     // ── Info group ─────────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_elemCategory, "Info");
-
         m_idEdit = new QLineEdit;
         m_idEdit->setFixedWidth(120);
         m_idEdit->setPlaceholderText("ID");
-
         gl->addWidget(makeRibbonLabel("ID "), 0, 0, 2, 1);
-        gl->addWidget(m_idEdit,         0, 1, 2, 1);
-
+        gl->addWidget(m_idEdit,              0, 1, 2, 1);
         connect(m_idEdit, &QLineEdit::editingFinished, this, &RibbonFormatSection::onIdEditingFinished);
     }
 
     // ── Transform group ────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_elemCategory, "Transform");
-
         auto mkSpin = [](const QString& suffix, double lo, double hi) {
-            auto* s = makeSpinBox(lo, hi, 1, suffix, 78);
-            return s;
+            return makeSpinBox(lo, hi, 1, suffix, 78);
         };
-
         m_spinX   = mkSpin(" px", -9999, 9999);
         m_spinY   = mkSpin(" px", -9999, 9999);
         m_spinW   = mkSpin(" px", -9999, 9999);
         m_spinH   = mkSpin(" px", -9999, 9999);
         m_spinRot = mkSpin("°",   -9999, 9999);
-
         m_spinShearX = mkSpin("", -10, 10);
         m_spinShearX->setDecimals(3);
         m_spinShearX->setSingleStep(0.01);
         m_spinShearX->setToolTip("Horizontal shear");
-
         m_spinShearY = mkSpin("", -10, 10);
         m_spinShearY->setDecimals(3);
         m_spinShearY->setSingleStep(0.01);
@@ -302,97 +246,70 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
         gl->addWidget(m_spinW,                            0, 3);
         gl->addWidget(makeRibbonLabel("Shear X "),        0, 4);
         gl->addWidget(m_spinShearX,                       0, 5);
-
         gl->addWidget(makeRibbonLabel("Y "),              1, 0);
         gl->addWidget(m_spinY,                            1, 1);
         gl->addWidget(makeRibbonLabel("Height "),         1, 2);
         gl->addWidget(m_spinH,                            1, 3);
         gl->addWidget(makeRibbonLabel("Shear Y "),        1, 4);
         gl->addWidget(m_spinShearY,                       1, 5);
-
         gl->addWidget(makeRibbonLabel("Rotation (deg.) "),2, 0);
-        gl->addWidget(m_spinRot,                    2, 1, 1, 3);
-
+        gl->addWidget(m_spinRot,                          2, 1, 1, 3);
         gl->setColumnStretch(1, 1);
         gl->setColumnStretch(3, 1);
         gl->setColumnStretch(5, 1);
 
-        connect(m_spinX,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onXChanged);
-        connect(m_spinY,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onYChanged);
-        connect(m_spinW,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onWChanged);
-        connect(m_spinH,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onHChanged);
-        connect(m_spinRot, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onRotChanged);
-        connect(m_spinShearX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                this, &RibbonFormatSection::onShearXChanged);
-        connect(m_spinShearY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                this, &RibbonFormatSection::onShearYChanged);
+        connect(m_spinX,      QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onXChanged);
+        connect(m_spinY,      QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onYChanged);
+        connect(m_spinW,      QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onWChanged);
+        connect(m_spinH,      QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onHChanged);
+        connect(m_spinRot,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onRotChanged);
+        connect(m_spinShearX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onShearXChanged);
+        connect(m_spinShearY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onShearYChanged);
     }
 
     // ── Appearance group ───────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_elemCategory, "Appearance");
-
         m_spinZ = new QSpinBox;
         m_spinZ->setRange(-9999, 9999);
         m_spinZ->setFixedWidth(64);
         m_spinZ->setToolTip("Z Order");
-
         m_spinOpacity = makeSpinBox(0.0, 100.0, 1, "%", 74);
         m_spinOpacity->setSingleStep(0.5);
-
         gl->addWidget(makeRibbonLabel("Z-Order "), 0, 0);
-        gl->addWidget(m_spinZ,               0, 1);
+        gl->addWidget(m_spinZ,                     0, 1);
         gl->addWidget(makeRibbonLabel("Opacity "), 1, 0);
-        gl->addWidget(m_spinOpacity,         1, 1);
-
-        gl->setColumnStretch(0, 0);
-        gl->setColumnStretch(1, 0);
-
-        connect(m_spinZ,       QOverload<int>::of(&QSpinBox::valueChanged),         this, &RibbonFormatSection::onZOrderChanged);
+        gl->addWidget(m_spinOpacity,               1, 1);
+        connect(m_spinZ,       QOverload<int>::of(&QSpinBox::valueChanged),          this, &RibbonFormatSection::onZOrderChanged);
         connect(m_spinOpacity, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onOpacityChanged);
     }
 
     // ── Layout group ───────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_elemCategory, "Layout");
-
         m_maskCombo = new QComboBox;
         m_maskCombo->setFixedWidth(100);
-
         gl->addWidget(makeRibbonLabel("Mask "),   0, 0);
-        gl->addWidget(m_maskCombo,          0, 1);
-
+        gl->addWidget(m_maskCombo,                0, 1);
         m_parentCombo = new QComboBox;
         m_parentCombo->setFixedWidth(100);
-
         gl->addWidget(makeRibbonLabel("Parent "), 1, 0);
-        gl->addWidget(m_parentCombo,        1, 1);
+        gl->addWidget(m_parentCombo,              1, 1);
 
         m_fitCheck = new QCheckBox("Fit to Children");
-
-        // Padding spinboxes (shown only when element has children and fitToChildren)
         m_paddingContainer = new QWidget;
         auto* padGrid = new QGridLayout(m_paddingContainer);
         padGrid->setContentsMargins(0, 0, 0, 0);
         padGrid->setSpacing(4);
-
-        auto mkPadSpin = []() {
-            auto* s = makeSpinBox(0.0, 9999.0, 1, " px", 64);
-            return s;
-        };
+        auto mkPadSpin = []() { return makeSpinBox(0.0, 9999.0, 1, " px", 64); };
         m_spinPadTop    = mkPadSpin();
         m_spinPadRight  = mkPadSpin();
         m_spinPadBottom = mkPadSpin();
         m_spinPadLeft   = mkPadSpin();
-
-        padGrid->addWidget(makeRibbonLabel("T "), 0, 0);
-        padGrid->addWidget(m_spinPadTop,    0, 1);
-        padGrid->addWidget(makeRibbonLabel("R "), 0, 2);
-        padGrid->addWidget(m_spinPadRight,  0, 3);
-        padGrid->addWidget(makeRibbonLabel("B "), 1, 0);
-        padGrid->addWidget(m_spinPadBottom, 1, 1);
-        padGrid->addWidget(makeRibbonLabel("L "), 1, 2);
-        padGrid->addWidget(m_spinPadLeft,   1, 3);
+        padGrid->addWidget(makeRibbonLabel("T "), 0, 0); padGrid->addWidget(m_spinPadTop,    0, 1);
+        padGrid->addWidget(makeRibbonLabel("R "), 0, 2); padGrid->addWidget(m_spinPadRight,  0, 3);
+        padGrid->addWidget(makeRibbonLabel("B "), 1, 0); padGrid->addWidget(m_spinPadBottom, 1, 1);
+        padGrid->addWidget(makeRibbonLabel("L "), 1, 2); padGrid->addWidget(m_spinPadLeft,   1, 3);
 
         auto* fitContainer = new QWidget;
         auto* fcl = new QVBoxLayout(fitContainer);
@@ -402,28 +319,19 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
         fcl->addWidget(m_paddingContainer);
         gl->addWidget(fitContainer, 0, 2, 2, 1);
 
-        gl->setColumnStretch(0, 0);
-        gl->setColumnStretch(1, 0);
-        gl->setColumnStretch(2, 0);
-
         connect(m_maskCombo,   QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onMaskChanged);
         connect(m_parentCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onParentChanged);
         connect(m_fitCheck,    &QCheckBox::toggled,                                 this, &RibbonFormatSection::onFitToChildrenToggled);
-
         auto connectPad = [this](QDoubleSpinBox* s) {
-            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                    this, &RibbonFormatSection::onChildrenPaddingChanged);
+            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onChildrenPaddingChanged);
         };
-        connectPad(m_spinPadTop);
-        connectPad(m_spinPadRight);
-        connectPad(m_spinPadBottom);
-        connectPad(m_spinPadLeft);
+        connectPad(m_spinPadTop); connectPad(m_spinPadRight);
+        connectPad(m_spinPadBottom); connectPad(m_spinPadLeft);
     }
 
     // ── Actions group ──────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_elemCategory, "Actions");
-
         auto* deleteAct = new QAction(themedIcon(Icons16::Action_Trash), "Delete", nullptr);
         auto* deleteBtn = new QToolButton;
         deleteBtn->setDefaultAction(deleteAct);
@@ -431,9 +339,7 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
         deleteBtn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         deleteBtn->setMinimumHeight(56);
         deleteBtn->setAutoRaise(true);
-
         gl->addWidget(deleteBtn, 0, 0, 2, 1, Qt::AlignCenter);
-
         connect(deleteAct, &QAction::triggered, this, &RibbonFormatSection::deleteElementRequested);
     }
 }
@@ -442,10 +348,9 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
 {
     m_styleCategory = ribbon->addCategoryPage("Style");
 
-    // ── Paint group (Fill + Stroke) ────────────────────────────────────────────
+    // ── Paint group ────────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_styleCategory, "Paint");
-
         m_fillPicker   = new PaintPickerWidget(m_doc);
         m_strokePicker = new PaintPickerWidget(m_doc);
 
@@ -467,7 +372,6 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         auto [strokeBtn, strokeMenu] = makePopupButton("Stroke", m_strokePicker);
         m_fillBtn   = fillBtn;
         m_strokeBtn = strokeBtn;
-
         for (auto* btn : {m_fillBtn, m_strokeBtn}) {
             btn->setIconSize({32, 32});
             btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
@@ -476,35 +380,28 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         }
         m_fillBtn->setToolTip("Fill paint");
         m_strokeBtn->setToolTip("Stroke paint");
-
         gl->addWidget(m_fillBtn,   0, 0, Qt::AlignCenter);
         gl->addWidget(m_strokeBtn, 0, 1, Qt::AlignCenter);
 
         auto wire = [&](PaintPickerWidget* picker, QMenu* menu, QDialog* gradDlg,
                         PaintEditor* editor, bool isFill) {
             connect(menu, &QMenu::aboutToShow, this, [this, picker, isFill]() {
-                if (m_graphicId.empty()) return;
+                if (m_elementId.empty()) return;
                 try {
-                    const Element& el =
-                        m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
+                    const VisualElement& el = m_doc->getElement(m_elementId);
                     picker->setPaint(isFill ? el.fill : el.stroke);
                 } catch (...) {}
             });
-
             if (isFill)
-                connect(picker, &PaintPickerWidget::paintChanged,
-                        this,   &RibbonFormatSection::onFillPaintChanged);
+                connect(picker, &PaintPickerWidget::paintChanged, this, &RibbonFormatSection::onFillPaintChanged);
             else
-                connect(picker, &PaintPickerWidget::paintChanged,
-                        this,   &RibbonFormatSection::onStrokePaintChanged);
-
+                connect(picker, &PaintPickerWidget::paintChanged, this, &RibbonFormatSection::onStrokePaintChanged);
             connect(picker, &PaintPickerWidget::moreOptionsRequested,
                     this, [this, menu, gradDlg, editor, isFill]() {
                 menu->close();
-                if (m_graphicId.empty()) return;
+                if (m_elementId.empty()) return;
                 try {
-                    const Element& el =
-                        m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
+                    const VisualElement& el = m_doc->getElement(m_elementId);
                     QSignalBlocker b(editor);
                     editor->setPaint(isFill ? el.fill : el.stroke);
                 } catch (...) {}
@@ -512,15 +409,11 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
                 gradDlg->raise();
                 gradDlg->activateWindow();
             });
-
             if (isFill)
-                connect(editor, &PaintEditor::paintChanged,
-                        this,   &RibbonFormatSection::onFillPaintChanged);
+                connect(editor, &PaintEditor::paintChanged, this, &RibbonFormatSection::onFillPaintChanged);
             else
-                connect(editor, &PaintEditor::paintChanged,
-                        this,   &RibbonFormatSection::onStrokePaintChanged);
+                connect(editor, &PaintEditor::paintChanged, this, &RibbonFormatSection::onStrokePaintChanged);
         };
-
         wire(m_fillPicker,   fillMenu,   fillGradDlg,   m_fillEditor,   true);
         wire(m_strokePicker, strokeMenu, strokeGradDlg, m_strokeEditor, false);
     }
@@ -528,17 +421,10 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
     // ── Stroke group ───────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_styleCategory, "Stroke");
-
         m_strokeWidth = makeSpinBox(0.0, 999.0, 1, " px", 80);
         m_strokeWidth->setSingleStep(0.5);
-        m_strokeWidth->setToolTip("Stroke width");
-
         gl->addWidget(makeRibbonLabel("Width "), 0, 0);
-        gl->addWidget(m_strokeWidth,       0, 1);
-
-        gl->setColumnStretch(0, 0);
-        gl->setColumnStretch(1, 0);
-
+        gl->addWidget(m_strokeWidth,             0, 1);
         connect(m_strokeWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                 this, &RibbonFormatSection::onStrokeWidthChanged);
     }
@@ -546,45 +432,28 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
     // ── Border group ───────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_styleCategory, "Border");
-
-        auto mkRadiusSpin = []() {
+        auto mkR = []() {
             auto* s = makeSpinBox(0.0, 9999.0, 1, " px", 72);
             s->setSingleStep(0.1);
             return s;
         };
-        m_spinTL = mkRadiusSpin(); m_spinTL->setToolTip("Top-Left radius");
-        m_spinTR = mkRadiusSpin(); m_spinTR->setToolTip("Top-Right radius");
-        m_spinBR = mkRadiusSpin(); m_spinBR->setToolTip("Bottom-Right radius");
-        m_spinBL = mkRadiusSpin(); m_spinBL->setToolTip("Bottom-Left radius");
-
-        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorTopLeft)), 0, 0);
-        gl->addWidget(m_spinTL,         0, 1);
-        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorTopRight)), 0, 2);
-        gl->addWidget(m_spinTR,         0, 3);
-        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorBottomLeft)), 1, 0);
-        gl->addWidget(m_spinBL,         1, 1);
-        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorBottomRight)), 1, 2);
-        gl->addWidget(m_spinBR,         1, 3);
-
-        gl->setColumnStretch(0, 0);
-        gl->setColumnStretch(1, 0);
-        gl->setColumnStretch(2, 0);
-        gl->setColumnStretch(3, 0);
-
-        auto connectRadius = [this](QDoubleSpinBox* s) {
-            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                    this, &RibbonFormatSection::onCornerRadiusChanged);
+        m_spinTL = mkR(); m_spinTL->setToolTip("Top-Left radius");
+        m_spinTR = mkR(); m_spinTR->setToolTip("Top-Right radius");
+        m_spinBR = mkR(); m_spinBR->setToolTip("Bottom-Right radius");
+        m_spinBL = mkR(); m_spinBL->setToolTip("Bottom-Left radius");
+        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorTopLeft)), 0, 0);     gl->addWidget(m_spinTL, 0, 1);
+        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorTopRight)), 0, 2);    gl->addWidget(m_spinTR, 0, 3);
+        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorBottomLeft)), 1, 0);  gl->addWidget(m_spinBL, 1, 1);
+        gl->addWidget(makeIconLabel(themedIcon(Icons16::Action_AnchorBottomRight)), 1, 2); gl->addWidget(m_spinBR, 1, 3);
+        auto connectR = [this](QDoubleSpinBox* s) {
+            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onCornerRadiusChanged);
         };
-        connectRadius(m_spinTL);
-        connectRadius(m_spinTR);
-        connectRadius(m_spinBR);
-        connectRadius(m_spinBL);
+        connectR(m_spinTL); connectR(m_spinTR); connectR(m_spinBR); connectR(m_spinBL);
     }
 
     // ── Shadow group ───────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_styleCategory, "Shadow");
-
         m_shadowEnabled = new QCheckBox("Enable");
         gl->addWidget(m_shadowEnabled, 0, 0, 1, 4);
 
@@ -593,12 +462,9 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         scGrid->setContentsMargins(0, 0, 0, 0);
         scGrid->setSpacing(4);
 
-        m_spinShadowOffX = makeSpinBox(-9999, 9999, 1, " px", 72);
-        m_spinShadowOffX->setSingleStep(0.5);
-        m_spinShadowOffY = makeSpinBox(-9999, 9999, 1, " px", 72);
-        m_spinShadowOffY->setSingleStep(0.5);
-        m_spinShadowBlur = makeSpinBox(0, 200, 1, " px", 72);
-        m_spinShadowBlur->setSingleStep(0.5);
+        m_spinShadowOffX = makeSpinBox(-9999, 9999, 1, " px", 72); m_spinShadowOffX->setSingleStep(0.5);
+        m_spinShadowOffY = makeSpinBox(-9999, 9999, 1, " px", 72); m_spinShadowOffY->setSingleStep(0.5);
+        m_spinShadowBlur = makeSpinBox(0, 200, 1, " px", 72);      m_spinShadowBlur->setSingleStep(0.5);
 
         m_shadowColorPicker = new ColorPicker;
         auto [shadowColorBtn, shadowColorMenu] = makePopupButton("", m_shadowColorPicker);
@@ -607,48 +473,37 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         m_shadowColorBtn->setToolTip("Shadow color");
         m_shadowColorBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
 
-        scGrid->addWidget(makeRibbonLabel("Off X "), 0, 0);
-        scGrid->addWidget(m_spinShadowOffX,           0, 1);
-        scGrid->addWidget(makeRibbonLabel("Off Y "), 0, 2);
-        scGrid->addWidget(m_spinShadowOffY,           0, 3);
-        scGrid->addWidget(makeRibbonLabel("Blur "),   1, 0);
-        scGrid->addWidget(m_spinShadowBlur,           1, 1);
-        scGrid->addWidget(makeRibbonLabel("Color "),  1, 2);
-        scGrid->addWidget(m_shadowColorBtn,           1, 3);
+        scGrid->addWidget(makeRibbonLabel("Off X "), 0, 0); scGrid->addWidget(m_spinShadowOffX, 0, 1);
+        scGrid->addWidget(makeRibbonLabel("Off Y "), 0, 2); scGrid->addWidget(m_spinShadowOffY, 0, 3);
+        scGrid->addWidget(makeRibbonLabel("Blur "),  1, 0); scGrid->addWidget(m_spinShadowBlur, 1, 1);
+        scGrid->addWidget(makeRibbonLabel("Color "), 1, 2); scGrid->addWidget(m_shadowColorBtn, 1, 3);
 
         gl->addWidget(m_shadowControls, 1, 0, 1, 4);
-        gl->setColumnStretch(0, 0);
 
         connect(m_shadowEnabled, &QCheckBox::toggled, this, &RibbonFormatSection::onShadowChanged);
-        auto connectShadow = [this](QDoubleSpinBox* s) {
-            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                    this, &RibbonFormatSection::onShadowChanged);
+        auto connectSh = [this](QDoubleSpinBox* s) {
+            connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onShadowChanged);
         };
-        connectShadow(m_spinShadowOffX);
-        connectShadow(m_spinShadowOffY);
-        connectShadow(m_spinShadowBlur);
+        connectSh(m_spinShadowOffX); connectSh(m_spinShadowOffY); connectSh(m_spinShadowBlur);
 
         connect(shadowColorMenu, &QMenu::aboutToShow, this, [this]() {
-            if (m_graphicId.empty()) return;
+            if (m_elementId.empty()) return;
             try {
-                const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
+                const VisualElement& el = m_doc->getElement(m_elementId);
                 const auto& c = el.shadow.color;
                 QSignalBlocker b(m_shadowColorPicker);
                 m_shadowColorPicker->setColor(QColor::fromRgbF(c[0], c[1], c[2], c[3]));
             } catch (...) {}
         });
-
         connect(m_shadowColorPicker, &ColorPicker::colorChanged, this, [this](const QColor& picked) {
-            if (m_graphicId.empty()) return;
+            if (m_elementId.empty()) return;
             try {
-                Element::DropShadow sh =
-                    m_doc->scene().GetById(m_graphicId).GetById(m_elementId).shadow;
+                VisualElement::DropShadow sh = m_doc->getElement(m_elementId).shadow;
                 sh.color[0] = static_cast<float>(picked.redF());
                 sh.color[1] = static_cast<float>(picked.greenF());
                 sh.color[2] = static_cast<float>(picked.blueF());
                 sh.color[3] = static_cast<float>(picked.alphaF());
-                m_doc->undoStack()->push(
-                    new SetElementShadowCmd(m_doc, m_graphicId, m_elementId, sh));
+                m_doc->undoStack()->push(new SetElementShadowCmd(m_doc, m_elementId, sh));
             } catch (...) {}
         });
     }
@@ -659,18 +514,13 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
     m_textCategory = ribbon->addCategoryPage("Text");
 
     // ── Font group ─────────────────────────────────────────────────────────────
-    // Row 0: Family (full width, no label)
-    // Row 1: Weight (expanding) + Size (fixed, no label)
-    // Row 2: Style buttons (I U S, no label)
     {
         auto* gl = addGroup(m_textCategory, "Font");
-
         auto* fontContainer = new QWidget;
         auto* fcl = new QVBoxLayout(fontContainer);
         fcl->setContentsMargins(0, 0, 0, 0);
         fcl->setSpacing(3);
 
-        // Row 0 — family
         m_fontFamily = new QComboBox;
         m_fontFamily->setMaxVisibleItems(20);
         m_fontFamily->setEditable(true);
@@ -686,35 +536,29 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
         loadFonts();
         fcl->addWidget(m_fontFamily);
 
-        // Row 1 — weight + size
         auto* row1 = new QWidget;
         auto* r1l = new QHBoxLayout(row1);
         r1l->setContentsMargins(0, 0, 0, 0);
         r1l->setSpacing(4);
-
         m_fontWeight = new QComboBox;
         for (const char* w : {"Thin", "Ultra Light", "Light", "Regular", "Medium",
                               "Semi Bold", "Bold", "Ultra Bold", "Heavy", "Ultra Heavy"})
             m_fontWeight->addItem(w);
         m_fontWeight->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
         m_fontSize = makeSpinBox(1.0, 9999.0, 1, " px", 76);
         m_fontSize->setSingleStep(1.0);
-
         r1l->addWidget(m_fontWeight, 1);
         r1l->addWidget(m_fontSize, 0);
         fcl->addWidget(row1);
 
-        // Row 2 — style buttons
         auto* row2 = new QWidget;
         auto* r2l = new QHBoxLayout(row2);
         r2l->setContentsMargins(0, 0, 0, 0);
         r2l->setSpacing(2);
         r2l->setAlignment(Qt::AlignLeft);
-
-        m_italicBtn    = makeIconToolButton(themedIcon(Icons16::Text_FormatItalic),         "Italic",         true);
-        m_underlineBtn = makeIconToolButton(themedIcon(Icons16::Text_FormatUnderline),      "Underline",      true);
-        m_strikeBtn    = makeIconToolButton(themedIcon(Icons16::Text_FormatStrikethrough),  "Strikethrough",  true);
+        m_italicBtn    = makeIconToolButton(themedIcon(Icons16::Text_FormatItalic),        "Italic",        true);
+        m_underlineBtn = makeIconToolButton(themedIcon(Icons16::Text_FormatUnderline),     "Underline",     true);
+        m_strikeBtn    = makeIconToolButton(themedIcon(Icons16::Text_FormatStrikethrough), "Strikethrough", true);
         r2l->addWidget(m_italicBtn);
         r2l->addWidget(m_underlineBtn);
         r2l->addWidget(m_strikeBtn);
@@ -723,12 +567,9 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
 
         gl->addWidget(fontContainer, 0, 0);
 
-        connect(m_fontFamily, QOverload<int>::of(&QComboBox::activated),
-                this, &RibbonFormatSection::onFontFamilyChanged);
-        connect(m_fontSize, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                this, &RibbonFormatSection::onFontSizeChanged);
-        connect(m_fontWeight, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &RibbonFormatSection::onFontWeightChanged);
+        connect(m_fontFamily, QOverload<int>::of(&QComboBox::activated),        this, &RibbonFormatSection::onFontFamilyChanged);
+        connect(m_fontSize,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &RibbonFormatSection::onFontSizeChanged);
+        connect(m_fontWeight, QOverload<int>::of(&QComboBox::currentIndexChanged),  this, &RibbonFormatSection::onFontWeightChanged);
         connect(m_italicBtn,    &QToolButton::toggled, this, &RibbonFormatSection::onItalicToggled);
         connect(m_underlineBtn, &QToolButton::toggled, this, &RibbonFormatSection::onUnderlineToggled);
         connect(m_strikeBtn,    &QToolButton::toggled, this, &RibbonFormatSection::onStrikethroughToggled);
@@ -737,39 +578,32 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
     // ── Paragraph group ────────────────────────────────────────────────────────
     {
         auto* gl = addGroup(m_textCategory, "Paragraph");
-
         auto* hGroup = new QButtonGroup(nullptr);
         hGroup->setExclusive(true);
         auto* vGroup = new QButtonGroup(nullptr);
         vGroup->setExclusive(true);
-
         auto mkAlignBtn = [&](Icons16 icon, const QString& tip, QButtonGroup* bg) {
             auto* btn = makeIconToolButton(themedIcon(icon), tip, true);
             bg->addButton(btn);
             return btn;
         };
-
-        m_alignLeft    = mkAlignBtn(Icons16::Text_JustifyLeft,            "Align Left",    hGroup);
-        m_alignCenter  = mkAlignBtn(Icons16::Text_JustifyCenter,          "Align Center",  hGroup);
-        m_alignJustify = mkAlignBtn(Icons16::Text_JustifyFill,            "Align Justify", hGroup);
-        m_alignRight   = mkAlignBtn(Icons16::Text_JustifyRight,           "Align Right",   hGroup);
-        m_alignTop     = mkAlignBtn(Icons16::Action_AlignTop,             "Align Top",     vGroup);
-        m_alignMiddle  = mkAlignBtn(Icons16::Action_AlignCenterHorizontal,"Align Middle",  vGroup);
-        m_alignBottom  = mkAlignBtn(Icons16::Action_AlignBottom,          "Align Bottom",  vGroup);
+        m_alignLeft    = mkAlignBtn(Icons16::Text_JustifyLeft,             "Align Left",    hGroup);
+        m_alignCenter  = mkAlignBtn(Icons16::Text_JustifyCenter,           "Align Center",  hGroup);
+        m_alignJustify = mkAlignBtn(Icons16::Text_JustifyFill,             "Align Justify", hGroup);
+        m_alignRight   = mkAlignBtn(Icons16::Text_JustifyRight,            "Align Right",   hGroup);
+        m_alignTop     = mkAlignBtn(Icons16::Action_AlignTop,              "Align Top",     vGroup);
+        m_alignMiddle  = mkAlignBtn(Icons16::Action_AlignCenterHorizontal, "Align Middle",  vGroup);
+        m_alignBottom  = mkAlignBtn(Icons16::Action_AlignBottom,           "Align Bottom",  vGroup);
 
         auto* btnRow = new QWidget;
-        auto* btnRowLayout = new QHBoxLayout(btnRow);
-        btnRowLayout->setContentsMargins(0, 0, 0, 0);
-        btnRowLayout->setSpacing(2);
-        btnRowLayout->setAlignment(Qt::AlignCenter);
-        for (auto* btn : {m_alignLeft, m_alignCenter, m_alignJustify, m_alignRight})
-            btnRowLayout->addWidget(btn);
-        btnRowLayout->addSpacing(6);
-        for (auto* btn : {m_alignTop, m_alignMiddle, m_alignBottom})
-            btnRowLayout->addWidget(btn);
-
+        auto* brl = new QHBoxLayout(btnRow);
+        brl->setContentsMargins(0, 0, 0, 0);
+        brl->setSpacing(2);
+        brl->setAlignment(Qt::AlignCenter);
+        for (auto* b : {m_alignLeft, m_alignCenter, m_alignJustify, m_alignRight}) brl->addWidget(b);
+        brl->addSpacing(6);
+        for (auto* b : {m_alignTop, m_alignMiddle, m_alignBottom}) brl->addWidget(b);
         m_autoScale = new QCheckBox("Auto scale");
-        m_autoScale->setToolTip("Auto scale text to fit bounds");
 
         gl->addWidget(btnRow,      0, 0);
         gl->addWidget(m_autoScale, 1, 0);
@@ -785,11 +619,8 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
     }
 
     // ── Text group ─────────────────────────────────────────────────────────────
-    // Ellipsize / Wrap / Case: label on left, combo expands
-    // Edit Text: big button below
     {
         auto* gl = addGroup(m_textCategory, "Text");
-
         auto* textContainer = new QWidget;
         auto* tcGrid = new QGridLayout(textContainer);
         tcGrid->setContentsMargins(0, 0, 0, 0);
@@ -799,25 +630,18 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
         m_ellipsize = new QComboBox;
         m_ellipsize->addItems({"None", "Start", "Middle", "End"});
         m_ellipsize->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_ellipsize->setToolTip("Text ellipsize mode");
 
         m_wrap = new QComboBox;
         m_wrap->addItems({"Word", "Char", "Word+Char"});
         m_wrap->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_wrap->setToolTip("Text wrap mode");
 
         m_textTransform = new QComboBox;
         m_textTransform->addItems({"None", "Capitalize", "Uppercase", "Lowercase"});
         m_textTransform->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_textTransform->setToolTip("Text transform");
 
-        tcGrid->addWidget(makeRibbonLabel("Ellipsize "), 0, 0);
-        tcGrid->addWidget(m_ellipsize,                   0, 1);
-        tcGrid->addWidget(makeRibbonLabel("Wrap "),      1, 0);
-        tcGrid->addWidget(m_wrap,                        1, 1);
-        tcGrid->addWidget(makeRibbonLabel("Case "),      2, 0);
-        tcGrid->addWidget(m_textTransform,               2, 1);
-        tcGrid->setColumnStretch(0, 0);
+        tcGrid->addWidget(makeRibbonLabel("Ellipsize "), 0, 0); tcGrid->addWidget(m_ellipsize,    0, 1);
+        tcGrid->addWidget(makeRibbonLabel("Wrap "),      1, 0); tcGrid->addWidget(m_wrap,          1, 1);
+        tcGrid->addWidget(makeRibbonLabel("Case "),      2, 0); tcGrid->addWidget(m_textTransform, 2, 1);
         tcGrid->setColumnStretch(1, 1);
 
         m_textBtn = new QToolButton;
@@ -833,26 +657,18 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
         gl->addWidget(textContainer, 0, 0);
         gl->setColumnStretch(0, 1);
 
-        connect(m_ellipsize, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &RibbonFormatSection::onEllipsizeChanged);
-        connect(m_wrap, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &RibbonFormatSection::onWrapChanged);
-        connect(m_textTransform, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &RibbonFormatSection::onTextTransformChanged);
-        connect(m_textBtn, &QToolButton::clicked, this,
-                [this]() { openContentEditor("Edit Text"); });
+        connect(m_ellipsize,     QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onEllipsizeChanged);
+        connect(m_wrap,          QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onWrapChanged);
+        connect(m_textTransform, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onTextTransformChanged);
+        connect(m_textBtn, &QToolButton::clicked, this, [this]() { openContentEditor("Edit Text"); });
     }
 }
-
-// ── Image tab ──────────────────────────────────────────────────────────────────
 
 void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
 {
     m_imageCategory = ribbon->addCategoryPage("Image");
-
     {
         auto* gl = addGroup(m_imageCategory, "Source");
-
         auto* container = new QWidget;
         auto* grid = new QGridLayout(container);
         grid->setContentsMargins(0, 0, 0, 0);
@@ -870,21 +686,16 @@ void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
 
         m_scaleMode = new QComboBox;
         m_scaleMode->addItems(kScaleModeLabels);
-        m_scaleMode->setToolTip("Scale mode");
         m_scaleMode->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-        grid->addWidget(makeRibbonLabel("Path "),  0, 0);
-        grid->addWidget(m_imagePathEdit,            0, 1);
-        grid->addWidget(browseBtn,                  0, 2);
-        grid->addWidget(makeRibbonLabel("Scale "), 1, 0);
-        grid->addWidget(m_scaleMode,                1, 1, 1, 2);
+        grid->addWidget(makeRibbonLabel("Path "),  0, 0); grid->addWidget(m_imagePathEdit, 0, 1); grid->addWidget(browseBtn, 0, 2);
+        grid->addWidget(makeRibbonLabel("Scale "), 1, 0); grid->addWidget(m_scaleMode, 1, 1, 1, 2);
         grid->setColumnStretch(1, 1);
 
         gl->addWidget(container, 0, 0);
         gl->setColumnStretch(0, 1);
 
-        connect(m_imagePathEdit, &QLineEdit::editingFinished,
-                this, &RibbonFormatSection::onImagePathChanged);
+        connect(m_imagePathEdit, &QLineEdit::editingFinished, this, &RibbonFormatSection::onImagePathChanged);
         connect(browseBtn, &QToolButton::clicked, this, [this]() {
             const QString path = QFileDialog::getOpenFileName(
                 nullptr, "Select Image", QString(), "Images (*.png *.jpg *.jpeg)");
@@ -892,20 +703,15 @@ void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
             m_imagePathEdit->setText(path);
             onImagePathChanged();
         });
-        connect(m_scaleMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this, &RibbonFormatSection::onScaleModeChanged);
+        connect(m_scaleMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onScaleModeChanged);
     }
 }
-
-// ── QR Code tab ────────────────────────────────────────────────────────────────
 
 void RibbonFormatSection::buildQrTab(SARibbonBar* ribbon)
 {
     m_qrCategory = ribbon->addCategoryPage("QR Code");
-
     {
         auto* gl = addGroup(m_qrCategory, "Content");
-
         auto* qrBtn = new QToolButton;
         qrBtn->setIcon(qrCodeIcon());
         qrBtn->setText("Edit Content…");
@@ -914,12 +720,9 @@ void RibbonFormatSection::buildQrTab(SARibbonBar* ribbon)
         qrBtn->setMinimumHeight(40);
         qrBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         qrBtn->setAutoRaise(true);
-
         gl->addWidget(qrBtn, 0, 0);
         gl->setColumnStretch(0, 1);
-
-        connect(qrBtn, &QToolButton::clicked, this,
-                [this]() { openContentEditor("Edit QR Content"); });
+        connect(qrBtn, &QToolButton::clicked, this, [this]() { openContentEditor("Edit QR Content"); });
     }
 }
 
@@ -931,15 +734,19 @@ void RibbonFormatSection::openContentEditor(const QString& title)
         auto* l = new QVBoxLayout(m_contentDialog);
         m_contentEdit = new QPlainTextEdit(m_contentDialog);
         l->addWidget(m_contentEdit);
-        connect(m_contentEdit, &QPlainTextEdit::textChanged,
-                this, &RibbonFormatSection::onContentChanged);
+        connect(m_contentEdit, &QPlainTextEdit::textChanged, this, &RibbonFormatSection::onContentChanged);
     }
     m_contentDialog->setWindowTitle(title);
-    if (!m_graphicId.empty()) {
+    if (!m_elementId.empty()) {
         try {
-            const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
+            const VisualElement& el = m_doc->getElement(m_elementId);
+            QString text;
+            if (const auto* te = dynamic_cast<const TextElement*>(&el))
+                text = QString::fromStdString(te->text);
+            else if (const auto* qe = dynamic_cast<const QrElement*>(&el))
+                text = QString::fromStdString(qe->text);
             QSignalBlocker blocker(m_contentEdit);
-            m_contentEdit->setPlainText(QString::fromStdString(el.text));
+            m_contentEdit->setPlainText(text);
             m_contentSavedCursor = 0;
         } catch (...) {}
     }
@@ -948,71 +755,51 @@ void RibbonFormatSection::openContentEditor(const QString& title)
     m_contentDialog->activateWindow();
 }
 
-// ── loadFonts ──────────────────────────────────────────────────────────────────
-
 void RibbonFormatSection::loadFonts()
 {
     auto* model = new QStandardItemModel(m_fontFamily);
-
     auto* browseItem = new QStandardItem("Open font from file…");
     browseItem->setData(QString(), Qt::UserRole);
     model->appendRow(browseItem);
-
     for (const QString& family : QFontDatabase::families()) {
         auto* item = new QStandardItem(family);
         item->setData(family, Qt::UserRole);
         model->appendRow(item);
     }
-
     m_fontFamily->setModel(model);
     m_fontFamily->view()->setItemDelegate(new FontItemDelegate(m_fontFamily));
 }
 
 // ── setSelection / clearSelection ─────────────────────────────────────────────
 
-void RibbonFormatSection::setGraphicSelection(const std::string& gi)
+void RibbonFormatSection::setSelection(const std::string& ei)
 {
-    m_graphicId = gi;
-    m_elementId.clear();
-    if (m_graphicIdEdit) {
-        try {
-            const Graphic& g = m_doc->scene().GetById(gi);
-            QSignalBlocker b(m_graphicIdEdit);
-            m_graphicIdEdit->setText(QString::fromStdString(g.id));
-        } catch (...) {}
-    }
-}
-
-void RibbonFormatSection::setSelection(const std::string& gi, const std::string& ei)
-{
-    m_graphicId = gi;
     m_elementId = ei;
     onDocumentChanged();
 }
 
 void RibbonFormatSection::clearSelection()
 {
-    m_graphicId.clear();
     m_elementId.clear();
 }
 
-// ── onDocumentChanged ──────────────────────────────────────────────────────────
+// ── populateRefCombos ─────────────────────────────────────────────────────────
 
 void RibbonFormatSection::populateRefCombos()
 {
     try {
-        Graphic& g = m_doc->scene().GetById(m_graphicId);
-        Element& el = g.GetById(m_elementId);
+        const VisualElement& el = m_doc->getElement(m_elementId);
+        const Title& t = m_doc->title();
 
         m_maskCombo->blockSignals(true);
         m_maskCombo->clear();
         m_maskCombo->addItem("None", QString());
         int maskIdx = 0;
-        for (const auto& other : g.elements) {
-            if (other.id == m_elementId) continue;
-            m_maskCombo->addItem(QString::fromStdString(other.id),
-                                 QString::fromStdString(other.id));
-            if (el.mask && el.mask->id == other.id)
+        for (int i = 1; i < (int)t.elements.size(); ++i) {
+            const std::string& eid = t.elements[i]->GetId();
+            if (eid == m_elementId) continue;
+            m_maskCombo->addItem(QString::fromStdString(eid), QString::fromStdString(eid));
+            if (el.mask && el.mask->GetId() == eid)
                 maskIdx = m_maskCombo->count() - 1;
         }
         m_maskCombo->setCurrentIndex(maskIdx);
@@ -1022,11 +809,13 @@ void RibbonFormatSection::populateRefCombos()
         m_parentCombo->clear();
         m_parentCombo->addItem("None", QString());
         int parentIdx = 0;
-        for (const auto& other : g.elements) {
-            if (other.id == m_elementId) continue;
-            m_parentCombo->addItem(QString::fromStdString(other.id),
-                                   QString::fromStdString(other.id));
-            if (el.parent && el.parent->id == other.id)
+        const IElement* elParent = el.GetParent();
+        const std::string parentId = (elParent && elParent->GetId() != "__root") ? elParent->GetId() : "";
+        for (int i = 1; i < (int)t.elements.size(); ++i) {
+            const std::string& eid = t.elements[i]->GetId();
+            if (eid == m_elementId) continue;
+            m_parentCombo->addItem(QString::fromStdString(eid), QString::fromStdString(eid));
+            if (eid == parentId)
                 parentIdx = m_parentCombo->count() - 1;
         }
         m_parentCombo->setCurrentIndex(parentIdx);
@@ -1034,60 +823,40 @@ void RibbonFormatSection::populateRefCombos()
     } catch (...) {}
 }
 
+// ── onDocumentChanged ─────────────────────────────────────────────────────────
+
 void RibbonFormatSection::onDocumentChanged()
 {
-    if (m_updating)
-        return;
+    if (m_updating || m_elementId.empty()) return;
 
-    // Sync the Graphic tab if only a graphic is selected.
-    if (!m_graphicId.empty() && m_elementId.empty() && m_graphicIdEdit) {
-        try {
-            const Graphic& g = m_doc->scene().GetById(m_graphicId);
-            QSignalBlocker b(m_graphicIdEdit);
-            m_graphicIdEdit->setText(QString::fromStdString(g.id));
-        } catch (...) {}
-        return;
-    }
-
-    if (m_graphicId.empty() || m_elementId.empty())
-        return;
-
-    Scene& s = m_doc->scene();
-    const Element* el = nullptr;
+    const VisualElement* el = nullptr;
     try {
-        el = &s.GetById(m_graphicId).GetById(m_elementId);
+        el = &m_doc->getElement(m_elementId);
     } catch (...) {
         return;
     }
 
-    const Graphic& g = s.GetById(m_graphicId);
-
     {
     UpdateGuard ug(m_updating);
 
-    // Transform
-    m_spinX->setValue(el->bounds.x);
-    m_spinY->setValue(el->bounds.y);
-    m_spinW->setValue(el->bounds.width);
-    m_spinH->setValue(el->bounds.height);
-    m_spinRot->setValue(static_cast<double>(el->rotation));
+    const Rectangle b = el->GetBounds();
+    m_spinX->setValue(b.x);
+    m_spinY->setValue(b.y);
+    m_spinW->setValue(b.width);
+    m_spinH->setValue(b.height);
+    m_spinRot->setValue(static_cast<double>(el->GetRotation()));
+    m_spinShearX->setValue(static_cast<double>(el->GetShearX()));
+    m_spinShearY->setValue(static_cast<double>(el->GetShearY()));
 
-    // Appearance
     m_spinZ->setValue(el->zOrder);
     m_spinOpacity->setValue(static_cast<double>(el->opacity) * 100.0);
 
-    // Style tab
     m_strokeWidth->setValue(static_cast<double>(el->strokeWidth));
     m_spinTL->setValue(static_cast<double>(el->cornerRadius[0]));
     m_spinTR->setValue(static_cast<double>(el->cornerRadius[1]));
     m_spinBR->setValue(static_cast<double>(el->cornerRadius[2]));
     m_spinBL->setValue(static_cast<double>(el->cornerRadius[3]));
 
-    // Shear
-    m_spinShearX->setValue(static_cast<double>(el->shearX));
-    m_spinShearY->setValue(static_cast<double>(el->shearY));
-
-    // Shadow
     m_shadowEnabled->setChecked(el->shadow.enabled);
     m_spinShadowOffX->setValue(el->shadow.offsetX);
     m_spinShadowOffY->setValue(el->shadow.offsetY);
@@ -1101,17 +870,12 @@ void RibbonFormatSection::onDocumentChanged()
     m_shadowControls->setEnabled(el->shadow.enabled);
 
     // ID field
-    bool usedAsParent = false;
-    for (const auto& other : g.elements)
-        if (other.parent == el) { usedAsParent = true; break; }
-    m_idEdit->setReadOnly(usedAsParent);
-    m_idEdit->setStyleSheet(usedAsParent ? "QLineEdit { color: #888; font-style: italic; }" : "");
-    m_idEdit->setText(QString::fromStdString(el->id));
+    bool hasChildren = !el->GetChildren().empty();
+    m_idEdit->setReadOnly(hasChildren);
+    m_idEdit->setStyleSheet(hasChildren ? "QLineEdit { color: #888; font-style: italic; }" : "");
+    m_idEdit->setText(QString::fromStdString(el->GetId()));
 
     // Fit-to-children + padding
-    bool hasChildren = false;
-    for (const auto& other : g.elements)
-        if (other.parent == el) { hasChildren = true; break; }
     m_fitCheck->setChecked(el->fitToChildren);
     m_paddingContainer->setEnabled(el->fitToChildren);
     m_spinPadTop->setValue(static_cast<double>(el->childrenPadding[0]));
@@ -1123,263 +887,269 @@ void RibbonFormatSection::onDocumentChanged()
 
     populateRefCombos();
 
-    // Text properties (only when text element)
-    if (el->type == ElementType::Text) {
-        const QString family = QString::fromStdString(el->font.family);
+    if (const auto* te = dynamic_cast<const TextElement*>(el)) {
+        const QString family = QString::fromStdString(te->font.family);
         auto* model = qobject_cast<QStandardItemModel*>(m_fontFamily->model());
         int idx = -1;
         for (int i = 1; i < model->rowCount(); ++i) {
-            if (model->item(i)->data(Qt::UserRole).toString() == family) {
-                idx = i; break;
-            }
+            if (model->item(i)->data(Qt::UserRole).toString() == family) { idx = i; break; }
         }
         m_fontFamily->setCurrentIndex(idx >= 0 ? idx : 0);
-        m_fontSize->setValue(static_cast<double>(el->font.size));
-        m_fontWeight->setCurrentIndex(weightToIndex(el->font.weight));
-        m_italicBtn->setChecked(el->font.isItalic);
-        m_underlineBtn->setChecked(el->font.isUnderline);
-        m_strikeBtn->setChecked(el->font.isStrikethrough);
-        m_autoScale->setChecked(el->textStyle.autoScale);
+        m_fontSize->setValue(static_cast<double>(te->font.size));
+        m_fontWeight->setCurrentIndex(weightToIndex(te->font.weight));
+        m_italicBtn->setChecked(te->font.isItalic);
+        m_underlineBtn->setChecked(te->font.isUnderline);
+        m_strikeBtn->setChecked(te->font.isStrikethrough);
+        m_autoScale->setChecked(te->textStyle.autoScale);
 
-        m_alignLeft->setChecked(el->textStyle.alignX    == HorizontalAlignment::Left);
-        m_alignCenter->setChecked(el->textStyle.alignX  == HorizontalAlignment::Center);
-        m_alignJustify->setChecked(el->textStyle.alignX == HorizontalAlignment::Justify);
-        m_alignRight->setChecked(el->textStyle.alignX   == HorizontalAlignment::Right);
-        m_alignTop->setChecked(el->textStyle.alignY    == VerticalAlignment::Top);
-        m_alignMiddle->setChecked(el->textStyle.alignY == VerticalAlignment::Middle);
-        m_alignBottom->setChecked(el->textStyle.alignY == VerticalAlignment::Bottom);
+        m_alignLeft->setChecked(te->textStyle.alignX    == HorizontalAlignment::Left);
+        m_alignCenter->setChecked(te->textStyle.alignX  == HorizontalAlignment::Center);
+        m_alignJustify->setChecked(te->textStyle.alignX == HorizontalAlignment::Justify);
+        m_alignRight->setChecked(te->textStyle.alignX   == HorizontalAlignment::Right);
+        m_alignTop->setChecked(te->textStyle.alignY    == VerticalAlignment::Top);
+        m_alignMiddle->setChecked(te->textStyle.alignY == VerticalAlignment::Middle);
+        m_alignBottom->setChecked(te->textStyle.alignY == VerticalAlignment::Bottom);
 
-        switch (el->textStyle.ellipsize) {
+        switch (te->textStyle.ellipsize) {
         case Ellipsize::Start:  m_ellipsize->setCurrentIndex(1); break;
         case Ellipsize::Middle: m_ellipsize->setCurrentIndex(2); break;
         case Ellipsize::End:    m_ellipsize->setCurrentIndex(3); break;
         default:                m_ellipsize->setCurrentIndex(0); break;
         }
-        switch (el->textStyle.wrapMode) {
+        switch (te->textStyle.wrapMode) {
         case WrapMode::Char:     m_wrap->setCurrentIndex(1); break;
         case WrapMode::WordChar: m_wrap->setCurrentIndex(2); break;
         default:                 m_wrap->setCurrentIndex(0); break;
         }
-        switch (el->textStyle.transform) {
+        switch (te->textStyle.transform) {
         case TextTransform::Capitalize: m_textTransform->setCurrentIndex(1); break;
         case TextTransform::Uppercase:  m_textTransform->setCurrentIndex(2); break;
         case TextTransform::Lowercase:  m_textTransform->setCurrentIndex(3); break;
         default:                        m_textTransform->setCurrentIndex(0); break;
         }
-
         if (m_contentEdit) {
             QSignalBlocker blocker(m_contentEdit);
-            m_contentEdit->setPlainText(QString::fromStdString(el->text));
+            m_contentEdit->setPlainText(QString::fromStdString(te->text));
             QTextCursor cursor(m_contentEdit->document());
             cursor.setPosition(m_contentSavedCursor);
             m_contentEdit->setTextCursor(cursor);
         }
     }
 
-    // Image properties
-    if (el->type == ElementType::Image) {
-        m_imagePathEdit->setText(QString::fromStdString(el->imagePath));
-        m_scaleMode->setCurrentIndex(scaleModeToComboIndex(el->imageScaleMode));
+    if (const auto* ie = dynamic_cast<const ImageElement*>(el)) {
+        m_imagePathEdit->setText(QString::fromStdString(ie->imagePath));
+        m_scaleMode->setCurrentIndex(scaleModeToComboIndex(ie->imageScaleMode));
     }
 
-    // QR content — restore cursor same as text
-    if (el->type == ElementType::QrCode && m_contentEdit) {
-        QSignalBlocker blocker(m_contentEdit);
-        m_contentEdit->setPlainText(QString::fromStdString(el->text));
-        QTextCursor cursor(m_contentEdit->document());
-        cursor.setPosition(m_contentSavedCursor);
-        m_contentEdit->setTextCursor(cursor);
+    if (const auto* qe = dynamic_cast<const QrElement*>(el)) {
+        if (m_contentEdit) {
+            QSignalBlocker blocker(m_contentEdit);
+            m_contentEdit->setPlainText(QString::fromStdString(qe->text));
+            QTextCursor cursor(m_contentEdit->document());
+            cursor.setPosition(m_contentSavedCursor);
+            m_contentEdit->setTextCursor(cursor);
+        }
     }
 
-    } // UpdateGuard released here
+    } // UpdateGuard released
 
     updateFillSwatch();
     updateStrokeSwatch();
 }
 
-// ── Graphic tab slot ──────────────────────────────────────────────────────────
-
-void RibbonFormatSection::onGraphicIdEditingFinished()
-{
-    if (m_updating || m_graphicId.empty()) return;
-    std::string newId = m_graphicIdEdit->text().toStdString();
-    if (m_graphicId == newId) return;
-    m_doc->undoStack()->push(new SetGraphicFieldCmd<std::string>(
-        m_doc, m_graphicId, newId,
-        [](Graphic& g) -> std::string& { return g.id; }, "id"));
-    m_graphicId = newId;
-}
-
-// ── Element tab slot implementations ──────────────────────────────────────────
+// ── Slot implementations ──────────────────────────────────────────────────────
 
 void RibbonFormatSection::onXChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<double>(
-        m_doc, m_graphicId, m_elementId, v,
-        [](Element& e) -> double& { return e.bounds.x; }, "x", ElemMergeTag::X));
+    if (m_updating || m_elementId.empty()) return;
+    try {
+        Rectangle b = m_doc->getElement(m_elementId).GetBounds();
+        b.x = v;
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::X));
+    } catch (...) {}
 }
 
 void RibbonFormatSection::onYChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<double>(
-        m_doc, m_graphicId, m_elementId, v,
-        [](Element& e) -> double& { return e.bounds.y; }, "y", ElemMergeTag::Y));
+    if (m_updating || m_elementId.empty()) return;
+    try {
+        Rectangle b = m_doc->getElement(m_elementId).GetBounds();
+        b.y = v;
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::Y));
+    } catch (...) {}
 }
 
 void RibbonFormatSection::onWChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<double>(
-        m_doc, m_graphicId, m_elementId, v,
-        [](Element& e) -> double& { return e.bounds.width; }, "width", ElemMergeTag::W));
+    if (m_updating || m_elementId.empty()) return;
+    try {
+        Rectangle b = m_doc->getElement(m_elementId).GetBounds();
+        b.width = v;
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::W));
+    } catch (...) {}
 }
 
 void RibbonFormatSection::onHChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<double>(
-        m_doc, m_graphicId, m_elementId, v,
-        [](Element& e) -> double& { return e.bounds.height; }, "height", ElemMergeTag::H));
+    if (m_updating || m_elementId.empty()) return;
+    try {
+        Rectangle b = m_doc->getElement(m_elementId).GetBounds();
+        b.height = v;
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::H));
+    } catch (...) {}
 }
 
 void RibbonFormatSection::onRotChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<float>(
-        m_doc, m_graphicId, m_elementId, static_cast<float>(v),
-        [](Element& e) -> float& { return e.rotation; }, "rotation", ElemMergeTag::Rotation));
+    if (m_updating || m_elementId.empty()) return;
+    m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, m_elementId, static_cast<float>(v)));
 }
 
 void RibbonFormatSection::onZOrderChanged(int v)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<int>(
-        m_doc, m_graphicId, m_elementId, v,
-        [](Element& e) -> int& { return e.zOrder; }, "zOrder", ElemMergeTag::ZOrder));
+        m_doc, m_elementId, v,
+        [](VisualElement& e) -> int& { return e.zOrder; }, "zOrder", ElemMergeTag::ZOrder));
 }
 
 void RibbonFormatSection::onOpacityChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
-        m_doc, m_graphicId, m_elementId, static_cast<float>(v / 100.0),
-        [](Element& e) -> float& { return e.opacity; }, "opacity", ElemMergeTag::Opacity));
+        m_doc, m_elementId, static_cast<float>(v / 100.0),
+        [](VisualElement& e) -> float& { return e.opacity; }, "opacity", ElemMergeTag::Opacity));
 }
 
 void RibbonFormatSection::onFillPaintChanged(const Paint& p)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementPaintCmd(
-        m_doc, m_graphicId, m_elementId, SetElementPaintCmd::Target::Fill, p));
+    if (m_updating || m_elementId.empty()) return;
+    m_doc->undoStack()->push(new SetElementPaintCmd(m_doc, m_elementId, SetElementPaintCmd::Target::Fill, p));
 }
 
 void RibbonFormatSection::onStrokePaintChanged(const Paint& p)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementPaintCmd(
-        m_doc, m_graphicId, m_elementId, SetElementPaintCmd::Target::Stroke, p));
+    if (m_updating || m_elementId.empty()) return;
+    m_doc->undoStack()->push(new SetElementPaintCmd(m_doc, m_elementId, SetElementPaintCmd::Target::Stroke, p));
 }
 
 void RibbonFormatSection::onStrokeWidthChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
-        m_doc, m_graphicId, m_elementId, static_cast<float>(v),
-        [](Element& e) -> float& { return e.strokeWidth; }, "strokeWidth",
-        ElemMergeTag::StrokeW));
+        m_doc, m_elementId, static_cast<float>(v),
+        [](VisualElement& e) -> float& { return e.strokeWidth; }, "strokeWidth", ElemMergeTag::StrokeW));
 }
 
 void RibbonFormatSection::onCornerRadiusChanged()
 {
-    if (m_updating || m_graphicId.empty() || !m_spinTL) return;
-    float tl = static_cast<float>(m_spinTL->value());
-    float tr = static_cast<float>(m_spinTR->value());
-    float br = static_cast<float>(m_spinBR->value());
-    float bl = static_cast<float>(m_spinBL->value());
-    m_doc->undoStack()->push(
-        new SetCornerRadiusCmd(m_doc, m_graphicId, m_elementId, tl, tr, br, bl));
+    if (m_updating || m_elementId.empty() || !m_spinTL) return;
+    m_doc->undoStack()->push(new SetCornerRadiusCmd(
+        m_doc, m_elementId,
+        static_cast<float>(m_spinTL->value()),
+        static_cast<float>(m_spinTR->value()),
+        static_cast<float>(m_spinBR->value()),
+        static_cast<float>(m_spinBL->value())));
 }
 
 void RibbonFormatSection::onIdEditingFinished()
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     std::string newId = m_idEdit->text().toStdString();
     if (m_elementId == newId) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
-        m_doc, m_graphicId, m_elementId, newId,
-        [](Element& e) -> std::string& { return e.id; }, "id"));
+    const std::string oldId = m_elementId;
+    m_doc->applyMutation([oldId, newId](Title& t) {
+        try { t.GetById(oldId).SetId(newId); } catch (...) {}
+    });
     m_elementId = newId;
-    emit elementIdChanged(m_graphicId, m_elementId);
+    emit elementIdChanged(m_elementId);
 }
 
 void RibbonFormatSection::onMaskChanged(int)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    try {
-        const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
-        std::string maskId   = m_maskCombo->currentData().toString().toStdString();
-        std::string parentId = el.parent ? el.parent->id : "";
-        m_doc->setElementRef(m_graphicId, m_elementId, maskId, parentId);
-    } catch (...) {}
+    if (m_updating || m_elementId.empty()) return;
+    std::string maskId = m_maskCombo->currentData().toString().toStdString();
+    m_doc->setElementMaskRef(m_elementId, maskId);
 }
 
 void RibbonFormatSection::onParentChanged(int)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    try {
-        const Element& el = m_doc->scene().GetById(m_graphicId).GetById(m_elementId);
-        std::string maskId      = el.mask ? el.mask->id : "";
-        std::string newParentId = m_parentCombo->currentData().toString().toStdString();
-        std::string oldParentId = el.parent ? el.parent->id : "";
-        if (newParentId == oldParentId) return;
-
-        Point globalPos = el.GetGlobalPosition();
-        m_doc->setElementRef(m_graphicId, m_elementId, maskId, newParentId);
-
-        double newX = globalPos.x, newY = globalPos.y;
-        if (!newParentId.empty()) {
-            try {
-                Point pg = m_doc->scene().GetById(m_graphicId).GetById(newParentId).GetGlobalPosition();
-                newX = globalPos.x - pg.x;
-                newY = globalPos.y - pg.y;
-            } catch (...) {}
-        }
-        const std::string gi = m_graphicId, ei = m_elementId;
-        m_doc->applyMutation([gi, ei, newX, newY](Scene& s) {
-            Element& e = s.GetById(gi).GetById(ei);
-            e.bounds.x = newX;
-            e.bounds.y = newY;
-        });
-    } catch (...) {}
+    if (m_updating || m_elementId.empty()) return;
+    std::string newParentId = m_parentCombo->currentData().toString().toStdString();
+    const std::string ei = m_elementId;
+    m_doc->applyMutation([ei, newParentId](Title& t) {
+        try {
+            VisualElement& el = t.GetById(ei);
+            IElement* curParent = el.GetParent();
+            IElement* newParent = t.GetRoot();
+            if (!newParentId.empty()) {
+                for (auto& e : t.elements)
+                    if (e->GetId() == newParentId) { newParent = e.get(); break; }
+            }
+            if (curParent == newParent) return;
+            if (curParent) curParent->RemoveChild(&el);
+            newParent->AddChild(&el);
+        } catch (...) {}
+    });
 }
 
 void RibbonFormatSection::onFitToChildrenToggled(bool checked)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_paddingContainer->setEnabled(checked);
     m_doc->undoStack()->push(new SetElementFieldCmd<bool>(
-        m_doc, m_graphicId, m_elementId, checked,
-        [](Element& e) -> bool& { return e.fitToChildren; }, "fitToChildren"));
+        m_doc, m_elementId, checked,
+        [](VisualElement& e) -> bool& { return e.fitToChildren; }, "fitToChildren"));
 }
 
 void RibbonFormatSection::onChildrenPaddingChanged()
 {
-    if (m_updating || m_graphicId.empty() || !m_spinPadTop) return;
-    float top    = static_cast<float>(m_spinPadTop->value());
-    float right  = static_cast<float>(m_spinPadRight->value());
-    float bottom = static_cast<float>(m_spinPadBottom->value());
-    float left   = static_cast<float>(m_spinPadLeft->value());
-    m_doc->undoStack()->push(
-        new SetChildrenPaddingCmd(m_doc, m_graphicId, m_elementId, top, right, bottom, left));
+    if (m_updating || m_elementId.empty() || !m_spinPadTop) return;
+    m_doc->undoStack()->push(new SetChildrenPaddingCmd(
+        m_doc, m_elementId,
+        static_cast<float>(m_spinPadTop->value()),
+        static_cast<float>(m_spinPadRight->value()),
+        static_cast<float>(m_spinPadBottom->value()),
+        static_cast<float>(m_spinPadLeft->value())));
 }
 
-// ── Text tab slot implementations ──────────────────────────────────────────────
+void RibbonFormatSection::onShearXChanged(double v)
+{
+    if (m_updating || m_elementId.empty()) return;
+    try {
+        VisualElement& el = m_doc->getElement(m_elementId);
+        m_doc->undoStack()->push(new SetElementShearCmd(
+            m_doc, m_elementId, static_cast<float>(v), el.GetShearY(), ElemMergeTag::ShearX));
+    } catch (...) {}
+}
+
+void RibbonFormatSection::onShearYChanged(double v)
+{
+    if (m_updating || m_elementId.empty()) return;
+    try {
+        VisualElement& el = m_doc->getElement(m_elementId);
+        m_doc->undoStack()->push(new SetElementShearCmd(
+            m_doc, m_elementId, el.GetShearX(), static_cast<float>(v), ElemMergeTag::ShearY));
+    } catch (...) {}
+}
+
+void RibbonFormatSection::onShadowChanged()
+{
+    if (m_updating || m_elementId.empty()) return;
+    try {
+        VisualElement::DropShadow sh = m_doc->getElement(m_elementId).shadow;
+        sh.enabled = m_shadowEnabled->isChecked();
+        sh.offsetX = m_spinShadowOffX->value();
+        sh.offsetY = m_spinShadowOffY->value();
+        sh.blur    = m_spinShadowBlur->value();
+        m_shadowControls->setEnabled(sh.enabled);
+        m_doc->undoStack()->push(new SetElementShadowCmd(m_doc, m_elementId, sh));
+    } catch (...) {}
+}
 
 void RibbonFormatSection::onFontFamilyChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     if (index == 0) {
         const QString path = QFileDialog::getOpenFileName(
             nullptr, "Open Font File", QString(),
@@ -1405,163 +1175,152 @@ void RibbonFormatSection::onFontFamilyChanged(int index)
         return;
     }
     auto* model = qobject_cast<QStandardItemModel*>(m_fontFamily->model());
-    const std::string family =
-        model->item(index)->data(Qt::UserRole).toString().toStdString();
+    const std::string family = model->item(index)->data(Qt::UserRole).toString().toStdString();
     m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
-        m_doc, m_graphicId, m_elementId, family,
-        [](Element& e) -> std::string& { return e.font.family; }, "font_family"));
+        m_doc, m_elementId, family,
+        [](VisualElement& e) -> std::string& { return static_cast<TextElement&>(e).font.family; },
+        "font_family"));
 }
 
 void RibbonFormatSection::onFontSizeChanged(double v)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
-        m_doc, m_graphicId, m_elementId, static_cast<float>(v),
-        [](Element& e) -> float& { return e.font.size; }, "font_size",
-        ElemMergeTag::StrokeW + 10));
+        m_doc, m_elementId, static_cast<float>(v),
+        [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).font.size; },
+        "font_size", ElemMergeTag::StrokeW + 10));
 }
 
 void RibbonFormatSection::onFontWeightChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<FontWeight>(
-        m_doc, m_graphicId, m_elementId, indexToWeight(index),
-        [](Element& e) -> FontWeight& { return e.font.weight; }, "font_weight"));
+        m_doc, m_elementId, indexToWeight(index),
+        [](VisualElement& e) -> FontWeight& { return static_cast<TextElement&>(e).font.weight; },
+        "font_weight"));
 }
 
 void RibbonFormatSection::onItalicToggled(bool checked)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<bool>(
-        m_doc, m_graphicId, m_elementId, checked,
-        [](Element& e) -> bool& { return e.font.isItalic; }, "font_italic"));
+        m_doc, m_elementId, checked,
+        [](VisualElement& e) -> bool& { return static_cast<TextElement&>(e).font.isItalic; },
+        "font_italic"));
 }
 
 void RibbonFormatSection::onUnderlineToggled(bool checked)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<bool>(
-        m_doc, m_graphicId, m_elementId, checked,
-        [](Element& e) -> bool& { return e.font.isUnderline; }, "font_underline"));
+        m_doc, m_elementId, checked,
+        [](VisualElement& e) -> bool& { return static_cast<TextElement&>(e).font.isUnderline; },
+        "font_underline"));
 }
 
 void RibbonFormatSection::onStrikethroughToggled(bool checked)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<bool>(
-        m_doc, m_graphicId, m_elementId, checked,
-        [](Element& e) -> bool& { return e.font.isStrikethrough; }, "font_strikethrough"));
+        m_doc, m_elementId, checked,
+        [](VisualElement& e) -> bool& { return static_cast<TextElement&>(e).font.isStrikethrough; },
+        "font_strikethrough"));
 }
 
 void RibbonFormatSection::onAlignXChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<HorizontalAlignment>(
-        m_doc, m_graphicId, m_elementId, static_cast<HorizontalAlignment>(index),
-        [](Element& e) -> HorizontalAlignment& { return e.textStyle.alignX; }, "text_align_x"));
+        m_doc, m_elementId, static_cast<HorizontalAlignment>(index),
+        [](VisualElement& e) -> HorizontalAlignment& { return static_cast<TextElement&>(e).textStyle.alignX; },
+        "text_align_x"));
 }
 
 void RibbonFormatSection::onAlignYChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<VerticalAlignment>(
-        m_doc, m_graphicId, m_elementId, static_cast<VerticalAlignment>(index),
-        [](Element& e) -> VerticalAlignment& { return e.textStyle.alignY; }, "text_align_y"));
+        m_doc, m_elementId, static_cast<VerticalAlignment>(index),
+        [](VisualElement& e) -> VerticalAlignment& { return static_cast<TextElement&>(e).textStyle.alignY; },
+        "text_align_y"));
 }
 
 void RibbonFormatSection::onAutoScaleToggled(bool checked)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<bool>(
-        m_doc, m_graphicId, m_elementId, checked,
-        [](Element& e) -> bool& { return e.textStyle.autoScale; }, "auto_scale"));
+        m_doc, m_elementId, checked,
+        [](VisualElement& e) -> bool& { return static_cast<TextElement&>(e).textStyle.autoScale; },
+        "auto_scale"));
 }
 
 void RibbonFormatSection::onEllipsizeChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    static const Ellipsize kMap[] = {Ellipsize::None, Ellipsize::Start,
-                                      Ellipsize::Middle, Ellipsize::End};
+    if (m_updating || m_elementId.empty()) return;
+    static const Ellipsize kMap[] = {Ellipsize::None, Ellipsize::Start, Ellipsize::Middle, Ellipsize::End};
     m_doc->undoStack()->push(new SetElementFieldCmd<Ellipsize>(
-        m_doc, m_graphicId, m_elementId, kMap[index],
-        [](Element& el) -> Ellipsize& { return el.textStyle.ellipsize; }, "ellipsize"));
+        m_doc, m_elementId, kMap[index],
+        [](VisualElement& e) -> Ellipsize& { return static_cast<TextElement&>(e).textStyle.ellipsize; },
+        "ellipsize"));
 }
 
 void RibbonFormatSection::onWrapChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     static const WrapMode kMap[] = {WrapMode::Word, WrapMode::Char, WrapMode::WordChar};
     m_doc->undoStack()->push(new SetElementFieldCmd<WrapMode>(
-        m_doc, m_graphicId, m_elementId, kMap[index],
-        [](Element& e) -> WrapMode& { return e.textStyle.wrapMode; }, "wrap"));
+        m_doc, m_elementId, kMap[index],
+        [](VisualElement& e) -> WrapMode& { return static_cast<TextElement&>(e).textStyle.wrapMode; },
+        "wrap"));
 }
 
 void RibbonFormatSection::onTextTransformChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    static const TextTransform kMap[] = {TextTransform::None, TextTransform::Capitalize,
-                                          TextTransform::Uppercase, TextTransform::Lowercase};
+    if (m_updating || m_elementId.empty()) return;
+    static const TextTransform kMap[] = {
+        TextTransform::None, TextTransform::Capitalize, TextTransform::Uppercase, TextTransform::Lowercase};
     m_doc->undoStack()->push(new SetElementFieldCmd<TextTransform>(
-        m_doc, m_graphicId, m_elementId, kMap[index],
-        [](Element& e) -> TextTransform& { return e.textStyle.transform; }, "text_transform"));
+        m_doc, m_elementId, kMap[index],
+        [](VisualElement& e) -> TextTransform& { return static_cast<TextElement&>(e).textStyle.transform; },
+        "text_transform"));
 }
 
 void RibbonFormatSection::onContentChanged()
 {
-    if (m_updating || !m_contentEdit || m_graphicId.empty()) return;
+    if (m_updating || !m_contentEdit || m_elementId.empty()) return;
     const std::string text = m_contentEdit->toPlainText().toStdString();
     m_contentSavedCursor = m_contentEdit->textCursor().position();
-    m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
-        m_doc, m_graphicId, m_elementId, text,
-        [](Element& e) -> std::string& { return e.text; }, "text"));
+    try {
+        VisualElement& el = m_doc->getElement(m_elementId);
+        if (dynamic_cast<TextElement*>(&el)) {
+            m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
+                m_doc, m_elementId, text,
+                [](VisualElement& e) -> std::string& { return static_cast<TextElement&>(e).text; },
+                "text"));
+        } else if (dynamic_cast<QrElement*>(&el)) {
+            m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
+                m_doc, m_elementId, text,
+                [](VisualElement& e) -> std::string& { return static_cast<QrElement&>(e).text; },
+                "text"));
+        }
+    } catch (...) {}
 }
 
 void RibbonFormatSection::onImagePathChanged()
 {
-    if (m_updating || m_graphicId.empty()) return;
+    if (m_updating || m_elementId.empty()) return;
     const std::string path = m_imagePathEdit->text().toStdString();
     m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
-        m_doc, m_graphicId, m_elementId, path,
-        [](Element& e) -> std::string& { return e.imagePath; }, "image_path"));
+        m_doc, m_elementId, path,
+        [](VisualElement& e) -> std::string& { return static_cast<ImageElement&>(e).imagePath; },
+        "image_path"));
 }
 
 void RibbonFormatSection::onScaleModeChanged(int index)
 {
-    if (m_updating || m_graphicId.empty()) return;
-    const ScaleMode mode = comboIndexToScaleMode(index);
+    if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<ScaleMode>(
-        m_doc, m_graphicId, m_elementId, mode,
-        [](Element& e) -> ScaleMode& { return e.imageScaleMode; }, "scale_mode"));
+        m_doc, m_elementId, comboIndexToScaleMode(index),
+        [](VisualElement& e) -> ScaleMode& { return static_cast<ImageElement&>(e).imageScaleMode; },
+        "scale_mode"));
 }
-
-void RibbonFormatSection::onShearXChanged(double v)
-{
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<float>(
-        m_doc, m_graphicId, m_elementId, static_cast<float>(v),
-        [](Element& e) -> float& { return e.shearX; }, "shearX", ElemMergeTag::ShearX));
-}
-
-void RibbonFormatSection::onShearYChanged(double v)
-{
-    if (m_updating || m_graphicId.empty()) return;
-    m_doc->undoStack()->push(new SetElementFieldCmd<float>(
-        m_doc, m_graphicId, m_elementId, static_cast<float>(v),
-        [](Element& e) -> float& { return e.shearY; }, "shearY", ElemMergeTag::ShearY));
-}
-
-void RibbonFormatSection::onShadowChanged()
-{
-    if (m_updating || m_graphicId.empty()) return;
-    try {
-        Element::DropShadow sh = m_doc->scene().GetById(m_graphicId).GetById(m_elementId).shadow;
-        sh.enabled = m_shadowEnabled->isChecked();
-        sh.offsetX = m_spinShadowOffX->value();
-        sh.offsetY = m_spinShadowOffY->value();
-        sh.blur    = m_spinShadowBlur->value();
-        m_shadowControls->setEnabled(sh.enabled);
-        m_doc->undoStack()->push(
-            new SetElementShadowCmd(m_doc, m_graphicId, m_elementId, sh));
-    } catch (...) {}
-}
-

@@ -3,153 +3,326 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include "engine/animation.h"
+#include "engine/element_image.h"
+#include "engine/element_qr.h"
+#include "engine/element_rectangle.h"
+#include "engine/element_text.h"
+#include "engine/spatial.h"
+
 using json = nlohmann::json;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers shared across commands
+// insertElementFromJson — re-parse a single element JSON blob into the title.
+// JSON x,y are LOCAL coords; converts to world before AddChild so SetParent
+// preserves the correct local position.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Re-parse a single graphic JSON blob into the scene
-static void insertGraphicFromJson(Scene& scene, const json& gj)
+static void insertElementFromJson(Title& t, const json& ej)
 {
-    // Build a temporary scene JSON and load just the one graphic.
-    // We wrap it in a scene envelope so Scene::LoadString handles pointer fixup.
-    json wrapper;
-    wrapper["graphics"] = json::array({gj});
-    Scene tmp = Scene::LoadString(wrapper.dump());
-    if (!tmp.graphics.empty())
-        scene.graphics.push_back(std::move(tmp.graphics[0]));
-}
+    const std::string type = ej.value("type", "rectangle");
+    const std::string id   = ej.value("id", "");
 
-// Re-parse a single element JSON blob into a graphic
-static void insertElementFromJson(Graphic& g, const json& ej)
-{
-    // Build a temporary graphic envelope and use Scene::LoadString
-    json gWrapper;
-    gWrapper["id"] = g.id;
-    gWrapper["z_order"] = g.zOrder;
-    gWrapper["elements"] = json::array({ej});
+    std::unique_ptr<VisualElement> el;
+    if (type == "text")      el = std::make_unique<TextElement>();
+    else if (type == "image")     el = std::make_unique<ImageElement>();
+    else if (type == "qr_code")   el = std::make_unique<QrElement>();
+    else                          el = std::make_unique<RectangleElement>();
 
-    json wrapper;
-    wrapper["graphics"] = json::array({gWrapper});
-    Scene tmp = Scene::LoadString(wrapper.dump());
-    if (!tmp.graphics.empty() && !tmp.graphics[0].elements.empty()) {
-        // Clear the pointer fixup — the real graphic already has existing
-        // elements so raw pointers from the temp scene are invalid.
-        Element newEl = std::move(tmp.graphics[0].elements[0]);
-        newEl.mask = nullptr;
-        newEl.parent = nullptr;
-        g.elements.push_back(std::move(newEl));
+    el->SetId(id);
+
+    // Bounds (local coords from JSON)
+    double x = ej.value("x", 0.0),  y = ej.value("y", 0.0);
+    double w = ej.value("w", 100.0), h = ej.value("h", 100.0);
+
+    el->zOrder      = ej.value("z_order", 0);
+    el->opacity     = static_cast<float>(ej.value("opacity", 1.0));
+    el->strokeWidth = static_cast<float>(ej.value("stroke_width", 0.0));
+
+    if (ej.contains("corner_radius")) {
+        const auto& cr = ej["corner_radius"];
+        if (cr.is_number()) {
+            float v = cr.get<float>();
+            el->cornerRadius[0] = el->cornerRadius[1] = el->cornerRadius[2] = el->cornerRadius[3] = v;
+        } else if (cr.is_array() && cr.size() == 4) {
+            for (int k = 0; k < 4; ++k) el->cornerRadius[k] = cr[k].get<float>();
+        }
     }
+
+    if (ej.value("fit_to_children", false)) {
+        el->fitToChildren = true;
+        if (ej.contains("children_padding") && ej["children_padding"].is_array() &&
+            ej["children_padding"].size() == 4) {
+            for (int k = 0; k < 4; ++k)
+                el->childrenPadding[k] = ej["children_padding"][k].get<float>();
+        }
+    }
+
+    if (ej.contains("shadow") && ej["shadow"].is_object()) {
+        const auto& sh = ej["shadow"];
+        el->shadow.enabled = sh.value("enabled", false);
+        el->shadow.offsetX = sh.value("offset_x", 4.0);
+        el->shadow.offsetY = sh.value("offset_y", 4.0);
+        el->shadow.blur    = sh.value("blur", 8.0);
+        if (sh.contains("color") && sh["color"].is_array() && sh["color"].size() == 4) {
+            for (int k = 0; k < 4; ++k) el->shadow.color[k] = sh["color"][k].get<float>();
+        }
+    }
+
+    // Type-specific fields
+    if (auto* te = dynamic_cast<TextElement*>(el.get())) {
+        te->text                = ej.value("text", "");
+        te->font.family         = ej.value("font_family", "");
+        te->font.size           = static_cast<float>(ej.value("font_size", 36.0));
+        te->font.isItalic       = ej.value("font_italic", false);
+        te->font.isUnderline    = ej.value("font_underline", false);
+        te->font.isStrikethrough= ej.value("font_strikethrough", false);
+    } else if (auto* ie = dynamic_cast<ImageElement*>(el.get())) {
+        ie->imagePath      = ej.value("image_path", "");
+        const std::string sm = ej.value("scale_mode", "stretch");
+        if      (sm == "contain")    ie->imageScaleMode = ScaleMode::Contain;
+        else if (sm == "cover")      ie->imageScaleMode = ScaleMode::Cover;
+        else if (sm == "fit_width")  ie->imageScaleMode = ScaleMode::FitWidth;
+        else if (sm == "fit_height") ie->imageScaleMode = ScaleMode::FitHeight;
+        else if (sm == "none")       ie->imageScaleMode = ScaleMode::None;
+        else                         ie->imageScaleMode = ScaleMode::Stretch;
+    } else if (auto* qe = dynamic_cast<QrElement*>(el.get())) {
+        qe->text = ej.value("text", "");
+    }
+
+    // Find parent element (by id); default to root
+    const std::string parentId = ej.value("parent", "");
+    IElement* parentEl = t.GetRoot();
+    if (!parentId.empty()) {
+        for (auto& pe : t.elements) {
+            if (pe->GetId() == parentId) {
+                parentEl = pe.get();
+                break;
+            }
+        }
+    }
+
+    // Convert local coords to world coords so SetParent in AddChild is correct
+    if (parentEl && parentEl != t.GetRoot()) {
+        Point pw = parentEl->GetGlobalPosition();
+        x += pw.x;
+        y += pw.y;
+    }
+    el->SetBounds({x, y, w, h});
+
+    // Rotation and shear must be set before AddChild
+    el->SetRotation(static_cast<float>(ej.value("rotation", 0.0)));
+    el->SetShearX(static_cast<float>(ej.value("shear_x", 0.0)));
+    el->SetShearY(static_cast<float>(ej.value("shear_y", 0.0)));
+
+    VisualElement* rawEl = el.get();
+    t.elements.push_back(std::move(el));
+
+    if (parentEl)
+        parentEl->AddChild(rawEl);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SetSceneDimensionsCmd
+// SetTitleDimensionsCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetSceneDimensionsCmd::SetSceneDimensionsCmd(SceneDocument* doc, int width, int height,
+SetTitleDimensionsCmd::SetTitleDimensionsCmd(TitleDocument* doc, int width, int height,
                                              QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_beforeW(doc->scene().width),
-      m_beforeH(doc->scene().height), m_afterW(width), m_afterH(height)
+    : QUndoCommand(parent), m_doc(doc), m_beforeW(doc->title().width),
+      m_beforeH(doc->title().height), m_afterW(width), m_afterH(height)
 {
-    setText("Set scene dimensions");
+    setText("Set title dimensions");
 }
 
-void SetSceneDimensionsCmd::undo()
+void SetTitleDimensionsCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        s.width = m_beforeW;
-        s.height = m_beforeH;
-    });
+    m_doc->applyMutation([&](Title& t) { t.width = m_beforeW; t.height = m_beforeH; });
 }
 
-void SetSceneDimensionsCmd::redo()
+void SetTitleDimensionsCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        s.width = m_afterW;
-        s.height = m_afterH;
-    });
+    m_doc->applyMutation([&](Title& t) { t.width = m_afterW; t.height = m_afterH; });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SetSceneNameCmd
+// SetTitleNameCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetSceneNameCmd::SetSceneNameCmd(SceneDocument* doc, const QString& after, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_before(doc->sceneName()), m_after(after)
+SetTitleNameCmd::SetTitleNameCmd(TitleDocument* doc, const QString& after, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_before(doc->titleName()), m_after(after)
 {
-    setText("Set scene name");
+    setText("Set title name");
 }
 
-void SetSceneNameCmd::undo()
-{
-    m_doc->setSceneName(m_before);
-}
-
-void SetSceneNameCmd::redo()
-{
-    m_doc->setSceneName(m_after);
-}
+void SetTitleNameCmd::undo() { m_doc->setTitleName(m_before); }
+void SetTitleNameCmd::redo() { m_doc->setTitleName(m_after); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SetBrandColorsCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetBrandColorsCmd::SetBrandColorsCmd(SceneDocument* doc, QList<QColor> after, QUndoCommand* parent)
+SetBrandColorsCmd::SetBrandColorsCmd(TitleDocument* doc, QList<QColor> after, QUndoCommand* parent)
     : QUndoCommand(parent), m_doc(doc), m_before(doc->brandColors()), m_after(std::move(after))
 {
     setText("Set brand colors");
 }
 
-void SetBrandColorsCmd::undo()
+void SetBrandColorsCmd::undo() { m_doc->setBrandColors(m_before); }
+void SetBrandColorsCmd::redo() { m_doc->setBrandColors(m_after); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SetElementBoundsCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetElementBoundsCmd::SetElementBoundsCmd(TitleDocument* doc, std::string ei, Rectangle after,
+                                         int mergeTag, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_after(after), m_mergeTag(mergeTag)
 {
-    m_doc->setBrandColors(m_before);
+    setText("Set element bounds");
+    try { m_before = m_doc->getElement(m_ei).GetBounds(); } catch (...) { m_before = after; }
 }
 
-void SetBrandColorsCmd::redo()
+void SetElementBoundsCmd::undo()
 {
-    m_doc->setBrandColors(m_after);
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_ei).SetBounds(m_before); } catch (...) {}
+    });
+}
+
+void SetElementBoundsCmd::redo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_ei).SetBounds(m_after); } catch (...) {}
+    });
+}
+
+int SetElementBoundsCmd::id() const { return m_mergeTag; }
+
+bool SetElementBoundsCmd::mergeWith(const QUndoCommand* other)
+{
+    if (other->id() != id() || id() == -1) return false;
+    const auto* o = static_cast<const SetElementBoundsCmd*>(other);
+    if (o->m_ei != m_ei) return false;
+    m_after = o->m_after;
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SetElementRotationCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetElementRotationCmd::SetElementRotationCmd(TitleDocument* doc, std::string ei, float after,
+                                             QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_after(after)
+{
+    setText("Set rotation");
+    try { m_before = m_doc->getElement(m_ei).GetRotation(); } catch (...) { m_before = after; }
+}
+
+void SetElementRotationCmd::undo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_ei).SetRotation(m_before); } catch (...) {}
+    });
+}
+
+void SetElementRotationCmd::redo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_ei).SetRotation(m_after); } catch (...) {}
+    });
+}
+
+int  SetElementRotationCmd::id() const { return ElemMergeTag::Rotation; }
+
+bool SetElementRotationCmd::mergeWith(const QUndoCommand* other)
+{
+    if (other->id() != id()) return false;
+    const auto* o = static_cast<const SetElementRotationCmd*>(other);
+    if (o->m_ei != m_ei) return false;
+    m_after = o->m_after;
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SetElementShearCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetElementShearCmd::SetElementShearCmd(TitleDocument* doc, std::string ei,
+                                       float shearX, float shearY, int mergeTag,
+                                       QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)),
+      m_afterX(shearX), m_afterY(shearY), m_mergeTag(mergeTag)
+{
+    setText("Set shear");
+    try {
+        m_beforeX = m_doc->getElement(m_ei).GetShearX();
+        m_beforeY = m_doc->getElement(m_ei).GetShearY();
+    } catch (...) { m_beforeX = shearX; m_beforeY = shearY; }
+}
+
+void SetElementShearCmd::undo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try {
+            auto& e = m_doc->getElement(m_ei);
+            e.SetShearX(m_beforeX);
+            e.SetShearY(m_beforeY);
+        } catch (...) {}
+    });
+}
+
+void SetElementShearCmd::redo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try {
+            auto& e = m_doc->getElement(m_ei);
+            e.SetShearX(m_afterX);
+            e.SetShearY(m_afterY);
+        } catch (...) {}
+    });
+}
+
+int  SetElementShearCmd::id() const { return m_mergeTag; }
+
+bool SetElementShearCmd::mergeWith(const QUndoCommand* other)
+{
+    if (other->id() != id() || id() == -1) return false;
+    const auto* o = static_cast<const SetElementShearCmd*>(other);
+    if (o->m_ei != m_ei) return false;
+    m_afterX = o->m_afterX;
+    m_afterY = o->m_afterY;
+    return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SetElementPaintCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetElementPaintCmd::SetElementPaintCmd(SceneDocument* doc, std::string gi, std::string ei,
+SetElementPaintCmd::SetElementPaintCmd(TitleDocument* doc, std::string ei,
                                        Target target, const Paint& after, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_ei(std::move(ei)), m_target(target),
-      m_after(after)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_target(target), m_after(after)
 {
     setText(target == Target::Fill ? "Set fill" : "Set stroke");
-
-    try {
-        m_before = paintRef(m_doc->scene().GetById(m_gi).GetById(m_ei));
-    } catch (const std::runtime_error&) {
-    }
+    try { m_before = paintRef(m_doc->getElement(m_ei)); } catch (...) {}
 }
 
-Paint& SetElementPaintCmd::paintRef(Element& el) const
+Paint& SetElementPaintCmd::paintRef(VisualElement& el) const
 {
     return (m_target == Target::Fill) ? el.fill : el.stroke;
 }
 
 void SetElementPaintCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            paintRef(s.GetById(m_gi).GetById(m_ei)) = m_before;
-        } catch (const std::runtime_error&) {
-        }
+    m_doc->applyMutation([&](Title&) {
+        try { paintRef(m_doc->getElement(m_ei)) = m_before; } catch (...) {}
     });
 }
 
 void SetElementPaintCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            paintRef(s.GetById(m_gi).GetById(m_ei)) = m_after;
-        } catch (const std::runtime_error&) {
-        }
+    m_doc->applyMutation([&](Title&) {
+        try { paintRef(m_doc->getElement(m_ei)) = m_after; } catch (...) {}
     });
 }
 
@@ -157,41 +330,30 @@ void SetElementPaintCmd::redo()
 // SetElementAnimCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetElementAnimCmd::SetElementAnimCmd(SceneDocument* doc, std::string gi, std::string ei,
+SetElementAnimCmd::SetElementAnimCmd(TitleDocument* doc, std::string ei,
                                      Target target, const AnimationDef& after, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_ei(std::move(ei)), m_target(target),
-      m_after(after)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_target(target), m_after(after)
 {
     setText(target == Target::AnimIn ? "Set anim in" : "Set anim out");
-
-    try {
-        m_before = animRef(m_doc->scene().GetById(m_gi).GetById(m_ei));
-    } catch (const std::runtime_error&) {
-    }
+    try { m_before = animRef(m_doc->getElement(m_ei)); } catch (...) {}
 }
 
-AnimationDef& SetElementAnimCmd::animRef(Element& el) const
+AnimationDef& SetElementAnimCmd::animRef(VisualElement& el) const
 {
     return (m_target == Target::AnimIn) ? el.inAnimation : el.outAnimation;
 }
 
 void SetElementAnimCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            animRef(s.GetById(m_gi).GetById(m_ei)) = m_before;
-        } catch (const std::runtime_error&) {
-        }
+    m_doc->applyMutation([&](Title&) {
+        try { animRef(m_doc->getElement(m_ei)) = m_before; } catch (...) {}
     });
 }
 
 void SetElementAnimCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            animRef(s.GetById(m_gi).GetById(m_ei)) = m_after;
-        } catch (const std::runtime_error&) {
-        }
+    m_doc->applyMutation([&](Title&) {
+        try { animRef(m_doc->getElement(m_ei)) = m_after; } catch (...) {}
     });
 }
 
@@ -199,48 +361,38 @@ void SetElementAnimCmd::redo()
 // SetChildrenPaddingCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetChildrenPaddingCmd::SetChildrenPaddingCmd(SceneDocument* doc, std::string gi, std::string ei,
+SetChildrenPaddingCmd::SetChildrenPaddingCmd(TitleDocument* doc, std::string ei,
                                              float top, float right, float bottom, float left,
                                              QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_ei(std::move(ei))
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei))
 {
     setText("Set children padding");
-    m_after[0] = top;
-    m_after[1] = right;
-    m_after[2] = bottom;
-    m_after[3] = left;
-
+    m_after[0] = top; m_after[1] = right; m_after[2] = bottom; m_after[3] = left;
     try {
-        const Element& el = m_doc->scene().GetById(m_gi).GetById(m_ei);
-        for (int i = 0; i < 4; ++i)
-            m_before[i] = el.childrenPadding[i];
-    } catch (const std::runtime_error&) {
-        for (int i = 0; i < 4; ++i)
-            m_before[i] = 0.f;
+        const VisualElement& el = m_doc->getElement(m_ei);
+        for (int i = 0; i < 4; ++i) m_before[i] = el.childrenPadding[i];
+    } catch (...) {
+        for (int i = 0; i < 4; ++i) m_before[i] = 0.f;
     }
 }
 
 void SetChildrenPaddingCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
+    m_doc->applyMutation([&](Title&) {
         try {
-            Element& el = s.GetById(m_gi).GetById(m_ei);
-            for (int i = 0; i < 4; ++i)
-                el.childrenPadding[i] = m_before[i];
-        } catch (const std::runtime_error&) {
-        }
+            VisualElement& el = m_doc->getElement(m_ei);
+            for (int i = 0; i < 4; ++i) el.childrenPadding[i] = m_before[i];
+        } catch (...) {}
     });
 }
 
 void SetChildrenPaddingCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
+    m_doc->applyMutation([&](Title&) {
         try {
-            Element& el = s.GetById(m_gi).GetById(m_ei);
-            for (int i = 0; i < 4; ++i)
-                el.childrenPadding[i] = m_after[i];
-        } catch (const std::runtime_error&) {
-        }
+            VisualElement& el = m_doc->getElement(m_ei);
+            for (int i = 0; i < 4; ++i) el.childrenPadding[i] = m_after[i];
+        } catch (...) {}
     });
 }
 
@@ -248,25 +400,25 @@ void SetChildrenPaddingCmd::redo()
 // SetElementShadowCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetElementShadowCmd::SetElementShadowCmd(SceneDocument* doc, std::string gi, std::string ei,
-                                         const Element::DropShadow& after, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_ei(std::move(ei)), m_after(after)
+SetElementShadowCmd::SetElementShadowCmd(TitleDocument* doc, std::string ei,
+                                         const VisualElement::DropShadow& after, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_after(after)
 {
     setText("Set shadow");
-    try { m_before = m_doc->scene().GetById(m_gi).GetById(m_ei).shadow; } catch (...) {}
+    try { m_before = m_doc->getElement(m_ei).shadow; } catch (...) {}
 }
 
 void SetElementShadowCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try { s.GetById(m_gi).GetById(m_ei).shadow = m_before; } catch (...) {}
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_ei).shadow = m_before; } catch (...) {}
     });
 }
 
 void SetElementShadowCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try { s.GetById(m_gi).GetById(m_ei).shadow = m_after; } catch (...) {}
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_ei).shadow = m_after; } catch (...) {}
     });
 }
 
@@ -274,164 +426,37 @@ void SetElementShadowCmd::redo()
 // SetCornerRadiusCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-SetCornerRadiusCmd::SetCornerRadiusCmd(SceneDocument* doc, std::string gi, std::string ei, float tl,
-                                       float tr, float br, float bl, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_ei(std::move(ei))
+SetCornerRadiusCmd::SetCornerRadiusCmd(TitleDocument* doc, std::string ei,
+                                       float tl, float tr, float br, float bl, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei))
 {
     setText("Set corner radius");
-    m_after[0] = tl;
-    m_after[1] = tr;
-    m_after[2] = br;
-    m_after[3] = bl;
-
+    m_after[0] = tl; m_after[1] = tr; m_after[2] = br; m_after[3] = bl;
     try {
-        const Element& el = m_doc->scene().GetById(m_gi).GetById(m_ei);
-        for (int i = 0; i < 4; ++i)
-            m_before[i] = static_cast<float>(el.cornerRadius[i]);
-    } catch (const std::runtime_error&) {
-        for (int i = 0; i < 4; ++i)
-            m_before[i] = 0.f;
+        const VisualElement& el = m_doc->getElement(m_ei);
+        for (int i = 0; i < 4; ++i) m_before[i] = el.cornerRadius[i];
+    } catch (...) {
+        for (int i = 0; i < 4; ++i) m_before[i] = 0.f;
     }
 }
 
 void SetCornerRadiusCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
+    m_doc->applyMutation([&](Title&) {
         try {
-            Element& el = s.GetById(m_gi).GetById(m_ei);
-            for (int i = 0; i < 4; ++i)
-                el.cornerRadius[i] = m_before[i];
-        } catch (const std::runtime_error&) {
-        }
+            VisualElement& el = m_doc->getElement(m_ei);
+            for (int i = 0; i < 4; ++i) el.cornerRadius[i] = m_before[i];
+        } catch (...) {}
     });
 }
 
 void SetCornerRadiusCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
+    m_doc->applyMutation([&](Title&) {
         try {
-            Element& el = s.GetById(m_gi).GetById(m_ei);
-            for (int i = 0; i < 4; ++i)
-                el.cornerRadius[i] = m_after[i];
-        } catch (const std::runtime_error&) {
-        }
-    });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RenameGraphicCmd
-// ─────────────────────────────────────────────────────────────────────────────
-
-RenameGraphicCmd::RenameGraphicCmd(SceneDocument* doc, std::string before, std::string after,
-                                   QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_before(std::move(before)), m_after(std::move(after))
-{
-    setText("Rename graphic");
-}
-
-void RenameGraphicCmd::applyRename(const std::string& from, const std::string& to)
-{
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            s.GetById(from).id = to;
-        } catch (const std::runtime_error&) {
-        }
-    });
-    m_doc->renameGraphicRef(from, to);
-}
-
-void RenameGraphicCmd::undo()
-{
-    applyRename(m_after, m_before);
-}
-void RenameGraphicCmd::redo()
-{
-    applyRename(m_before, m_after);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AddGraphicCmd
-// ─────────────────────────────────────────────────────────────────────────────
-
-AddGraphicCmd::AddGraphicCmd(SceneDocument* doc, json graphicJson, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_json(std::move(graphicJson)), m_id(m_json.value("id", ""))
-{
-    setText("Add graphic");
-}
-
-void AddGraphicCmd::undo()
-{
-    m_doc->applyMutation([&](Scene& s) {
-        auto it = std::find_if(s.graphics.begin(), s.graphics.end(),
-                               [&](const Graphic& g) { return g.id == m_id; });
-        if (it != s.graphics.end())
-            s.graphics.erase(it);
-    });
-}
-
-void AddGraphicCmd::redo()
-{
-    m_doc->applyMutation([&](Scene& s) { insertGraphicFromJson(s, m_json); });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RemoveGraphicCmd
-// ─────────────────────────────────────────────────────────────────────────────
-
-RemoveGraphicCmd::RemoveGraphicCmd(SceneDocument* doc, std::string gi, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_savedZOrder(0), m_savedPosition(-1)
-{
-    setText("Remove graphic");
-
-    Scene& s = m_doc->scene();
-    try {
-        const Graphic& g = s.GetById(m_gi);
-        m_savedZOrder = g.zOrder;
-
-        auto it = std::find_if(s.graphics.begin(), s.graphics.end(),
-                               [&](const Graphic& gr) { return gr.id == m_gi; });
-        if (it != s.graphics.end()) {
-            m_savedPosition = static_cast<int>(it - s.graphics.begin());
-            json fullScene = SceneDocument::sceneToJson(s);
-            const auto& garr = fullScene["graphics"];
-            if (m_savedPosition < static_cast<int>(garr.size()))
-                m_snapshot = garr[m_savedPosition];
-        }
-    } catch (const std::runtime_error&) {
-    }
-}
-
-void RemoveGraphicCmd::undo()
-{
-    m_doc->applyMutation([&](Scene& s) {
-        insertGraphicFromJson(s, m_snapshot);
-        if (m_savedPosition >= 0) {
-            int last = static_cast<int>(s.graphics.size()) - 1;
-            if (last > m_savedPosition) {
-                std::rotate(s.graphics.begin() + m_savedPosition, s.graphics.end() - 1,
-                            s.graphics.end());
-            }
-        }
-    });
-    // Restore mask/parent logical refs for all elements in the snapshot
-    if (m_snapshot.contains("elements")) {
-        for (const auto& ej : m_snapshot["elements"]) {
-            std::string eid = ej.value("id", "");
-            std::string maskId = ej.value("mask", "");
-            std::string parentId = ej.value("parent", "");
-            if (!eid.empty() && (!maskId.empty() || !parentId.empty()))
-                m_doc->setElementRef(m_gi, eid, maskId, parentId);
-        }
-    }
-}
-
-void RemoveGraphicCmd::redo()
-{
-    m_doc->applyMutation([&](Scene& s) {
-        auto it = std::find_if(s.graphics.begin(), s.graphics.end(),
-                               [&](const Graphic& g) { return g.id == m_gi; });
-        if (it != s.graphics.end())
-            s.graphics.erase(it);
+            VisualElement& el = m_doc->getElement(m_ei);
+            for (int i = 0; i < 4; ++i) el.cornerRadius[i] = m_after[i];
+        } catch (...) {}
     });
 }
 
@@ -439,9 +464,8 @@ void RemoveGraphicCmd::redo()
 // AddElementCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-AddElementCmd::AddElementCmd(SceneDocument* doc, std::string gi, json elementJson,
-                             QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_json(std::move(elementJson)),
+AddElementCmd::AddElementCmd(TitleDocument* doc, json elementJson, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_json(std::move(elementJson)),
       m_id(m_json.value("id", ""))
 {
     setText("Add element");
@@ -449,170 +473,98 @@ AddElementCmd::AddElementCmd(SceneDocument* doc, std::string gi, json elementJso
 
 void AddElementCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            Graphic& g = s.GetById(m_gi);
-            auto it = std::find_if(g.elements.begin(), g.elements.end(),
-                                   [&](const Element& el) { return el.id == m_id; });
-            if (it != g.elements.end())
-                g.elements.erase(it);
-        } catch (const std::runtime_error&) {
+    m_doc->applyMutation([&](Title& t) {
+        auto it = std::find_if(t.elements.begin(), t.elements.end(),
+                               [&](const auto& e) { return e->GetId() == m_id; });
+        if (it != t.elements.end()) {
+            IElement* parent = (*it)->GetParent();
+            if (parent) parent->RemoveChild(it->get());
+            t.elements.erase(it);
         }
     });
 }
 
 void AddElementCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            insertElementFromJson(s.GetById(m_gi), m_json);
-        } catch (const std::runtime_error&) {
-        }
-    });
+    m_doc->applyMutation([&](Title& t) { insertElementFromJson(t, m_json); });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RemoveElementCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-RemoveElementCmd::RemoveElementCmd(SceneDocument* doc, std::string gi, std::string ei,
-                                   QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_ei(std::move(ei)),
-      m_savedPosition(-1)
+RemoveElementCmd::RemoveElementCmd(TitleDocument* doc, std::string ei, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_savedPosition(-1)
 {
     setText("Remove element");
 
-    Scene& s = m_doc->scene();
-    try {
-        Graphic& g = s.GetById(m_gi);
-        auto eit = std::find_if(g.elements.begin(), g.elements.end(),
-                                [&](const Element& el) { return el.id == m_ei; });
-        if (eit != g.elements.end()) {
-            m_savedPosition = static_cast<int>(eit - g.elements.begin());
-
-            auto git = std::find_if(s.graphics.begin(), s.graphics.end(),
-                                    [&](const Graphic& gr) { return gr.id == m_gi; });
-            if (git != s.graphics.end()) {
-                int gi_idx = static_cast<int>(git - s.graphics.begin());
-                json fullScene = SceneDocument::sceneToJson(s);
-                const auto& garr = fullScene["graphics"];
-                if (gi_idx < static_cast<int>(garr.size())) {
-                    const auto& earr = garr[gi_idx]["elements"];
-                    if (m_savedPosition < static_cast<int>(earr.size()))
-                        m_snapshot = earr[m_savedPosition];
-                }
-            }
+    Title& t = m_doc->title();
+    for (int i = 1; i < (int)t.elements.size(); ++i) {
+        if (t.elements[i]->GetId() == m_ei) {
+            m_savedPosition = i;
+            auto* ve = dynamic_cast<VisualElement*>(t.elements[i].get());
+            if (ve) m_snapshot = TitleDocument::elementToJson(*ve);
+            break;
         }
-    } catch (const std::runtime_error&) {
     }
 }
 
 void RemoveElementCmd::undo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            Graphic& g = s.GetById(m_gi);
-            insertElementFromJson(g, m_snapshot);
-            if (m_savedPosition >= 0) {
-                int last = static_cast<int>(g.elements.size()) - 1;
-                if (last > m_savedPosition) {
-                    std::rotate(g.elements.begin() + m_savedPosition, g.elements.end() - 1,
-                                g.elements.end());
-                }
+    m_doc->applyMutation([&](Title& t) {
+        insertElementFromJson(t, m_snapshot);
+        // Restore element to original position in the vector
+        if (m_savedPosition >= 0 && m_savedPosition < (int)t.elements.size()) {
+            int last = static_cast<int>(t.elements.size()) - 1;
+            if (last > m_savedPosition) {
+                std::rotate(t.elements.begin() + m_savedPosition,
+                            t.elements.end() - 1,
+                            t.elements.end());
             }
-        } catch (const std::runtime_error&) {
         }
     });
-    // Restore mask/parent logical refs that insertElementFromJson cleared
+    // Restore mask ref if present
     const std::string maskId = m_snapshot.value("mask", "");
-    const std::string parentId = m_snapshot.value("parent", "");
-    if (!maskId.empty() || !parentId.empty())
-        m_doc->setElementRef(m_gi, m_ei, maskId, parentId);
+    if (!maskId.empty())
+        m_doc->setElementMaskRef(m_ei, maskId);
 }
 
 void RemoveElementCmd::redo()
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            Graphic& g = s.GetById(m_gi);
-            auto it = std::find_if(g.elements.begin(), g.elements.end(),
-                                   [&](const Element& el) { return el.id == m_ei; });
-            if (it != g.elements.end())
-                g.elements.erase(it);
-        } catch (const std::runtime_error&) {
+    m_doc->applyMutation([&](Title& t) {
+        auto it = std::find_if(t.elements.begin(), t.elements.end(),
+                               [&](const auto& e) { return e->GetId() == m_ei; });
+        if (it != t.elements.end()) {
+            IElement* parent = (*it)->GetParent();
+            if (parent) parent->RemoveChild(it->get());
+            t.elements.erase(it);
         }
     });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MoveGraphicCmd
-// ─────────────────────────────────────────────────────────────────────────────
-
-MoveGraphicCmd::MoveGraphicCmd(SceneDocument* doc, int fromIndex, int toIndex, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_from(fromIndex), m_to(toIndex)
-{
-    setText("Move graphic");
-}
-
-void MoveGraphicCmd::doMove(int from, int to)
-{
-    m_doc->applyMutation([&](Scene& s) {
-        int n = static_cast<int>(s.graphics.size());
-        if (from < 0 || from >= n || to < 0 || to >= n || from == to)
-            return;
-        if (from < to)
-            std::rotate(s.graphics.begin() + from, s.graphics.begin() + from + 1,
-                        s.graphics.begin() + to + 1);
-        else
-            std::rotate(s.graphics.begin() + to, s.graphics.begin() + from,
-                        s.graphics.begin() + from + 1);
-    });
-}
-
-void MoveGraphicCmd::undo()
-{
-    doMove(m_to, m_from);
-}
-void MoveGraphicCmd::redo()
-{
-    doMove(m_from, m_to);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MoveElementCmd
 // ─────────────────────────────────────────────────────────────────────────────
 
-MoveElementCmd::MoveElementCmd(SceneDocument* doc, std::string gi, int fromIndex, int toIndex,
-                               QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_gi(std::move(gi)), m_from(fromIndex), m_to(toIndex)
+MoveElementCmd::MoveElementCmd(TitleDocument* doc, int fromIndex, int toIndex, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_from(fromIndex), m_to(toIndex)
 {
     setText("Move element");
 }
 
 void MoveElementCmd::doMove(int from, int to)
 {
-    m_doc->applyMutation([&](Scene& s) {
-        try {
-            Graphic& g = s.GetById(m_gi);
-            int n = static_cast<int>(g.elements.size());
-            if (from < 0 || from >= n || to < 0 || to >= n || from == to)
-                return;
-            if (from < to)
-                std::rotate(g.elements.begin() + from, g.elements.begin() + from + 1,
-                            g.elements.begin() + to + 1);
-            else
-                std::rotate(g.elements.begin() + to, g.elements.begin() + from,
-                            g.elements.begin() + from + 1);
-        } catch (const std::runtime_error&) {
-        }
+    m_doc->applyMutation([&](Title& t) {
+        int n = static_cast<int>(t.elements.size());
+        if (from < 1 || from >= n || to < 1 || to >= n || from == to) return;
+        if (from < to)
+            std::rotate(t.elements.begin() + from, t.elements.begin() + from + 1,
+                        t.elements.begin() + to + 1);
+        else
+            std::rotate(t.elements.begin() + to, t.elements.begin() + from,
+                        t.elements.begin() + from + 1);
     });
 }
 
-void MoveElementCmd::undo()
-{
-    doMove(m_to, m_from);
-}
-void MoveElementCmd::redo()
-{
-    doMove(m_from, m_to);
-}
+void MoveElementCmd::undo() { doMove(m_to, m_from); }
+void MoveElementCmd::redo() { doMove(m_from, m_to); }

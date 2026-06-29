@@ -18,14 +18,14 @@ set(PROJECT_SOURCES
         main.cpp
         mainwindow.cpp
         mainwindow.h
-        model/EditorScene.h
-        model/EditorScene.cpp
-        model/SceneDocument.h
-        model/SceneDocument.cpp
+        model/EditorTitle.h
+        model/EditorTitle.cpp
+        model/TitleDocument.h
+        model/TitleDocument.cpp
         model/UndoCommands.h
         model/UndoCommands.cpp
         ui/adaptivestack.h ui/adaptivestack.cpp
-        ui/sceneproperties.h ui/sceneproperties.cpp
+        ui/titleproperties.h ui/titleproperties.cpp
         ui/transformeditor.h ui/transformeditor.cpp
         ui/animationeditor.h ui/animationeditor.cpp
         ui/widgets/ColorUtils.h     ui/widgets/ColorUtils.cpp
@@ -41,12 +41,11 @@ set(PROJECT_SOURCES
         ui/widgets/ColorPicker.h    ui/widgets/ColorPicker.cpp
         ui/cornerradiuseditor.h ui/cornerradiuseditor.cpp
         ui/paddingeditor.h ui/paddingeditor.cpp
-        ui/graphicproperties.h ui/graphicproperties.cpp
         icons.h icons.cpp
         ui/painteditor.h ui/painteditor.cpp
         ui/widgets/CanvasWidget.h ui/widgets/CanvasWidget.cpp
-        ui/widgets/SceneTreeModel.h ui/widgets/SceneTreeModel.cpp
-        ui/widgets/SceneTreeView.h ui/widgets/SceneTreeView.cpp
+        ui/widgets/TitleTreeModel.h ui/widgets/TitleTreeModel.cpp
+        ui/widgets/TitleTreeView.h ui/widgets/TitleTreeView.cpp
         ui/widgets/SelectionHandles.h ui/widgets/SelectionHandles.cpp
         ui/widgets/AnimationTimingEditor.h ui/widgets/AnimationTimingEditor.cpp
         ui/widgets/GraphicTimingEditor.h ui/widgets/GraphicTimingEditor.cpp

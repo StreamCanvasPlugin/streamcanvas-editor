@@ -1,12 +1,12 @@
 #pragma once
 
-#include "model/EditorScene.h"
+#include "model/EditorTitle.h"
 #include <SARibbonMainWindow.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 
-class SceneDocument;
-class EditorScene;
+class TitleDocument;
+class EditorTitle;
 class CanvasWidget;
 class GraphicTimingEditor;
 class RibbonFormatSection;
@@ -42,16 +42,16 @@ private:
     bool maybeSave();
     void doPaste(bool inPlace);
 
-    SceneDocument* m_doc;
-    EditorScene*   m_editorScene;
+    TitleDocument* m_doc;
+    EditorTitle*   m_editorTitle;
     CanvasWidget*  m_canvas;
 
-    // Scene ribbon controls
-    QLineEdit* m_sceneNameEdit{nullptr};
-    QComboBox* m_scenePresetCombo{nullptr};
-    QSpinBox*  m_sceneWidthSpin{nullptr};
-    QSpinBox*  m_sceneHeightSpin{nullptr};
-    bool       m_sceneUpdating{false};
+    // Title ribbon controls
+    QLineEdit* m_titleNameEdit{nullptr};
+    QComboBox* m_titlePresetCombo{nullptr};
+    QSpinBox*  m_titleWidthSpin{nullptr};
+    QSpinBox*  m_titleHeightSpin{nullptr};
+    bool       m_titleUpdating{false};
 
     RibbonFormatSection* m_formatSection{nullptr};
 

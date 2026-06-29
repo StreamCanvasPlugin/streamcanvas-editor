@@ -2,7 +2,7 @@
 
 #include <QWidget>
 
-class SceneDocument;
+class TitleDocument;
 class AnimationTimingEditor;
 class ScrubRuler;
 class QDoubleSpinBox;
@@ -19,9 +19,9 @@ enum class Easing;
 class GraphicTimingEditor : public QWidget {
     Q_OBJECT
 public:
-    explicit GraphicTimingEditor(SceneDocument* doc, QWidget* parent = nullptr);
+    explicit GraphicTimingEditor(TitleDocument* doc, QWidget* parent = nullptr);
 
-    void loadGraphic(int graphicIndex);
+    void load();
     void clear();
     bool isIn() const;
 
@@ -45,8 +45,7 @@ private:
     float computeAutoMaxDuration() const;
     void setScrubTimeOnAll(float t);
 
-    SceneDocument*  m_doc;
-    int             m_graphicIndex{-1};
+    TitleDocument*  m_doc;
     PlayState       m_playState{PlayState::Stopped};
     float           m_scrubTime{0.0f};
 

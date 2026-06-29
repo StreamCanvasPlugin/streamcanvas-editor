@@ -5,7 +5,7 @@
 #include <QSize>
 #include <string>
 
-class SceneDocument;
+class TitleDocument;
 class SARibbonBar;
 class SARibbonCategory;
 class QDoubleSpinBox;
@@ -20,34 +20,28 @@ class ColorPicker;
 class PaintEditor;
 class PaintPickerWidget;
 
-// Creates and manages the contextual "Graphic", "Element", "Style", "Text", "Image", and
-// "QR Code" ribbon categories. Categories shown/hidden in MainWindow::onSelectionChanged.
+// Creates and manages the contextual "Element", "Style", "Text", "Image", and "QR Code"
+// ribbon categories. Categories shown/hidden in MainWindow::onSelectionChanged.
 class RibbonFormatSection : public QObject {
     Q_OBJECT
 public:
-    explicit RibbonFormatSection(SceneDocument* doc, SARibbonBar* ribbon, QObject* parent = nullptr);
+    explicit RibbonFormatSection(TitleDocument* doc, SARibbonBar* ribbon, QObject* parent = nullptr);
 
-    SARibbonCategory* graphicCategory() const { return m_graphicCategory; }
     SARibbonCategory* elementCategory() const { return m_elemCategory; }
     SARibbonCategory* styleCategory()   const { return m_styleCategory; }
     SARibbonCategory* textCategory()    const { return m_textCategory; }
     SARibbonCategory* imageCategory()   const { return m_imageCategory; }
     SARibbonCategory* qrCategory()      const { return m_qrCategory; }
 
-    void setGraphicSelection(const std::string& gi);
-    void setSelection(const std::string& gi, const std::string& ei);
+    void setSelection(const std::string& ei);
     void clearSelection();
 
 signals:
-    void elementIdChanged(const std::string& gi, const std::string& ei);
-    void deleteGraphicRequested();
+    void elementIdChanged(const std::string& ei);
     void deleteElementRequested();
 
 private slots:
     void onDocumentChanged();
-
-    // Graphic tab slots
-    void onGraphicIdEditingFinished();
 
     // Element tab slots
     void onXChanged(double v);
@@ -83,6 +77,7 @@ private slots:
     void onEllipsizeChanged(int idx);
     void onWrapChanged(int idx);
     void onTextTransformChanged(int idx);
+
     // Image tab slots
     void onImagePathChanged();
     void onScaleModeChanged(int idx);
@@ -91,7 +86,6 @@ private slots:
     void onContentChanged();
 
 private:
-    void buildGraphicTab(SARibbonBar* ribbon);
     void buildElementTab(SARibbonBar* ribbon);
     void buildStyleTab(SARibbonBar* ribbon);
     void buildTextTab(SARibbonBar* ribbon);
@@ -99,26 +93,21 @@ private:
     void buildQrTab(SARibbonBar* ribbon);
     void openContentEditor(const QString& title);
 
-    QPixmap  makePaintSwatch(const Paint& paint, QSize size = QSize(36, 20));
+    QPixmap makePaintSwatch(const Paint& paint, QSize size = QSize(36, 20));
     void updateFillSwatch();
     void updateStrokeSwatch();
     void populateRefCombos();
     void loadFonts();
 
-    SceneDocument* m_doc{nullptr};
-    std::string    m_graphicId;
+    TitleDocument* m_doc{nullptr};
     std::string    m_elementId;
     bool           m_updating{false};
 
-    SARibbonCategory* m_graphicCategory{nullptr};
     SARibbonCategory* m_elemCategory{nullptr};
     SARibbonCategory* m_styleCategory{nullptr};
     SARibbonCategory* m_textCategory{nullptr};
     SARibbonCategory* m_imageCategory{nullptr};
     SARibbonCategory* m_qrCategory{nullptr};
-
-    // Graphic tab
-    QLineEdit* m_graphicIdEdit{nullptr};
 
     // Transform group
     QDoubleSpinBox* m_spinX{nullptr};
@@ -138,8 +127,8 @@ private:
     QToolButton*        m_strokeBtn{nullptr};
     PaintPickerWidget*  m_fillPicker{nullptr};
     PaintPickerWidget*  m_strokePicker{nullptr};
-    PaintEditor*        m_fillEditor{nullptr};    // gradient dialog editor
-    PaintEditor*        m_strokeEditor{nullptr};  // gradient dialog editor
+    PaintEditor*        m_fillEditor{nullptr};
+    PaintEditor*        m_strokeEditor{nullptr};
     QDoubleSpinBox*     m_strokeWidth{nullptr};
 
     // Border group (corner radii)
@@ -194,7 +183,7 @@ private:
     QComboBox*   m_textTransform{nullptr};
     QToolButton* m_textBtn{nullptr};
 
-    // Shared text content editor (Text and QrCode elements)
+    // Shared text content editor
     QDialog*        m_contentDialog{nullptr};
     QPlainTextEdit* m_contentEdit{nullptr};
     int             m_contentSavedCursor{0};

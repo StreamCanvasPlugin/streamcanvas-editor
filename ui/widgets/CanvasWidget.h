@@ -16,7 +16,7 @@
 #endif
 
 #include "engine/types.hpp"
-#include "model/EditorScene.h"
+#include "model/EditorTitle.h"
 
 class QTimer;
 class QDragEnterEvent;
@@ -29,9 +29,9 @@ class QResizeEvent;
 class QMouseEvent;
 class QWheelEvent;
 
-class SceneDocument;
-class EditorScene;
-struct Scene;
+class TitleDocument;
+class EditorTitle;
+struct Title;
 
 class CanvasWidget : public QWidget {
     Q_OBJECT
@@ -46,35 +46,26 @@ public:
     };
     Q_DECLARE_FLAGS(GuideFlags, GuideFlag)
 
-    explicit CanvasWidget(SceneDocument* doc, EditorScene* editorState, QWidget* parent = nullptr);
+    explicit CanvasWidget(TitleDocument* doc, EditorTitle* editorState, QWidget* parent = nullptr);
     ~CanvasWidget() override;
 
-    void startAnimationPreview(int graphicIndex, bool playIn);
+    void startAnimationPreview(bool playIn);
     void stopAnimationPreview();
-    void previewAtTime(int graphicIndex, bool isIn, double t);
+    void previewAtTime(bool isIn, double t);
 
     // Guides
     void setGuides(GuideFlags flags);
-    GuideFlags guides() const
-    {
-        return m_guideFlags;
-    }
+    GuideFlags guides() const { return m_guideFlags; }
 
     // Snapping
     void setSnapping(bool on);
-    bool snapping() const
-    {
-        return m_snappingEnabled;
-    }
+    bool snapping() const { return m_snappingEnabled; }
 
     // Zoom / pan
     void zoomIn();
     void zoomOut();
     void fitToWindow();
-    double zoom() const
-    {
-        return m_zoom;
-    }
+    double zoom() const { return m_zoom; }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -96,18 +87,18 @@ private slots:
     void onAnimTick();
 
 private:
-    // Coordinate helpers (all derived from letterboxRect — zoom/pan automatic)
+    // Coordinate helpers
     QRectF letterboxRect() const;
-    QPointF widgetToScene(QPointF pt) const;
-    QRectF sceneToWidget(const Rectangle& r) const;
+    QPointF widgetToTitle(QPointF pt) const;
+    QRectF titleToWidget(const Rectangle& r) const;
 
     // Hit testing
-    SelectionId hitTest(QPointF scenePt) const;
+    SelectionId hitTest(QPointF titlePt) const;
     int hitHandle(QPointF widgetPt) const;
 
     // Rendering
-    void renderStaticScene();
-    void renderPreviewScene();
+    void renderStaticTitle();
+    void renderPreviewTitle();
     void setupCairo();
     void teardownCairo();
 
@@ -117,70 +108,63 @@ private:
     void drawSnapLines(QPainter& p, const QRectF& lb);
     void drawElementOutlines(QPainter& p);
 
-    // Scene dimension helpers
-    int sceneW() const;
-    int sceneH() const;
+    // Title dimension helpers
+    int titleW() const;
+    int titleH() const;
 
     // Zoom helper
     void zoomToward(QPointF widgetCenter, double factor);
 
     // Snapping
-    Rectangle applySnapping(Rectangle b, int gi, int ei);
+    Rectangle applySnapping(Rectangle b, int ei);
     void appendGuideCandidates(QList<double>& candX, QList<double>& candY) const;
 
     // Cursor
     void updateCursorForPos(QPointF widgetPos);
 
-    // Resize drag (extracted so key events can re-trigger it without mouse movement)
+    // Resize drag
     void applyResizeDrag(QPointF widgetPos, Qt::KeyboardModifiers mods);
 
-    // Graphic helpers
-    Rectangle graphicSceneBounds(int gi) const;
-
     // ── Document / selection ──────────────────────────────────────────────────
-    SceneDocument* m_doc;
-    EditorScene* m_editorState;
+    TitleDocument* m_doc;
+    EditorTitle* m_editorState;
 
     // ── Cairo offscreen surface ───────────────────────────────────────────────
     cairo_surface_t* m_surface{nullptr};
     cairo_t* m_cr{nullptr};
-    QImage m_image; // zero-copy wrapper around m_surface pixels
+    QImage m_image;
 
     // ── Animation preview ─────────────────────────────────────────────────────
     QTimer* m_animTimer{nullptr};
     QElapsedTimer m_elapsedTimer;
-    std::unique_ptr<Scene> m_previewScene;
+    std::unique_ptr<Title> m_previewTitle;
 
     // ── Guides ───────────────────────────────────────────────────────────────
     GuideFlags m_guideFlags{GuideRuleOfThirds | GuideCenterLines};
 
     // ── Snapping ─────────────────────────────────────────────────────────────
     bool m_snappingEnabled{true};
-    QList<double> m_snapLinesX; // active snap lines in scene coords during drag
+    QList<double> m_snapLinesX;
     QList<double> m_snapLinesY;
 
     // ── Zoom + pan ────────────────────────────────────────────────────────────
     double m_zoom{1.0};
     QPointF m_panOffset{0.0, 0.0};
 
-    // Middle-button pan
     bool m_panning{false};
     QPointF m_panStart;
     QPointF m_panStartOffset;
 
     // ── Element drag / resize ─────────────────────────────────────────────────
-    enum class DragMode { None, Move, Resize, MoveGraphic };
+    enum class DragMode { None, Move, Resize };
     DragMode m_dragMode{DragMode::None};
     int m_dragHandle{-1};
     QPointF m_dragStartWidget;
-    QPointF m_dragStartScene;
-    QPointF m_lastDragWidgetPos; // latest widget-space mouse pos during drag
+    QPointF m_dragStartTitle;
+    QPointF m_lastDragWidgetPos;
     Rectangle m_dragOrigBounds;
-    int m_dragGi{-1};
-    int m_dragEi{-1};
+    int m_dragEi{-1};  // index into title.elements (1-based)
     bool m_dragging{false};
-
-    std::vector<Rectangle> m_graphicOrigBounds;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(CanvasWidget::GuideFlags)

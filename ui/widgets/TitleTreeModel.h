@@ -4,14 +4,14 @@
 #include <QMimeData>
 #include <QVector>
 
-#include "model/EditorScene.h"
+#include "model/EditorTitle.h"
 
-class SceneDocument;
+class TitleDocument;
 
-class SceneTreeModel : public QAbstractItemModel {
+class TitleTreeModel : public QAbstractItemModel {
     Q_OBJECT
 public:
-    explicit SceneTreeModel(SceneDocument* doc, QObject* parent = nullptr);
+    explicit TitleTreeModel(TitleDocument* doc, QObject* parent = nullptr);
 
     // QAbstractItemModel overrides
     QModelIndex index(int row, int column,
@@ -34,33 +34,19 @@ public:
     QModelIndex indexForSelection(const SelectionId& sel) const;
 
 private:
-    SceneDocument* m_doc;
+    TitleDocument* m_doc;
 
-    // Z-Order sorting helpers (items displayed descending by zOrder — highest first)
-    QVector<int> sortedGraphicIndices() const;
-    QVector<int> sortedElementIndices(int gi) const;
-    int sortedGraphicRow(int gi) const;
-    int sortedElementRow(int gi, int ei) const;
+    // Returns title.elements indices [1..] sorted descending by zOrder (highest = row 0)
+    QVector<int> sortedElementIndices() const;
+    int sortedElementRow(int ei) const;  // ei = index into title.elements
 
-    static constexpr quintptr LEVEL_SCENE = 0;
-    static constexpr quintptr LEVEL_GRAPHIC = 1;
+    static constexpr quintptr LEVEL_SCENE   = 0;
     static constexpr quintptr LEVEL_ELEMENT = 2;
 
-    static quintptr makeId(quintptr level, int gi, int ei)
+    static quintptr makeId(quintptr level, int ei)
     {
-        return (level << 60) | (quintptr(gi & 0x0FFFFFFF) << 32) | quintptr(quint32(ei));
+        return (level << 60) | quintptr(quint32(ei));
     }
-
-    static quintptr levelOf(quintptr id)
-    {
-        return (id >> 60) & 0x3;
-    }
-    static int giOf(quintptr id)
-    {
-        return int((id >> 32) & 0x0FFFFFFF);
-    }
-    static int eiOf(quintptr id)
-    {
-        return int(qint32(id & 0xFFFFFFFF));
-    }
+    static quintptr levelOf(quintptr id) { return (id >> 60) & 0x3; }
+    static int eiOf(quintptr id) { return int(qint32(id & 0xFFFFFFFF)); }
 };

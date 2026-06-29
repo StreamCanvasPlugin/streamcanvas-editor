@@ -5,14 +5,14 @@
 #include <QWidget>
 
 class QGridLayout;
-class SceneDocument;
+class TitleDocument;
 
 class BrandColorSwatchGrid : public QWidget {
     Q_OBJECT
 public:
     enum class Mode { Compact, Full };
 
-    explicit BrandColorSwatchGrid(SceneDocument* doc, Mode mode, QWidget* parent = nullptr);
+    explicit BrandColorSwatchGrid(TitleDocument* doc, Mode mode, QWidget* parent = nullptr);
 
     void setCurrentColor(const QColor& color);
 
@@ -25,7 +25,7 @@ private slots:
 private:
     void rebuild();
 
-    SceneDocument* m_doc{nullptr};
+    TitleDocument* m_doc{nullptr};
     Mode m_mode;
     QGridLayout* m_grid{nullptr};
     QColor m_currentColor{Qt::black};

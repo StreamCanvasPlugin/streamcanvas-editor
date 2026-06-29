@@ -2,13 +2,13 @@
 #include "BrandColorSwatchGrid.h"
 #include "ColorPicker.h"
 #include "icons.h"
-#include "model/SceneDocument.h"
+#include "model/TitleDocument.h"
 #include <QFrame>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
-PaintPickerWidget::PaintPickerWidget(SceneDocument* doc, QWidget* parent)
+PaintPickerWidget::PaintPickerWidget(TitleDocument* doc, QWidget* parent)
     : QWidget(parent)
 {
     auto* layout = new QVBoxLayout(this);

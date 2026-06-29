@@ -1,12 +1,12 @@
 #include "graphicproperties.h"
 #include "engine/scene.h"
-#include "model/SceneDocument.h"
+#include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 
 #include <QFormLayout>
 #include <QVBoxLayout>
 
-GraphicProperties::GraphicProperties(SceneDocument* doc, QWidget* parent)
+GraphicProperties::GraphicProperties(TitleDocument* doc, QWidget* parent)
     : QWidget(parent), m_doc(doc)
 {
     auto* layout = new QVBoxLayout(this);
@@ -28,7 +28,7 @@ GraphicProperties::GraphicProperties(SceneDocument* doc, QWidget* parent)
     connect(m_idEdit, &QLineEdit::editingFinished, this, &GraphicProperties::onIdEditingFinished);
     connect(m_zOrderSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &GraphicProperties::onZOrderChanged);
-    connect(m_doc, &SceneDocument::documentChanged, this, &GraphicProperties::onDocumentChanged);
+    connect(m_doc, &TitleDocument::documentChanged, this, &GraphicProperties::onDocumentChanged);
 }
 
 void GraphicProperties::setSelection(const std::string& graphicId)

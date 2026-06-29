@@ -6,12 +6,12 @@
 #include <QWidget>
 #include <string>
 
-class SceneDocument;
+class TitleDocument;
 
 class GraphicProperties : public QWidget {
     Q_OBJECT
 public:
-    explicit GraphicProperties(SceneDocument* doc, QWidget* parent = nullptr);
+    explicit GraphicProperties(TitleDocument* doc, QWidget* parent = nullptr);
 
     void setSelection(const std::string& graphicId);
 
@@ -21,7 +21,7 @@ private slots:
     void onZOrderChanged(int value);
 
 private:
-    SceneDocument* m_doc;
+    TitleDocument* m_doc;
     std::string m_graphicId;
     bool m_updating{false};
 

@@ -2,16 +2,16 @@
 
 #include <QTreeView>
 
-#include "model/EditorScene.h"
+#include "model/EditorTitle.h"
 
-class SceneDocument;
-class EditorScene;
-class SceneTreeModel;
+class TitleDocument;
+class EditorTitle;
+class TitleTreeModel;
 
-class SceneTreeView : public QTreeView {
+class TitleTreeView : public QTreeView {
     Q_OBJECT
 public:
-    explicit SceneTreeView(SceneDocument* doc, EditorScene* editorScene, QWidget* parent = nullptr);
+    explicit TitleTreeView(TitleDocument* doc, EditorTitle* editorTitle, QWidget* parent = nullptr);
 
 protected:
     bool event(QEvent* e) override;
@@ -22,8 +22,8 @@ private slots:
     void onEditorSelectionChanged(SelectionId id);
 
 private:
-    SceneDocument* m_doc;
-    EditorScene* m_editorScene;
-    SceneTreeModel* m_model;
+    TitleDocument* m_doc;
+    EditorTitle* m_editorTitle;
+    TitleTreeModel* m_model;
     bool m_syncingSelection{false};
 };

@@ -2,15 +2,15 @@
 
 #include <QWidget>
 
-class SceneDocument;
+class TitleDocument;
 class QComboBox;
 class QLineEdit;
 class QSpinBox;
 
-class SceneProperties : public QWidget {
+class TitleProperties : public QWidget {
     Q_OBJECT
 public:
-    explicit SceneProperties(SceneDocument* doc, QWidget* parent = nullptr);
+    explicit TitleProperties(TitleDocument* doc, QWidget* parent = nullptr);
 
 private slots:
     void onDocumentChanged();
@@ -20,7 +20,7 @@ private slots:
     void onHeightFinished();
 
 private:
-    SceneDocument* m_doc;
+    TitleDocument* m_doc;
     QLineEdit* m_nameEdit;
     QComboBox* m_presetCombo;
     QSpinBox* m_widthSpin;

@@ -2,22 +2,21 @@
 
 #include <QObject>
 
-class SceneDocument;
+class TitleDocument;
 
 struct SelectionId {
-    enum class Level { None, Scene, Graphic, Element };
+    enum class Level { None, Title, Element };
 
     Level level{Level::None};
-    int graphicIndex{-1};
-    int elementIndex{-1};
+    int elementIndex{-1};  // direct index into title.elements (1-based; [0] is root)
 
     bool operator==(const SelectionId&) const = default;
 };
 
-class EditorScene : public QObject {
+class EditorTitle : public QObject {
     Q_OBJECT
 public:
-    explicit EditorScene(SceneDocument* doc, QObject* parent = nullptr);
+    explicit EditorTitle(TitleDocument* doc, QObject* parent = nullptr);
 
     SelectionId selection() const
     {
@@ -32,6 +31,6 @@ private slots:
     void validateSelection();
 
 private:
-    SceneDocument* m_doc;
+    TitleDocument* m_doc;
     SelectionId m_selection;
 };

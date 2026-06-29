@@ -4,7 +4,7 @@
 #include <QPainter>
 #include <QToolButton>
 
-#include "model/SceneDocument.h"
+#include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 
 // ── SwatchCell ────────────────────────────────────────────────────────────────
@@ -60,14 +60,14 @@ private:
 
 // ── BrandColorSwatchGrid ──────────────────────────────────────────────────────
 
-BrandColorSwatchGrid::BrandColorSwatchGrid(SceneDocument* doc, Mode mode, QWidget* parent)
+BrandColorSwatchGrid::BrandColorSwatchGrid(TitleDocument* doc, Mode mode, QWidget* parent)
     : QWidget(parent), m_doc(doc), m_mode(mode)
 {
     m_grid = new QGridLayout(this);
     m_grid->setContentsMargins(0, 0, 0, 0);
     m_grid->setSpacing(kCellGap);
 
-    connect(m_doc, &SceneDocument::documentChanged, this, &BrandColorSwatchGrid::onDocumentChanged);
+    connect(m_doc, &TitleDocument::documentChanged, this, &BrandColorSwatchGrid::onDocumentChanged);
 
     rebuild();
 }

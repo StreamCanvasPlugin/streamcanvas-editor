@@ -12,13 +12,13 @@
 #include "ui/widgets/RadialGradientEditor.h"
 
 class BrandColorSwatchGrid;
-class SceneDocument;
+class TitleDocument;
 
 class PaintEditor : public QWidget {
     Q_OBJECT
 
 public:
-    explicit PaintEditor(SceneDocument* doc = nullptr, QWidget* parent = nullptr);
+    explicit PaintEditor(TitleDocument* doc = nullptr, QWidget* parent = nullptr);
 
     Paint getPaint() const;
     void setPaint(const Paint& paint);
