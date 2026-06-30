@@ -15,6 +15,105 @@ executors:
     machine:
       image: ubuntu-2404:current
 
+commands:
+  upload_to_minio:
+    parameters:
+      component:
+        type: string
+      linux_ext:
+        type: string
+        default: tar.gz
+      windows_ext:
+        type: string
+        default: zip
+      shell:
+        type: enum
+        enum: [bash, powershell]
+        default: bash
+    steps:
+      - when:
+          condition:
+            equal: [bash, << parameters.shell >>]
+          steps:
+            - run:
+                name: Upload << parameters.component >> (linux) to MinIO
+                command: |
+                  if [ -z "$CIRCLE_TAG" ]; then echo "Not a tag — skipping"; exit 0; fi
+                  pip3 install --quiet --break-system-packages awscli
+                  export AWS_ACCESS_KEY_ID="$MINIO_ACCESS_KEY_ID"
+                  export AWS_SECRET_ACCESS_KEY="$MINIO_SECRET_ACCESS_KEY"
+                  COMP="<< parameters.component >>"
+                  EXT="<< parameters.linux_ext >>"
+                  WEXT="<< parameters.windows_ext >>"
+                  TAG="$CIRCLE_TAG"
+                  FILE="artifacts/${COMP}-${TAG}-linux-x86_64.${EXT}"
+                  aws s3 cp "$FILE" \
+                    "s3://releases/${COMP}/${COMP}-${TAG}-linux-x86_64.${EXT}" \
+                    --endpoint-url "$MINIO_S3_ENDPOINT" --region us-east-1
+                  aws s3 cp s3://releases/manifest.json /tmp/manifest.json \
+                    --endpoint-url "$MINIO_S3_ENDPOINT" --region us-east-1 2>/dev/null \
+                    || echo '{}' > /tmp/manifest.json
+                  python3 << 'PYEOF'
+                  import json, os
+                  tag  = os.environ['CIRCLE_TAG']
+                  comp = os.environ['COMP']
+                  ext  = os.environ['EXT']
+                  wext = os.environ['WEXT']
+                  try:
+                      with open('/tmp/manifest.json') as f:
+                          m = json.load(f)
+                  except Exception:
+                      m = {}
+                  m[comp] = {
+                      'linux_x86_64': f'{comp}-{tag}-linux-x86_64.{ext}',
+                      'windows_x64':  f'{comp}-{tag}-windows-x64.{wext}',
+                  }
+                  with open('/tmp/manifest.json', 'w') as f:
+                      json.dump(m, f, indent=2)
+                  PYEOF
+                  aws s3 cp /tmp/manifest.json s3://releases/manifest.json \
+                    --endpoint-url "$MINIO_S3_ENDPOINT" --region us-east-1 \
+                    --content-type application/json
+      - when:
+          condition:
+            equal: [powershell, << parameters.shell >>]
+          steps:
+            - run:
+                name: Upload << parameters.component >> (windows) to MinIO
+                shell: powershell.exe
+                command: |
+                  if (-not $env:CIRCLE_TAG) { Write-Output "Not a tag — skipping"; exit 0 }
+                  $tag  = $env:CIRCLE_TAG
+                  $comp = '<< parameters.component >>'
+                  $ext  = '<< parameters.windows_ext >>'
+                  $env:AWS_ACCESS_KEY_ID     = $env:MINIO_ACCESS_KEY_ID
+                  $env:AWS_SECRET_ACCESS_KEY = $env:MINIO_SECRET_ACCESS_KEY
+
+                  $file = "artifacts\$comp-$tag-windows-x64.$ext"
+                  aws s3 cp $file `
+                    "s3://releases/$comp/$comp-$tag-windows-x64.$ext" `
+                    --endpoint-url $env:MINIO_S3_ENDPOINT --region us-east-1
+
+                  try {
+                    aws s3 cp s3://releases/manifest.json "$env:TEMP\manifest.json" `
+                      --endpoint-url $env:MINIO_S3_ENDPOINT --region us-east-1 2>$null
+                  } catch {}
+                  if (-not (Test-Path "$env:TEMP\manifest.json")) {
+                    '{}' | Set-Content "$env:TEMP\manifest.json"
+                  }
+
+                  $linExt = '<< parameters.linux_ext >>'
+                  $m = Get-Content "$env:TEMP\manifest.json" | ConvertFrom-Json
+                  $m | Add-Member -NotePropertyName $comp -NotePropertyValue ([PSCustomObject]@{
+                    linux_x86_64 = "$comp-$tag-linux-x86_64.$linExt"
+                    windows_x64  = "$comp-$tag-windows-x64.$ext"
+                  }) -Force
+                  $m | ConvertTo-Json -Depth 5 | Set-Content "$env:TEMP\manifest_new.json"
+
+                  aws s3 cp "$env:TEMP\manifest_new.json" s3://releases/manifest.json `
+                    --endpoint-url $env:MINIO_S3_ENDPOINT --region us-east-1 `
+                    --content-type application/json
+
 jobs:
   build-ubuntu:
     executor: linux
@@ -78,8 +177,6 @@ jobs:
             wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
             chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
 
-            # cmake install populates AppDir with binary, desktop entry, and icons
-            # (CMakeLists.txt install rules handle all three for UNIX)
             DESTDIR=AppDir cmake --install build --prefix /usr
 
             QMAKE=$(which qmake6 2>/dev/null || which qmake) \
@@ -91,6 +188,13 @@ jobs:
             mkdir -p artifacts
             mv OBS_Graphics_Editor-x86_64.AppImage \
               "artifacts/editor-${CIRCLE_TAG}-linux-x86_64.AppImage"
+      - store_artifacts:
+          path: artifacts
+          destination: releases
+      - upload_to_minio:
+          component: editor
+          linux_ext: AppImage
+
   build-windows:
     executor:
       name: windows/default
@@ -115,7 +219,7 @@ jobs:
             New-Item -ItemType Directory -Force -Path $env:SCCACHE_DIR | Out-Null
       - run:
           name: Install build tools
-          command: choco install pkgconfiglite cmake sccache python -y --no-progress
+          command: choco install pkgconfiglite cmake sccache python awscli -y --no-progress
       - restore_cache:
           keys:
             - qt-6.8.3-windows-v1
@@ -248,6 +352,10 @@ jobs:
       - store_artifacts:
           path: artifacts
           destination: releases
+      - upload_to_minio:
+          component: editor
+          linux_ext: AppImage
+          shell: powershell
 
 workflows:
   build:
