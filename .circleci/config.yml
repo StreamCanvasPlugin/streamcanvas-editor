@@ -127,7 +127,7 @@ jobs:
             New-Item -ItemType Directory -Force -Path $env:SCCACHE_DIR | Out-Null
       - run:
           name: Install build tools
-          command: choco install pkgconfiglite cmake sccache -y --no-progress
+          command: choco install pkgconfiglite cmake sccache python -y --no-progress
       - restore_cache:
           keys:
             - qt-6.8.3-windows-v1
@@ -198,13 +198,13 @@ jobs:
           command: |
             $install_dir = "$PWD\build_x64\vcpkg_installed"
             $env:PKG_CONFIG_PATH = "$install_dir\x64-windows\lib\pkgconfig"
-            $env:Qt6_DIR = "$env:USERPROFILE\Qt\6.8.3\msvc2022_64\lib\cmake\Qt6"
             cmake -S . -B build_x64 `
               -G "Visual Studio 17 2022" -A x64 `
               -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
               -DVCPKG_TARGET_TRIPLET=x64-windows `
               -DVCPKG_INSTALLED_DIR="$install_dir" `
               -DVCPKG_MANIFEST_INSTALL=OFF `
+              "-DCMAKE_PREFIX_PATH=$env:USERPROFILE\Qt\6.8.3\msvc2022_64" `
               -DCMAKE_C_COMPILER_LAUNCHER=sccache `
               -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
               "-DCPM_SOURCE_CACHE=$env:USERPROFILE\.cpm"
