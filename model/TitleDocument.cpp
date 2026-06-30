@@ -355,7 +355,7 @@ nlohmann::json TitleDocument::elementToJson(const VisualElement& el)
         j["wrap"] = wrapModeToString(te->textStyle.wrapMode);
         j["text_transform"] = textTransformToString(te->textStyle.transform);
         if (te->textStyle.lineSpacing != 0.0f) j["line_spacing"] = te->textStyle.lineSpacing;
-        if (te->textStyle.charSpacing != 0.0f) j["char_spacing"] = te->textStyle.charSpacing;
+        if (te->textStyle.letterSpacing != 0.0f) j["letter_spacing"] = te->textStyle.letterSpacing;
     } else if (const auto* ie = dynamic_cast<const ImageElement*>(&el)) {
         j["type"] = "image";
         if (!ie->imagePath.empty()) j["image_path"] = ie->imagePath;

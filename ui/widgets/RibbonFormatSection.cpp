@@ -950,7 +950,7 @@ void RibbonFormatSection::onDocumentChanged()
             m_contentEdit->setTextCursor(cursor);
         }
         m_lineSpacing->setValue(static_cast<double>(te->textStyle.lineSpacing));
-        m_charSpacing->setValue(static_cast<double>(te->textStyle.charSpacing));
+        m_charSpacing->setValue(static_cast<double>(te->textStyle.letterSpacing));
     }
 
     if (const auto* ie = dynamic_cast<const ImageElement*>(el)) {
@@ -1303,8 +1303,8 @@ void RibbonFormatSection::onCharSpacingChanged(double v)
     if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
-        [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.charSpacing; },
-        "char_spacing", ElemMergeTag::CharSpacing));
+        [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.letterSpacing; },
+        "letter_spacing", ElemMergeTag::CharSpacing));
 }
 
 void RibbonFormatSection::onContentChanged()
