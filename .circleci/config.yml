@@ -2,7 +2,6 @@ version: 2.1
 
 # Notes:
 #   - Windows jobs require CircleCI's paid plan.
-#   - Set GITHUB_TOKEN in CircleCI project settings for the create-release job.
 #   - Enable "Only build pull requests" in CircleCI project settings to replicate
 #     the GH Actions behavior of building only on PRs targeting master/main.
 #   - There is no path-ignore equivalent for markdown files; all pushes trigger builds.
@@ -92,17 +91,6 @@ jobs:
             mkdir -p artifacts
             mv OBS_Graphics_Editor-x86_64.AppImage \
               "artifacts/editor-${CIRCLE_TAG}-linux-x86_64.AppImage"
-      - run:
-          name: Prepare Workspace
-          command: mkdir -p artifacts
-      - persist_to_workspace:
-          root: .
-          paths:
-            - artifacts
-      - store_artifacts:
-          path: artifacts
-          destination: releases
-
   build-windows:
     executor:
       name: windows/default
@@ -257,64 +245,9 @@ jobs:
             New-Item -ItemType Directory -Path artifacts -Force
             Compress-Archive -Path $stagingDir `
               -DestinationPath "artifacts\editor-$tag-windows-x64.zip"
-      - run:
-          name: Prepare Workspace
-          command: New-Item -ItemType Directory -Path artifacts -Force
-      - persist_to_workspace:
-          root: .
-          paths:
-            - artifacts
       - store_artifacts:
           path: artifacts
           destination: releases
-
-  create-release:
-    executor: linux
-    steps:
-      - attach_workspace:
-          at: ~/workspace
-      - run:
-          name: Install GitHub CLI
-          command: |
-            type gh >/dev/null 2>&1 || {
-              sudo apt-get update -qq && sudo apt-get install -y gh
-            }
-      - run:
-          name: Validate Tag
-          command: |
-            if ! echo "$CIRCLE_TAG" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-beta[0-9]*|-rc[0-9]*)?$'; then
-              echo "Tag '$CIRCLE_TAG' does not match a release version format — skipping"
-              circleci-agent step halt
-            fi
-      - run:
-          name: Generate Checksums
-          command: |
-            echo "### Checksums" > CHECKSUMS.txt
-            shopt -s nullglob
-            for file in ~/workspace/artifacts/*.AppImage \
-                        ~/workspace/artifacts/*.zip; do
-              echo "    ${file##*/}: $(sha256sum "$file" | cut -d ' ' -f 1)" >> CHECKSUMS.txt
-            done
-            cat CHECKSUMS.txt
-      - run:
-          name: Create GitHub Release
-          command: |
-            PRERELEASE_FLAG=""
-            if echo "$CIRCLE_TAG" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-(beta|rc)'; then
-              PRERELEASE_FLAG="--prerelease"
-            fi
-            shopt -s nullglob
-            ARTIFACTS=(
-              ~/workspace/artifacts/*.AppImage
-              ~/workspace/artifacts/*.zip
-            )
-            gh release create "$CIRCLE_TAG" \
-              --repo "$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME" \
-              --title "OBS Graphics Editor $CIRCLE_TAG" \
-              --notes-file CHECKSUMS.txt \
-              --draft \
-              $PRERELEASE_FLAG \
-              "${ARTIFACTS[@]}"
 
 workflows:
   build:
@@ -337,12 +270,3 @@ workflows:
                 - /release\/.*/
             tags:
               only: /.*/
-      - create-release:
-          requires:
-            - build-ubuntu
-            - build-windows
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /[0-9]+\.[0-9]+\.[0-9]+.*/
