@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Standalone Qt6 desktop app for authoring animated broadcast graphics scenes. Saves scenes as JSON consumed by the obs-graphics OBS plugin.
+Standalone Qt6 desktop app for authoring animated broadcast graphics scenes. Saves scenes as JSON consumed by the StreamCanvas OBS plugin.
 
 ## Build
 
@@ -8,7 +8,7 @@ Standalone Qt6 desktop app for authoring animated broadcast graphics scenes. Sav
 git submodule update --init   # populate engine/
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j$(nproc)
-./build/editor_v2
+./build/stream-canvas-editor
 ```
 
 Qt Creator uses `build/Desktop-Debug` kit preset. QtAwesome is fetched by CPM at configure time.

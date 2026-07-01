@@ -326,10 +326,10 @@ void MainWindow::setupRibbon()
 
     m_aboutAction = new QAction(themedIcon(Icons16::Misc_Info), "About…", this);
     connect(m_aboutAction, &QAction::triggered, this, [this]() {
-        QMessageBox::about(this, "About obs-graphics Title Editor",
-            "<b>obs-graphics Title Editor</b> &mdash; version " APP_VERSION "<br><br>"
+        QMessageBox::about(this, "About StreamCanvas Title Editor",
+            "<b>StreamCanvas Title Editor</b> &mdash; version " APP_VERSION "<br><br>"
             "A standalone desktop editor for authoring animated broadcast graphics titles.<br>"
-            "Titles are saved as .ogt archives and consumed by the <i>obs-graphics</i> OBS Studio plugin.<br><br>"
+            "Titles are saved as .ogt archives and consumed by the <i>StreamCanvas</i> OBS Studio plugin.<br><br>"
             "Built with Qt 6 and Cairo.");
     });
 
@@ -699,7 +699,7 @@ void MainWindow::onOpen()
 {
     if (!maybeSave()) return;
     QString path = QFileDialog::getOpenFileName(this, "Open Title", QString(),
-                                                "OBS Graphics Title (*.ogt);;All Files (*)");
+                                                "StreamCanvas Title (*.ogt);;All Files (*)");
     if (path.isEmpty()) return;
     if (!m_doc->load(path))
         QMessageBox::warning(this, "Open Failed",
@@ -718,7 +718,7 @@ void MainWindow::onSave()
 void MainWindow::onSaveAs()
 {
     QString path = QFileDialog::getSaveFileName(this, "Save Title As", QString(),
-                                                "OBS Graphics Title (*.ogt);;All Files (*)");
+                                                "StreamCanvas Title (*.ogt);;All Files (*)");
     if (path.isEmpty()) return;
     if (!path.endsWith(".ogt", Qt::CaseInsensitive))
         path += ".ogt";
@@ -763,7 +763,7 @@ void MainWindow::showEvent(QShowEvent* event)
 
 void MainWindow::updateWindowTitle()
 {
-    setWindowTitle(QString("%1[*] — obs-graphics Title Editor").arg(m_doc->titleName()));
+    setWindowTitle(QString("%1[*] — StreamCanvas Title Editor").arg(m_doc->titleName()));
 }
 
 // ── Selection ─────────────────────────────────────────────────────────────────

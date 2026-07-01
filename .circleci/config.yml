@@ -188,7 +188,7 @@ jobs:
               --output appimage
 
             mkdir -p artifacts
-            mv OBS_Graphics_Editor-x86_64.AppImage \
+            mv StreamCanvas_Editor-x86_64.AppImage \
               "artifacts/editor-${CIRCLE_TAG}-linux-x86_64.AppImage"
       - store_artifacts:
           path: artifacts
@@ -339,9 +339,9 @@ jobs:
             $stagingDir = "editor-windows-stage"
             New-Item -ItemType Directory -Path $stagingDir
 
-            Copy-Item "build_x64\$config\obs-graphics-editor.exe" "$stagingDir\"
+            Copy-Item "build_x64\$config\stream-canvas-editor.exe" "$stagingDir\"
             & "$env:USERPROFILE\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe" `
-              --release --no-translations --no-system-d3d-compiler "$stagingDir\obs-graphics-editor.exe"
+              --release --no-translations --no-system-d3d-compiler "$stagingDir\stream-canvas-editor.exe"
 
             $vcpkgBin = "build_x64\vcpkg_installed\x64-windows\bin"
             if (Test-Path $vcpkgBin) {

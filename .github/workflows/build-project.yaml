@@ -78,7 +78,7 @@ jobs:
           mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
           cat > AppDir/usr/share/applications/editor.desktop << 'DESKTOP'
           [Desktop Entry]
-          Name=OBS Graphics Editor
+          Name=StreamCanvas Editor
           Exec=editor
           Icon=editor
           Type=Application
@@ -95,7 +95,7 @@ jobs:
             --plugin qt \
             --output appimage
 
-          mv "OBS_Graphics_Editor"*.AppImage editor-${{ github.ref_name }}-linux-x86_64.AppImage
+          mv "StreamCanvas_Editor"*.AppImage editor-${{ github.ref_name }}-linux-x86_64.AppImage
 
       - name: Upload Artifacts 📡
         if: fromJSON(needs.check-event.outputs.package)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(obs-graphics-editor VERSION 0.1 LANGUAGES C CXX)
+project(stream-canvas-editor VERSION 0.1 LANGUAGES C CXX)
 
 include(cmake/CPM.cmake)
 
@@ -146,7 +146,7 @@ endif()
 # If you are developing for iOS or macOS you should consider setting an
 # explicit, fixed bundle identifier manually though.
 if(${QT_VERSION} VERSION_LESS 6.1.0)
-  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER br.com.teknetsys.obs_graphics_editor)
+  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER br.com.teknetsys.stream_canvas_editor)
 endif()
 set_target_properties(${PROJECT_NAME} PROPERTIES
     ${BUNDLE_ID_OPTION}
@@ -166,14 +166,14 @@ install(TARGETS ${PROJECT_NAME}
 
 # ── Linux: install desktop entry and icon for AppImage / system packaging ─────
 if(UNIX AND NOT APPLE)
-    install(FILES packaging/obs-graphics-editor.desktop
+    install(FILES packaging/stream-canvas-editor.desktop
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES resources/icons/app.png
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
-        RENAME obs-graphics-editor.png)
+        RENAME stream-canvas-editor.png)
     install(FILES resources/icons/app.svg
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
-        RENAME obs-graphics-editor.svg)
+        RENAME stream-canvas-editor.svg)
 endif()
 
 if(QT_VERSION_MAJOR EQUAL 6)

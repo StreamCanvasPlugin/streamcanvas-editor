@@ -1,4 +1,4 @@
-# End-User License Agreement — obs-graphics Scene Editor
+# End-User License Agreement — StreamCanvas Scene Editor
 
 Copyright (c) 2026 Diego Lopes. All rights reserved.
 

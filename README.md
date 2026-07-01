@@ -1,6 +1,6 @@
-# obs-graphics-editor
+# StreamCanvas Editor
 
-Standalone Qt6 desktop application for authoring animated broadcast graphics scenes. Scenes are saved as JSON and loaded by the [obs-graphics](https://github.com/OBS-Graphics/obs-graphics) OBS plugin at runtime.
+Standalone Qt6 desktop application for authoring animated broadcast graphics scenes. Scenes are saved as JSON and loaded by the [StreamCanvas](https://github.com/OBS-Graphics/obs-graphics) OBS plugin at runtime.
 
 ## Dependencies
 
@@ -15,7 +15,7 @@ Standalone Qt6 desktop application for authoring animated broadcast graphics sce
 git submodule update --init   # populate engine/
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
-./build/editor_v2
+./build/stream-canvas-editor
 ```
 
 QtAwesome is fetched automatically via CPM at configure time.
@@ -46,5 +46,9 @@ data/             Demo scenes and data sources
 
 ## Related repos
 
-- [obs-graphics-engine](https://github.com/OBS-Graphics/obs-graphics-engine) — rendering engine (submodule)
-- [obs-graphics](https://github.com/OBS-Graphics/obs-graphics) — OBS plugin that loads scenes produced by this editor
+- [StreamCanvas Engine](https://github.com/OBS-Graphics/obs-graphics-engine) — rendering engine (submodule)
+- [StreamCanvas](https://github.com/OBS-Graphics/obs-graphics) — OBS plugin that loads scenes produced by this editor
+
+## AI disclosure
+
+Parts of this project were built with the help of AI coding tools. All AI-assisted changes were reviewed before merging.
