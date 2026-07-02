@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 #include <QDir>
 #include <QDragEnterEvent>
@@ -36,6 +35,7 @@
 #include "model/UndoCommands.h"
 
 #include "SelectionHandles.h"
+#include "icons.h"
 
 static constexpr int kArrowMergeTag = 9999;
 
@@ -157,6 +157,18 @@ void CanvasWidget::zoomIn() { zoomToward(rect().center(), 1.25); }
 void CanvasWidget::zoomOut() { zoomToward(rect().center(), 1.0 / 1.25); }
 void CanvasWidget::fitToWindow() { m_zoom = 1.0; m_panOffset = {}; update(); }
 
+// ── Paint (copy-style) mode ───────────────────────────────────────────────────
+
+void CanvasWidget::setPaintMode(bool active, const std::string& sourceElementId)
+{
+    m_paintModeActive = active;
+    m_paintSourceEi = active ? sourceElementId : std::string();
+    if (active)
+        setCursor(QCursor(themedIcon(Icons16::Misc_PaintBrushThin).pixmap(24, 24)));
+    else
+        unsetCursor();
+}
+
 // ── Snapping ──────────────────────────────────────────────────────────────────
 
 void CanvasWidget::setSnapping(bool on)
@@ -269,23 +281,16 @@ SelectionId CanvasWidget::hitTest(QPointF titlePt) const
         return (va ? va->zOrder : 0) > (vb ? vb->zOrder : 0);
     });
 
-    SelectionId bestHit;
-    double bestArea = std::numeric_limits<double>::max();
-
     for (int ei : order) {
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
         if (!ve) continue;
         const Rectangle gb = globalBounds(*ve);
         if (titlePt.x() >= gb.x && titlePt.x() <= gb.x + gb.width &&
             titlePt.y() >= gb.y && titlePt.y() <= gb.y + gb.height) {
-            double area = gb.width * gb.height;
-            if (area < bestArea) {
-                bestArea = area;
-                bestHit = {SelectionId::Level::Element, ei};
-            }
+            return {SelectionId::Level::Element, ei};
         }
     }
-    return bestHit;
+    return {};
 }
 
 int CanvasWidget::hitHandle(QPointF widgetPt) const
@@ -369,8 +374,10 @@ void CanvasWidget::drawGuides(QPainter& p, const QRectF& lb)
     p.save();
     p.setClipRect(lb);
 
+    const double guideWidth = std::clamp(lb.width() / titleW(), 1.0, 3.0);
+
     if (m_guideFlags & GuideRuleOfThirds) {
-        p.setPen(QPen(QColor(255, 255, 255, 55), 1.0));
+        p.setPen(QPen(QColor(255, 255, 255, 55), guideWidth));
         for (int i = 1; i <= 2; ++i) {
             double x = lb.left() + lb.width() * i / 3.0;
             double y = lb.top() + lb.height() * i / 3.0;
@@ -379,19 +386,19 @@ void CanvasWidget::drawGuides(QPainter& p, const QRectF& lb)
         }
     }
     if (m_guideFlags & GuideCenterLines) {
-        p.setPen(QPen(QColor(255, 255, 255, 38), 1.0, Qt::DashLine));
+        p.setPen(QPen(QColor(255, 255, 255, 38), guideWidth, Qt::DashLine));
         double cx = lb.center().x(), cy = lb.center().y();
         p.drawLine(QPointF(cx, lb.top()), QPointF(cx, lb.bottom()));
         p.drawLine(QPointF(lb.left(), cy), QPointF(lb.right(), cy));
     }
     if (m_guideFlags & GuideTitleSafe) {
         double mx = lb.width() * 0.05, my = lb.height() * 0.05;
-        p.setPen(QPen(QColor(255, 210, 50, 80), 1.0));
+        p.setPen(QPen(QColor(255, 210, 50, 80), guideWidth));
         p.drawRect(lb.adjusted(mx, my, -mx, -my));
     }
     if (m_guideFlags & GuideActionSafe) {
         double mx = lb.width() * 0.10, my = lb.height() * 0.10;
-        p.setPen(QPen(QColor(255, 100, 50, 80), 1.0));
+        p.setPen(QPen(QColor(255, 100, 50, 80), guideWidth));
         p.drawRect(lb.adjusted(mx, my, -mx, -my));
     }
     p.restore();
@@ -402,7 +409,8 @@ void CanvasWidget::drawSnapLines(QPainter& p, const QRectF& lb)
     if (m_snapLinesX.isEmpty() && m_snapLinesY.isEmpty()) return;
     p.save();
     p.setClipRect(lb);
-    p.setPen(QPen(QColor(0, 150, 255, 210), 1.0));
+    const double guideWidth = std::clamp(lb.width() / titleW(), 1.0, 3.0);
+    p.setPen(QPen(QColor(0, 150, 255, 210), guideWidth));
     for (double sx : m_snapLinesX) {
         double wx = lb.left() + sx / titleW() * lb.width();
         p.drawLine(QPointF(wx, lb.top()), QPointF(wx, lb.bottom()));
@@ -686,6 +694,21 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
 
     const QPointF wpos = event->position();
 
+    if (m_paintModeActive) {
+        const QPointF sp = widgetToTitle(wpos);
+        const SelectionId hit = hitTest(sp);
+        if (hit.level == SelectionId::Level::Element) {
+            const Title& t = m_doc->title();
+            const std::string dstId = t.elements[hit.elementIndex]->GetId();
+            if (dstId != m_paintSourceEi)
+                m_doc->undoStack()->push(new CopyElementStyleCmd(m_doc, m_paintSourceEi, dstId));
+        }
+        setPaintMode(false, std::string());
+        emit paintModeFinished();
+        event->accept();
+        return;
+    }
+
     // 1. Resize handle hit?
     const int handle = hitHandle(wpos);
     if (handle >= 0) {
@@ -705,44 +728,28 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
     const SelectionId curSel = m_editorState->selection();
     const QPointF sp = widgetToTitle(wpos);
 
-    // 2. Inside already-selected element → start move
-    if (curSel.level == SelectionId::Level::Element) {
-        const Title& t = m_doc->title();
-        if (curSel.elementIndex >= 1 && curSel.elementIndex < (int)t.elements.size()) {
-            const auto* ve = dynamic_cast<const VisualElement*>(t.elements[curSel.elementIndex].get());
-            if (ve) {
-                const Rectangle gb = globalBounds(*ve);
-                if (sp.x() >= gb.x && sp.x() <= gb.x + gb.width &&
-                    sp.y() >= gb.y && sp.y() <= gb.y + gb.height) {
-                    m_dragMode = DragMode::Move;
-                    m_dragHandle = -1;
-                    m_dragStartWidget = wpos;
-                    m_dragStartTitle = sp;
-                    m_dragOrigBounds = ve->GetBounds();
-                    m_dragEi = curSel.elementIndex;
-                    m_dragging = true;
-                    return;
-                }
-            }
-        }
+    // 2. Always hit-test (top-most element under cursor wins), then decide
+    //    whether to keep dragging the current selection or select the new hit.
+    const SelectionId hit = hitTest(sp);
+
+    if (hit.level != SelectionId::Level::Element) {
+        m_editorState->setSelection(hit);
+        return;
     }
 
-    // 3. Hit-test for new selection
-    const SelectionId hit = hitTest(sp);
-    m_editorState->setSelection(hit);
+    if (!(hit == curSel))
+        m_editorState->setSelection(hit);
 
-    if (hit.level == SelectionId::Level::Element) {
-        const Title& t = m_doc->title();
-        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[hit.elementIndex].get());
-        if (ve) {
-            m_dragMode = DragMode::Move;
-            m_dragHandle = -1;
-            m_dragStartWidget = wpos;
-            m_dragStartTitle = sp;
-            m_dragOrigBounds = ve->GetBounds();
-            m_dragEi = hit.elementIndex;
-            m_dragging = true;
-        }
+    const Title& t = m_doc->title();
+    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[hit.elementIndex].get());
+    if (ve) {
+        m_dragMode = DragMode::Move;
+        m_dragHandle = -1;
+        m_dragStartWidget = wpos;
+        m_dragStartTitle = sp;
+        m_dragOrigBounds = ve->GetBounds();
+        m_dragEi = hit.elementIndex;
+        m_dragging = true;
     }
 }
 
@@ -1037,6 +1044,8 @@ void CanvasWidget::dropEvent(QDropEvent* event)
 
 void CanvasWidget::updateCursorForPos(QPointF wpos)
 {
+    if (m_paintModeActive) return; // cursor already set by setPaintMode(); don't override
+
     static const Qt::CursorShape kHandleCursors[8] = {
         Qt::SizeFDiagCursor, Qt::SizeVerCursor, Qt::SizeBDiagCursor, Qt::SizeHorCursor,
         Qt::SizeHorCursor, Qt::SizeBDiagCursor, Qt::SizeVerCursor, Qt::SizeFDiagCursor};

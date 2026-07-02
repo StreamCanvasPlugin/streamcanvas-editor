@@ -30,6 +30,10 @@ public:
         return m_stops[index];
     }
 
+    void selectStop(int index);
+    bool canDeleteSelectedStop() const;
+    void deleteSelectedStop();
+
     void updateStops();
 
     QSize sizeHint() const override;

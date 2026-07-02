@@ -1,10 +1,13 @@
 #include "painteditor.h"
 #include "ui/widgets/BrandColorSwatchGrid.h"
+#include "ui/UiUtils.h"
+#include "icons.h"
 #include "model/TitleDocument.h"
 #include <QFileDialog>
 #include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -66,21 +69,33 @@ PaintEditor::PaintEditor(TitleDocument* doc, QWidget* parent) : QWidget(parent)
         m_linearEditor->setGeometry(0, 0, 1, 64);
         layout->addWidget(m_linearEditor, 0, 0, 1, 2);
 
+        auto* navRow = new QWidget;
+        auto* nrl = new QHBoxLayout(navRow);
+        nrl->setContentsMargins(0, 0, 0, 0);
+        auto* prevBtn = makeIconToolButton(themedIcon(Icons16::Navigation_ChevronLeft), "Previous Stop");
+        auto* nextBtn = makeIconToolButton(themedIcon(Icons16::Navigation_ChevronRight), "Next Stop");
+        m_lnDeleteStopBtn = makeIconToolButton(themedIcon(Icons16::Action_Trash), "Delete Stop");
+        nrl->addWidget(prevBtn);
+        nrl->addWidget(nextBtn);
+        nrl->addWidget(m_lnDeleteStopBtn);
+        nrl->addStretch();
+        layout->addWidget(navRow, 1, 0, 1, 2);
+
         QLabel* label = new QLabel("Position");
         label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        layout->addWidget(label, 1, 0);
+        layout->addWidget(label, 2, 0);
 
         m_lnStopPosition = new QDoubleSpinBox();
         m_lnStopPosition->setMinimum(0.0);
         m_lnStopPosition->setMaximum(1.0);
         m_lnStopPosition->setDecimals(2);
         m_lnStopPosition->setSingleStep(0.1);
-        layout->addWidget(m_lnStopPosition, 1, 1);
+        layout->addWidget(m_lnStopPosition, 2, 1);
 
         m_cpLinear = new ColorPicker();
         m_cpLinear->setGeometry(0, 0, 80, 80);
         m_cpLinear->setColor(Qt::black);
-        layout->addWidget(m_cpLinear, 2, 0, 1, 2);
+        layout->addWidget(m_cpLinear, 3, 0, 1, 2);
 
         m_mainSelector->addWidget(page);
 
@@ -95,6 +110,15 @@ PaintEditor::PaintEditor(TitleDocument* doc, QWidget* parent) : QWidget(parent)
                 [this](QPointF) { emitPaint(); });
         connect(m_linearEditor, &LinearGradientEditor::p2Changed, this,
                 [this](QPointF) { emitPaint(); });
+        connect(prevBtn, &QToolButton::clicked, this, [this]() {
+            m_linearEditor->selectStop(m_linearEditor->selectedStop() - 1);
+        });
+        connect(nextBtn, &QToolButton::clicked, this, [this]() {
+            m_linearEditor->selectStop(m_linearEditor->selectedStop() + 1);
+        });
+        connect(m_lnDeleteStopBtn, &QToolButton::clicked, this, [this]() {
+            m_linearEditor->deleteSelectedStop();
+        });
 
         m_linearEditor->setStops({{0.0, Qt::black}, {1.0, Qt::white}});
     }
@@ -111,21 +135,33 @@ PaintEditor::PaintEditor(TitleDocument* doc, QWidget* parent) : QWidget(parent)
         m_radialEditor->setGeometry(0, 0, 1, 64);
         layout->addWidget(m_radialEditor, 0, 0, 1, 2);
 
+        auto* navRow = new QWidget;
+        auto* nrl = new QHBoxLayout(navRow);
+        nrl->setContentsMargins(0, 0, 0, 0);
+        auto* prevBtn = makeIconToolButton(themedIcon(Icons16::Navigation_ChevronLeft), "Previous Stop");
+        auto* nextBtn = makeIconToolButton(themedIcon(Icons16::Navigation_ChevronRight), "Next Stop");
+        m_radDeleteStopBtn = makeIconToolButton(themedIcon(Icons16::Action_Trash), "Delete Stop");
+        nrl->addWidget(prevBtn);
+        nrl->addWidget(nextBtn);
+        nrl->addWidget(m_radDeleteStopBtn);
+        nrl->addStretch();
+        layout->addWidget(navRow, 1, 0, 1, 2);
+
         QLabel* label = new QLabel("Position");
         label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        layout->addWidget(label, 1, 0);
+        layout->addWidget(label, 2, 0);
 
         m_radStopPosition = new QDoubleSpinBox();
         m_radStopPosition->setMinimum(0.0);
         m_radStopPosition->setMaximum(1.0);
         m_radStopPosition->setDecimals(2);
         m_radStopPosition->setSingleStep(0.1);
-        layout->addWidget(m_radStopPosition, 1, 1);
+        layout->addWidget(m_radStopPosition, 2, 1);
 
         m_cpRadial = new ColorPicker();
         m_cpRadial->setGeometry(0, 0, 80, 80);
         m_cpRadial->setColor(Qt::black);
-        layout->addWidget(m_cpRadial, 2, 0, 1, 2);
+        layout->addWidget(m_cpRadial, 3, 0, 1, 2);
 
         m_mainSelector->addWidget(page);
 
@@ -138,6 +174,15 @@ PaintEditor::PaintEditor(TitleDocument* doc, QWidget* parent) : QWidget(parent)
                 &PaintEditor::onStopSelected);
         connect(m_radialEditor, &RadialGradientEditor::geometryChanged, this,
                 [this](QPointF, qreal) { emitPaint(); });
+        connect(prevBtn, &QToolButton::clicked, this, [this]() {
+            m_radialEditor->selectStop(m_radialEditor->selectedStop() - 1);
+        });
+        connect(nextBtn, &QToolButton::clicked, this, [this]() {
+            m_radialEditor->selectStop(m_radialEditor->selectedStop() + 1);
+        });
+        connect(m_radDeleteStopBtn, &QToolButton::clicked, this, [this]() {
+            m_radialEditor->deleteSelectedStop();
+        });
 
         m_radialEditor->setStops({{0.0, Qt::black}, {1.0, Qt::white}});
     }
@@ -396,11 +441,15 @@ void PaintEditor::onStopSelected(int index)
         m_lnStopPosition->setValue(stop.position);
         m_lnStopPosition->setEnabled(index > 0 && index < m_linearEditor->stops().size() - 1);
         m_cpLinear->setColor(stop.color);
+        if (m_lnDeleteStopBtn) m_lnDeleteStopBtn->setEnabled(m_linearEditor->canDeleteSelectedStop());
+        if (m_brandGrid) m_brandGrid->setCurrentColor(stop.color);
     } else if (dynamic_cast<RadialGradientEditor*>(widget)) {
         auto stop = m_radialEditor->stop(index);
         m_radStopPosition->setValue(stop.position);
         m_radStopPosition->setEnabled(index > 0 && index < m_radialEditor->stops().size() - 1);
         m_cpRadial->setColor(stop.color);
+        if (m_radDeleteStopBtn) m_radDeleteStopBtn->setEnabled(m_radialEditor->canDeleteSelectedStop());
+        if (m_brandGrid) m_brandGrid->setCurrentColor(stop.color);
     }
 }
 

@@ -10,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "engine/element_text.h"
 #include "engine/title.h"
 #include "engine/visual_element.h"
 
@@ -279,6 +280,38 @@ private:
     std::string    m_ei;
     float m_before[4];
     float m_after[4];
+};
+
+// ── CopyElementStyleCmd ───────────────────────────────────────────────────────
+// Copies fill/stroke/strokeWidth/cornerRadius/opacity/shadow from src onto dst as
+// one undoable action. If both src and dst are TextElement, also copies font +
+// textStyle. Type mismatches only touch the common VisualElement style fields.
+
+class CopyElementStyleCmd : public QUndoCommand {
+public:
+    CopyElementStyleCmd(TitleDocument* doc, std::string srcEi, std::string dstEi,
+                        QUndoCommand* parent = nullptr);
+    void undo() override;
+    void redo() override;
+
+private:
+    struct StyleSnapshot {
+        Paint fill, stroke;
+        float strokeWidth{0.0f};
+        float cornerRadius[4]{0, 0, 0, 0};
+        float opacity{1.0f};
+        VisualElement::DropShadow shadow;
+        bool hasTextStyle{false};
+        TextElement::Font font;
+        TextElement::TextStyle textStyle;
+    };
+
+    TitleDocument* m_doc;
+    std::string    m_dstEi;
+    StyleSnapshot  m_before, m_after;
+
+    static StyleSnapshot capture(const VisualElement& src, bool wantTextStyle);
+    void apply(const StyleSnapshot& s);
 };
 
 // ── Structural: Add / Remove Element ─────────────────────────────────────────

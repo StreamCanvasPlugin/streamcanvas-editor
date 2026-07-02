@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Svg)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Svg)
 
+set(ENABLE_LUA_SCRIPTING OFF CACHE BOOL "Disable Lua scripting in editor build" FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine engine)
 
 set(PROJECT_SOURCES

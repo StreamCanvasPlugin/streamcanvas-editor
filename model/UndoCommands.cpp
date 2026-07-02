@@ -42,6 +42,105 @@ static Paint parsePaint(const json& v)
     return Paint{};
 }
 
+static FontWeight parseFontWeight(const std::string& s)
+{
+    if (s == "thin")        return FontWeight::Thin;
+    if (s == "ultralight")  return FontWeight::UltraLight;
+    if (s == "semilight")   return FontWeight::SemiLight;
+    if (s == "light")       return FontWeight::Light;
+    if (s == "book")        return FontWeight::Book;
+    if (s == "medium")      return FontWeight::Medium;
+    if (s == "semibold")    return FontWeight::SemiBold;
+    if (s == "bold")        return FontWeight::Bold;
+    if (s == "ultrabold")   return FontWeight::UltraBold;
+    if (s == "heavy")       return FontWeight::Heavy;
+    if (s == "ultraheavy")  return FontWeight::UltraHeavy;
+    return FontWeight::Normal;
+}
+
+static HorizontalAlignment parseAlignmentH(const std::string& s)
+{
+    if (s == "justify") return HorizontalAlignment::Justify;
+    if (s == "center")  return HorizontalAlignment::Center;
+    if (s == "right")   return HorizontalAlignment::Right;
+    return HorizontalAlignment::Left;
+}
+
+static VerticalAlignment parseAlignmentV(const std::string& s)
+{
+    if (s == "bottom") return VerticalAlignment::Bottom;
+    if (s == "middle") return VerticalAlignment::Middle;
+    return VerticalAlignment::Top;
+}
+
+static Ellipsize parseEllipsize(const std::string& s)
+{
+    if (s == "start")  return Ellipsize::Start;
+    if (s == "middle") return Ellipsize::Middle;
+    if (s == "end")    return Ellipsize::End;
+    return Ellipsize::None;
+}
+
+static WrapMode parseWrapMode(const std::string& s)
+{
+    if (s == "char")      return WrapMode::Char;
+    if (s == "word_char") return WrapMode::WordChar;
+    return WrapMode::Word;
+}
+
+static TextTransform parseTextTransform(const std::string& s)
+{
+    if (s == "capitalize") return TextTransform::Capitalize;
+    if (s == "uppercase")  return TextTransform::Uppercase;
+    if (s == "lowercase")  return TextTransform::Lowercase;
+    return TextTransform::None;
+}
+
+static AnimationType parseAnimType(const std::string& s)
+{
+    if (s == "fade")        return AnimationType::Fade;
+    if (s == "slide_up")    return AnimationType::SlideUp;
+    if (s == "slide_down")  return AnimationType::SlideDown;
+    if (s == "slide_left")  return AnimationType::SlideLeft;
+    if (s == "slide_right") return AnimationType::SlideRight;
+    if (s == "scale_in")    return AnimationType::ScaleIn;
+    if (s == "wipe_up")     return AnimationType::WipeUp;
+    if (s == "wipe_down")   return AnimationType::WipeDown;
+    if (s == "wipe_left")   return AnimationType::WipeLeft;
+    if (s == "wipe_right")  return AnimationType::WipeRight;
+    return AnimationType::None;
+}
+
+static Easing parseEasing(const std::string& s)
+{
+    if (s == "ease_in")               return Easing::EaseIn;
+    if (s == "ease_out")              return Easing::EaseOut;
+    if (s == "ease_in_out")           return Easing::EaseInOut;
+    if (s == "ease_in_cubic")         return Easing::EaseInCubic;
+    if (s == "ease_out_cubic")        return Easing::EaseOutCubic;
+    if (s == "ease_in_out_cubic")     return Easing::EaseInOutCubic;
+    if (s == "ease_in_expo")          return Easing::EaseInExpo;
+    if (s == "ease_out_expo")         return Easing::EaseOutExpo;
+    if (s == "ease_in_out_expo")      return Easing::EaseInOutExpo;
+    if (s == "ease_in_back")          return Easing::EaseInBack;
+    if (s == "ease_out_back")         return Easing::EaseOutBack;
+    if (s == "ease_in_out_back")      return Easing::EaseInOutBack;
+    if (s == "ease_in_elastic")       return Easing::EaseInElastic;
+    if (s == "ease_out_elastic")      return Easing::EaseOutElastic;
+    if (s == "ease_in_out_elastic")   return Easing::EaseInOutElastic;
+    return Easing::Linear;
+}
+
+static AnimationDef parseAnimDef(const json& j)
+{
+    AnimationDef a;
+    a.type     = parseAnimType(j.value("type", "none"));
+    a.easing   = parseEasing(j.value("easing", "linear"));
+    a.duration = static_cast<float>(j.value("duration", 0.5));
+    a.delay    = static_cast<float>(j.value("delay", 0.0));
+    return a;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // insertElementFromJson — re-parse a single element JSON blob into the title.
 // JSON x,y are LOCAL coords; converts to world before AddChild so SetParent
@@ -103,6 +202,9 @@ static void insertElementFromJson(Title& t, const json& ej)
         }
     }
 
+    if (ej.contains("anim_in"))  el->inAnimation  = parseAnimDef(ej["anim_in"]);
+    if (ej.contains("anim_out")) el->outAnimation = parseAnimDef(ej["anim_out"]);
+
     // Type-specific fields
     if (auto* te = dynamic_cast<TextElement*>(el.get())) {
         te->text                = ej.value("text", "");
@@ -111,6 +213,15 @@ static void insertElementFromJson(Title& t, const json& ej)
         te->font.isItalic       = ej.value("font_italic", false);
         te->font.isUnderline    = ej.value("font_underline", false);
         te->font.isStrikethrough= ej.value("font_strikethrough", false);
+        te->font.weight         = parseFontWeight(ej.value("font_weight", "normal"));
+        te->textStyle.autoScale     = ej.value("auto_scale", false);
+        te->textStyle.alignX        = parseAlignmentH(ej.value("text_align_x", "left"));
+        te->textStyle.alignY        = parseAlignmentV(ej.value("text_align_y", "top"));
+        te->textStyle.ellipsize     = parseEllipsize(ej.value("ellipsize", "none"));
+        te->textStyle.wrapMode      = parseWrapMode(ej.value("wrap", "word"));
+        te->textStyle.transform     = parseTextTransform(ej.value("text_transform", "none"));
+        te->textStyle.lineSpacing   = static_cast<float>(ej.value("line_spacing", 0.0));
+        te->textStyle.letterSpacing = static_cast<float>(ej.value("letter_spacing", 0.0));
     } else if (auto* ie = dynamic_cast<ImageElement*>(el.get())) {
         ie->imagePath      = ej.value("image_path", "");
         const std::string sm = ej.value("scale_mode", "stretch");
@@ -500,6 +611,75 @@ void SetCornerRadiusCmd::redo()
             VisualElement& el = m_doc->getElement(m_ei);
             for (int i = 0; i < 4; ++i) el.cornerRadius[i] = m_after[i];
         } catch (...) {}
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CopyElementStyleCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+CopyElementStyleCmd::StyleSnapshot CopyElementStyleCmd::capture(const VisualElement& src, bool wantTextStyle)
+{
+    StyleSnapshot s;
+    s.fill = src.fill;
+    s.stroke = src.stroke;
+    s.strokeWidth = src.strokeWidth;
+    for (int i = 0; i < 4; ++i) s.cornerRadius[i] = src.cornerRadius[i];
+    s.opacity = src.opacity;
+    s.shadow = src.shadow;
+    if (wantTextStyle) {
+        if (const auto* te = dynamic_cast<const TextElement*>(&src)) {
+            s.hasTextStyle = true;
+            s.font = te->font;
+            s.textStyle = te->textStyle;
+        }
+    }
+    return s;
+}
+
+void CopyElementStyleCmd::apply(const StyleSnapshot& s)
+{
+    VisualElement& dst = m_doc->getElement(m_dstEi);
+    dst.fill = s.fill;
+    dst.stroke = s.stroke;
+    dst.strokeWidth = s.strokeWidth;
+    for (int i = 0; i < 4; ++i) dst.cornerRadius[i] = s.cornerRadius[i];
+    dst.opacity = s.opacity;
+    dst.shadow = s.shadow;
+    if (s.hasTextStyle) {
+        if (auto* te = dynamic_cast<TextElement*>(&dst)) {
+            te->font = s.font;
+            te->textStyle = s.textStyle;
+        }
+    }
+}
+
+CopyElementStyleCmd::CopyElementStyleCmd(TitleDocument* doc, std::string srcEi, std::string dstEi,
+                                         QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_dstEi(std::move(dstEi))
+{
+    setText("Copy style");
+    try {
+        const VisualElement& src = m_doc->getElement(srcEi);
+        const VisualElement& dst = m_doc->getElement(m_dstEi);
+        const bool wantTextStyle = dynamic_cast<const TextElement*>(&src) != nullptr &&
+                                   dynamic_cast<const TextElement*>(&dst) != nullptr;
+        m_after = capture(src, wantTextStyle);
+        m_before = capture(dst, wantTextStyle);
+    } catch (...) {}
+}
+
+void CopyElementStyleCmd::undo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { apply(m_before); } catch (...) {}
+    });
+}
+
+void CopyElementStyleCmd::redo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { apply(m_after); } catch (...) {}
     });
 }
 

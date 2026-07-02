@@ -505,6 +505,30 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
             } catch (...) {}
         });
     }
+
+    // ── Paint Style group ──────────────────────────────────────────────────────
+    {
+        auto* gl = addGroup(m_styleCategory, "Paint Style");
+        m_copyStyleAct = new QAction(themedIcon(Icons16::Misc_PaintBrushThin), "Copy Style", nullptr);
+        m_copyStyleAct->setCheckable(true);
+        auto* copyStyleBtn = new QToolButton;
+        copyStyleBtn->setDefaultAction(m_copyStyleAct);
+        copyStyleBtn->setIconSize({32, 32});
+        copyStyleBtn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        copyStyleBtn->setMinimumHeight(56);
+        copyStyleBtn->setAutoRaise(true);
+        gl->addWidget(copyStyleBtn, 0, 0, 2, 1, Qt::AlignCenter);
+        connect(m_copyStyleAct, &QAction::toggled, this, [this](bool on) {
+            emit copyStyleModeToggled(on, m_elementId);
+        });
+    }
+}
+
+void RibbonFormatSection::setPaintModeActive(bool active)
+{
+    if (!m_copyStyleAct) return;
+    QSignalBlocker b(m_copyStyleAct);
+    m_copyStyleAct->setChecked(active);
 }
 
 void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)

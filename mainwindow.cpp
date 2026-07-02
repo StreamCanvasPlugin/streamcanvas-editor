@@ -661,6 +661,12 @@ void MainWindow::setupRibbon()
         const std::string ei = t.elements[sel.elementIndex]->GetId();
         m_doc->undoStack()->push(new RemoveElementCmd(m_doc, ei));
     });
+
+    connect(m_formatSection, &RibbonFormatSection::copyStyleModeToggled, this,
+            [this](bool on, const std::string& srcEi) { m_canvas->setPaintMode(on, srcEi); });
+    connect(m_canvas, &CanvasWidget::paintModeFinished, this, [this]() {
+        m_formatSection->setPaintModeActive(false);
+    });
 }
 
 // ── Menu bar ──────────────────────────────────────────────────────────────────

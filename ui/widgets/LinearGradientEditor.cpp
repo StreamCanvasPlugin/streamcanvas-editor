@@ -60,6 +60,30 @@ void LinearGradientEditor::updateStops()
     update();
 }
 
+void LinearGradientEditor::selectStop(int index)
+{
+    index = qBound(0, index, m_stops.size() - 1);
+    if (index == m_selected) return;
+    m_selected = index;
+    emit stopSelected(m_selected);
+    update();
+}
+
+bool LinearGradientEditor::canDeleteSelectedStop() const
+{
+    return m_stops.size() > 2 && m_selected != 0 && m_selected != m_stops.size() - 1;
+}
+
+void LinearGradientEditor::deleteSelectedStop()
+{
+    if (!canDeleteSelectedStop()) return;
+    m_stops.removeAt(m_selected);
+    m_selected = qBound(0, m_selected, m_stops.size() - 1);
+    emit stopSelected(m_selected);
+    emit stopsChanged(m_stops);
+    update();
+}
+
 QSize LinearGradientEditor::sizeHint() const
 {
     return {300, 200};

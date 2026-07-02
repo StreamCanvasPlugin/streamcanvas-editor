@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include <QElapsedTimer>
 #include <QImage>
@@ -66,6 +67,12 @@ public:
     void zoomOut();
     void fitToWindow();
     double zoom() const { return m_zoom; }
+
+    // Paint (copy-style) mode
+    void setPaintMode(bool active, const std::string& sourceElementId);
+
+signals:
+    void paintModeFinished();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -165,6 +172,10 @@ private:
     Rectangle m_dragOrigBounds;
     int m_dragEi{-1};  // index into title.elements (1-based)
     bool m_dragging{false};
+
+    // ── Paint (copy-style) mode ───────────────────────────────────────────────
+    bool m_paintModeActive{false};
+    std::string m_paintSourceEi;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(CanvasWidget::GuideFlags)

@@ -13,6 +13,7 @@
 
 class BrandColorSwatchGrid;
 class TitleDocument;
+class QToolButton;
 
 class PaintEditor : public QWidget {
     Q_OBJECT
@@ -44,11 +45,13 @@ private:
     ColorPicker* m_cpLinear;
     QDoubleSpinBox* m_lnStopPosition;
     LinearGradientEditor* m_linearEditor;
+    QToolButton* m_lnDeleteStopBtn{nullptr};
 
     // radial page
     ColorPicker* m_cpRadial;
     QDoubleSpinBox* m_radStopPosition;
     RadialGradientEditor* m_radialEditor;
+    QToolButton* m_radDeleteStopBtn{nullptr};
 
     // image page
     QLineEdit* m_imagePathForPaint{nullptr};

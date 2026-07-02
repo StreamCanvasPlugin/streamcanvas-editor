@@ -14,6 +14,7 @@ class QLineEdit;
 class QComboBox;
 class QCheckBox;
 class QToolButton;
+class QAction;
 class QDialog;
 class QPlainTextEdit;
 class ColorPicker;
@@ -39,6 +40,10 @@ public:
 signals:
     void elementIdChanged(const std::string& ei);
     void deleteElementRequested();
+    void copyStyleModeToggled(bool on, const std::string& sourceElementId);
+
+public slots:
+    void setPaintModeActive(bool active);
 
 private slots:
     void onDocumentChanged();
@@ -138,6 +143,9 @@ private:
     QDoubleSpinBox* m_spinTR{nullptr};
     QDoubleSpinBox* m_spinBR{nullptr};
     QDoubleSpinBox* m_spinBL{nullptr};
+
+    // Paint Style group (Style tab)
+    QAction* m_copyStyleAct{nullptr};
 
     // Shadow group (Style tab)
     QCheckBox*      m_shadowEnabled{nullptr};
