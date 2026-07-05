@@ -40,7 +40,7 @@ src/              (repo root)
     animationeditor.*     In/out animation picker
     sceneproperties.*     Scene name and resolution
     widgets/              Reusable custom widgets (canvas, color, gradient, tree)
-engine/           Submodule: obs-graphics-engine
+engine/           Submodule: streamcanvas-engine
 data/             Demo scenes and data sources
 ```
 
