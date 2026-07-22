@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <QObject>
 
 class TitleDocument;
@@ -37,4 +39,5 @@ private:
     TitleDocument* m_doc;
     SelectionId m_selection;
     const IElement* m_selectedElement = nullptr;
+    std::string m_selectedElementId;
 };

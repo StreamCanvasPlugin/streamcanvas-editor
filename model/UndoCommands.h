@@ -282,6 +282,21 @@ private:
     float m_after[4];
 };
 
+// ── SetElementIdCmd — undoable element rename ─────────────────────────────────
+
+class SetElementIdCmd : public QUndoCommand {
+public:
+    SetElementIdCmd(TitleDocument* doc, std::string oldId, std::string newId,
+                    QUndoCommand* parent = nullptr);
+    void undo() override;
+    void redo() override;
+
+private:
+    TitleDocument* m_doc;
+    std::string    m_oldId;
+    std::string    m_newId;
+};
+
 // ── CopyElementStyleCmd ───────────────────────────────────────────────────────
 // Copies fill/stroke/strokeWidth/cornerRadius/opacity/shadow from src onto dst as
 // one undoable action. If both src and dst are TextElement, also copies font +

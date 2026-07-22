@@ -37,6 +37,7 @@
 #include <QCompleter>
 #include <QStyledItemDelegate>
 #include <QToolButton>
+#include <QToolTip>
 #include <QVBoxLayout>
 #include <QWidgetAction>
 
@@ -1098,10 +1099,26 @@ void RibbonFormatSection::onIdEditingFinished()
     if (m_updating || m_elementId.empty()) return;
     std::string newId = m_idEdit->text().toStdString();
     if (m_elementId == newId) return;
-    const std::string oldId = m_elementId;
-    m_doc->applyMutation([oldId, newId](Title& t) {
-        try { t.GetById(oldId).SetId(newId); } catch (...) {}
-    });
+
+    if (newId.empty()) {
+        m_idEdit->setText(QString::fromStdString(m_elementId));
+        QToolTip::showText(m_idEdit->mapToGlobal(QPoint(0, m_idEdit->height())),
+                           tr("ID cannot be empty."), m_idEdit);
+        return;
+    }
+
+    for (const auto& up : m_doc->title().elements) {
+        if (up && up->GetId() == newId) {
+            m_idEdit->setText(QString::fromStdString(m_elementId));
+            QToolTip::showText(m_idEdit->mapToGlobal(QPoint(0, m_idEdit->height())),
+                               tr("An element named \"%1\" already exists.")
+                                   .arg(QString::fromStdString(newId)),
+                               m_idEdit);
+            return;
+        }
+    }
+
+    m_doc->undoStack()->push(new SetElementIdCmd(m_doc, m_elementId, newId));
     m_elementId = newId;
     emit elementIdChanged(m_elementId);
 }

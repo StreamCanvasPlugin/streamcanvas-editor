@@ -17,8 +17,8 @@ Dark-only theme. Rotation & multi-select deferred.
 ### Editor (obs-graphics-editor)
 - [x] P0-1: Refactor elementToJson/insertElementFromJson to call `ogt::` API — VERIFIED
       (mirror of E1 applied to submodule working tree; formal submodule bump pending)
-- [ ] P0-2: selection retargets wrong element after delete/reorder
-- [ ] P0-3: ID rename not undoable + corrupts undo history
+- [x] P0-2: selection retargets wrong element after delete/reorder — VERIFIED (code deb5b2b + GUI smoke)
+- [x] P0-3: ID rename not undoable + corrupts undo history — VERIFIED (impl+reviewer APPROVE + GUI)
 - [ ] P0-4: editor-side missing-asset validation (complements E2)
 - [ ] P1-1..7: shortcuts, hit-slack, tree reset, undo merge, error surfacing, palette colors, DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
@@ -52,6 +52,35 @@ Dark-only theme. Rotation & multi-select deferred.
   missing asset → Save throws with path, no .ogt written.
 - Submodule jump 6db8ded→934cef4 = 5 Lua/HTTP commits (compiled out, LUA OFF) + dormant
   data-source polling; NO serialization change. Bumping editor to master+commit is safe.
+
+### 2026-07-22 — P0-1/P0-2 GUI smoke (qt-auto-test, NOT use-computer)
+- Editor launched via `qt-auto-test launch -- ./build/stream-canvas-editor` (pid 205225), renders
+  clean dark theme (screenshot smoke-01/editor.png). NOTE: use `qt-auto-test`, never use-computer.
+- Added 2 rectangles → contextual Element/Style ribbon tabs appear on selection (two-elems.png).
+- P0-2 delete: selected element_2 deleted → selection CLEARS cleanly, element_1 remains with no
+  handles, contextual tabs gone (after-delete.png). No silent retarget to a stranger. ✓
+- Undo (Home→Undo button) restored element_2; both elements coexist, stack labels read
+  "Undo Add element"/"Redo Remove element" (after-undo2.png). RemoveElementCmd undo via the
+  P0-1 JSON-snapshot round-trip works live, no crash/loss. ✓
+- Injected key-shortcuts (send-keys <Ctrl+Z> to a child widget) do NOT trigger window-level
+  QAction shortcuts — use toolbar buttons for shortcut-bound actions in qt-auto-test.
+- Minor observation (not P0): after undo, the Animation Timing panel did not re-add element_2's
+  row (tree updated, timeline stayed 1 row) — panel-refresh staleness, adjacent to P1-3.
+
+### 2026-07-22 — P0-3 undoable rename (impl → reviewer APPROVE → GUI smoke)
+- Impl: new `SetElementIdCmd` (UndoCommands.h/.cpp); `onIdEditingFinished` now validates
+  empty+duplicate (revert field + QToolTip) and pushes the command; `EditorTitle` caches
+  `m_selectedElementId` and re-emits `selectionChanged` on id-change-with-same-index so the
+  ribbon re-syncs on undo/redo. `cmake --build build -j` exit 0, clean.
+- Reviewer APPROVED with full undo/redo-ordering + re-entrancy + null-safety trace.
+- GUI (qt-auto-test pid 451964): renamed element_1→text_hero via ID field (w0573)+Return →
+  ID field/tree/timeline all show "text_hero"; undo label became "Undo Rename element" (rename
+  is now on the stack — the core fix). Undo → ID field/tree/timeline revert to "element_1"
+  (EditorTitle re-emit re-syncs live); stack shows "Undo Add element"/"Redo Rename element".
+- GUI dup-rejection: added element_2, renamed →"element_1" (exists) → field REVERTED to
+  "element_2", tree unchanged, undo label stayed "Undo Add element" (NO rename cmd pushed). ✓
+- No committed test infra in repo (no CTest/gtest/QTest); test-writer skipped, consistent with
+  P0-1/P0-2 — verified deterministically via undo-label + field-text evidence instead.
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after

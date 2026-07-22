@@ -394,6 +394,33 @@ void SetCornerRadiusCmd::redo()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SetElementIdCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetElementIdCmd::SetElementIdCmd(TitleDocument* doc, std::string oldId, std::string newId,
+                                 QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_oldId(std::move(oldId)), m_newId(std::move(newId))
+{
+    setText("Rename element");
+}
+
+void SetElementIdCmd::redo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_oldId).SetId(m_newId); }
+        catch (const std::runtime_error&) {}
+    });
+}
+
+void SetElementIdCmd::undo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_newId).SetId(m_oldId); }
+        catch (const std::runtime_error&) {}
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CopyElementStyleCmd
 // ─────────────────────────────────────────────────────────────────────────────
 

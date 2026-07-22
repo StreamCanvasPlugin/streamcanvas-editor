@@ -34,13 +34,19 @@ void EditorTitle::validateSelection()
     }
 
     if (foundIndex >= 0) {
+        std::string curId = m_selectedElement->GetId();
         if (foundIndex != m_selection.elementIndex) {
             m_selection.elementIndex = foundIndex;
+            m_selectedElementId = curId;
+            emit selectionChanged(m_selection);
+        } else if (curId != m_selectedElementId) {
+            m_selectedElementId = curId;
             emit selectionChanged(m_selection);
         }
     } else {
         m_selection = SelectionId{};
         m_selectedElement = nullptr;
+        m_selectedElementId.clear();
         emit selectionChanged(m_selection);
     }
 }
@@ -51,5 +57,6 @@ void EditorTitle::setSelection(const SelectionId& id)
         return;
     m_selection = id;
     m_selectedElement = elementForSelection(id);
+    m_selectedElementId = m_selectedElement ? m_selectedElement->GetId() : std::string();
     emit selectionChanged(m_selection);
 }
