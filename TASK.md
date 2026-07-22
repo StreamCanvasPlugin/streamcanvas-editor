@@ -203,6 +203,10 @@ Dark-only theme. Rotation & multi-select deferred.
 - Not GUI-observed: the ColorWheel lives behind a modal PaintEditor dialog (blocks qt-auto-test)
   and looks identical at dpr=1. Standard Qt HiDPI pattern; verified by build + no-regression logic.
 
+### 2026-07-22 — Final full rebuild at HEAD (fe52549)
+- `cmake --build build -j$(nproc)` → exit 0, clean (nothing to rebuild beyond up-to-date targets).
+  All 12 commits compile together. git status clean except pre-existing `M CLAUDE.md` (untouched).
+
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
   submodule bump so multiple items verify together.
@@ -215,9 +219,30 @@ Dark-only theme. Rotation & multi-select deferred.
 | (none yet) | | | |
 
 ## Current State
-Plan approved + reshaped after user redirect: engine (de)serializer is the single source of
-truth; editor's lossy duplicate will be replaced by calls into a newly-exposed `ogt::` engine
-API. Engine work happens in ~/Projects/obs-graphics-engine (master, dirty — surgical commits
-only). Next: E1 (expose ParseElement/SerializeElement), build-verify engine, then bump the
-editor submodule and refactor elementToJson/insertElementFromJson (P0-1). All prior state
-(branch, build) verified in Log.
+ALL planned P0 and P1 items are implemented, verified, and committed on branch `ux-audit-fixes`
+(one focused commit each). Engine work (E1-E4) is committed + pushed to the engine origin; the
+editor submodule was bumped to consume it.
+
+Done (12 commits after the plan doc):
+- P0-1 reuse engine ogt:: (de)serializers (27ad283) — roundtrip.cpp PASS
+- P0-2 selection reconciled by identity (deb5b2b) — GUI: delete clears cleanly
+- P0-3 undoable rename + dup/empty rejection (997a886) — GUI: undo "Rename element", dup rejected
+- P0-4 asset validation + real save/load errors (9f55171) — GUI: red-border on bad path
+- P1-1 Delete shortcut + Duplicate cmd (bd97d16) — GUI: Duplicate offset copy +10
+- P1-2 handle hit-slack + nearest-center (f2be4ca) — deterministic hittest.cpp PASS
+- P1-3 tree reset coalescing + selection re-apply (aac850c) — GUI: selection kept after edit
+- P1-4 undo merge idle-time barrier (d5fc060) — GUI: two X-edits across a pause = 2 undo entries
+- P1-5 typed catches in ribbon (8dd8e61) — 0 bare catch(...); load/save+rename via P0-4/P0-3
+- P1-6 neutral colors → palette roles (ac5e54c) — GUI: F1 dialog renders correctly
+- P1-7 ColorWheel device-pixel-ratio (fe52549) — build + dpr==1 no-regression
+
+Every "works" claim above is backed by evidence in the Log (deterministic test / live qt-auto-test
+screenshot+text-dump / reviewer trace). Harness notes: use qt-auto-test (NOT use-computer);
+window-QAction key shortcuts and canvas drags aren't reliably injectable — verified those via
+buttons / deterministic tests instead; native+modal dialogs block qt-auto-test (dismiss via xdotool,
+screenshot via `import`).
+
+Deferred (NOT done, need separate approval — see PLAN.md): P2-1..5 and D-1 rotation-correct
+handles, D-2 multi-select, D-3 full tree parity, D-4 broader schema versioning. Minor follow-ups
+noted in the Log: Animation Timing panel stale after structural undo (adjacent to P1-3); shortcuts
+reference dialog doesn't list the new Delete/Ctrl+D. Full clean rebuild at HEAD: see final Log entry.
