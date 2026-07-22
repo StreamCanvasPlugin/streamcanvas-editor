@@ -28,6 +28,14 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P1-6: hardcoded neutral colors → palette roles (dark-only) — VERIFIED (GUI: F1 dialog renders)
 - [x] P1-7: ColorWheel HiDPI DPR — VERIFIED (build + no-regression reasoning; dpr==1 is a no-op)
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
+### D-1 — Rotation/shear-correct canvas manipulation (plan approved; add rotate handle; full rot+shear resize)
+- [x] D1-1: transform helper (elementToWidgetTransform / elementLinear / makeElementTransform) — VERIFIED (impl+reviewer APPROVE, numeric 0.0 error vs Cairo)
+- [x] D1-2: rotation-aware SelectionHandles API + rotate handle (9th) — VERIFIED (impl+deterministic handles_test PASS; reviewer skipped per P1-2 pure-geometry precedent)
+- [x] D1-3: overlay drawing via transform (polygon box, mapped handles) — VERIFIED (impl build exit 0; mechanical migration, orchestrator diff-reviewed)
+- [x] D1-4: hit-test (inverse-map body) + direction-based cursors — VERIFIED (impl build exit 0; orchestrator diff-review; identity case reduces to old AABB, no regression)
+- [x] D1-5a: full rot+shear resize math (inverse-map delta + anchor-fixed solve); snapping identity-only — VERIFIED (impl+reviewer APPROVE, deterministic resize_test PASS incl. 90°+shear anchor-fixed, re-run by orchestrator)
+- [x] D1-5b: rotate drag mode (DragMode::Rotate, kRotateHandle press → SetElementRotationCmd) — VERIFIED (impl build exit 0 + rotate_test PASS; reviewer pass for the un-GUI-testable drag gesture)
+- [x] D1-6: verification (4 deterministic tests + qt-auto-test GUI) — VERIFIED (rotation+shear overlay + hit-test confirmed live; drag gestures via deterministic tests)
 
 ## Log
 ### 2026-07-21
@@ -207,6 +215,119 @@ Dark-only theme. Rotation & multi-select deferred.
 - `cmake --build build -j$(nproc)` → exit 0, clean (nothing to rebuild beyond up-to-date targets).
   All 12 commits compile together. git status clean except pre-existing `M CLAUDE.md` (untouched).
 
+### 2026-07-22 — D1-1 transform helper (impl → reviewer APPROVE)
+- Plan approved (add on-canvas rotate handle; resize honors full rotation+shear). Plan file:
+  ~/.claude-personal/plans/let-s-plan-d-1-eventual-sonnet.md. Design: one QTransform
+  (element-local 0..w,0..h → widget px) mirroring the engine Cairo render exactly.
+- Impl (CanvasWidget.h/.cpp, +55/-0, purely additive): file-local static
+  `makeElementTransform(...)` (testable), `elementToWidgetTransform(el)`,
+  `elementLinear(el)` (pure rotation+shear linear part in title space, for resize R^-1).
+  Existing globalBounds/titleToWidget/widgetToTitle/letterboxRect untouched. Not yet wired
+  to any call site (later subtasks). `cmake --build build -j$(nproc)` → exit 0.
+- Deterministic: session scratchpad transform_test.cpp (g++ -std=c++20 + Qt6Core/Gui) →
+  `TRANSFORM TEST PASS (failures=0)`, exit 0. Covers identity case, 90° center-pivot
+  invariance, lin.inverted()*lin==I.
+- Reviewer APPROVED with an independent NUMERIC ground-truth: compiled makeElementTransform
+  vs a from-scratch Cairo matrix built from types.hpp:46-54 → max error 0.000e+00 across
+  corners/center/interior AND for non-trivial shear(0.3,-0.15) at 27° (pins shear-direction
+  + rotation-sign empirically, not analytic-only). Compose-order, shear convention, rotation
+  sign all bit-identical to Cairo. Bonus finding: nested elements are ALSO exact — engine
+  RenderChildren runs OUTSIDE the parent transform block, so translation-only
+  GetGlobalPosition suffices; the "nested parent-rotation out of scope" caveat is a non-issue
+  for render-match fidelity.
+
+### 2026-07-22 — D1-2 rotation-aware SelectionHandles + rotate handle (impl → deterministic)
+- Impl (SelectionHandles.h/.cpp, +152/-0, purely additive OVERLOADS — old QRectF methods
+  byte-identical so CanvasWidget compiles untouched): `handleCenterT(idx,xf,localRect)` maps
+  0-7 via xf.map(handleCenter(localRect)) and idx==kRotateHandle(8) → knob kRotateGap(24px)
+  beyond mapped top-center along the mapped up-vector (degenerate-length guard); transform
+  overloads of handleRect/hitTest/draw. hitTest nearest-center-wins across 0-7 (rect+slack)
+  plus rotate knob (circle radius+slack). draw: mapped-quad border (AA on) + connector line
+  + knob circle + the 8 square handles (AA off, original two-pass style). New constants
+  kRotateHandle/kRotateGap/kRotateRadius. `cmake --build build -j$(nproc)` → exit 0.
+- Deterministic: session scratchpad handles_test.cpp (links real SelectionHandles.cpp+Qt6) →
+  `HANDLES TEST PASS (failures=0)`, exit 0. Covers identity handle centers + knob position,
+  90° center-invariance + knob distance ≈ kRotateGap, hitTest knob/TL/miss on identity+rotated.
+- Reviewer round SKIPPED (P1-2 precedent): pure-additive geometry + passing deterministic
+  execution proof + orchestrator's own diff read. Visual styling deferred to D1-6 GUI shot.
+- No call sites migrated yet (old overloads still in use by CanvasWidget); they get deleted
+  in D1-4 once paintEvent(draw) and hitHandle(hitTest) are migrated.
+
+### 2026-07-22 — D1-3 overlay drawing via transform (impl → build)
+- Impl (CanvasWidget.cpp): added file-local `localBoundsRect(el)`=QRectF(0,0,w,h);
+  `drawElementOutlines` now maps the 4 local corners → QPolygonF and drawPolygon (dashed
+  two-pass), AA flipped false→true for clean rotated edges; paintEvent selection draw now
+  calls the `SelectionHandles::draw(p, elementToWidgetTransform(*ve), localBoundsRect(*ve),…)`
+  transform overload. `cmake --build build -j$(nproc)` → exit 0.
+- Grep confirms the only remaining old-QRectF-overload caller is hitHandle:358 (hitTest);
+  draw(QRectF) fully migrated. Old public overloads become dead after D1-4 migrates hitHandle.
+- Mechanical migration mirroring the already-tested D1-2 draw pattern; orchestrator diff-read,
+  reviewer round folded into D1-6 GUI (visual).
+
+### 2026-07-22 — D1-4 hit-test + cursors (impl → build)
+- Impl (CanvasWidget.h/.cpp + SelectionHandles.h/.cpp): added `elementLocalToTitle(el)`
+  (local→title, no letterbox); hitTest body now inverse-maps titlePt to local + tests
+  0..w,0..h (with inverted(&ok) degenerate guard); hitHandle uses the transform hitTest
+  overload (can return kRotateHandle); new `resizeCursorForAngle(dx,dy)` folds handle outward
+  direction to [0,180) → Hor/FDiag/Ver/BDiag; updateCursorForPos resolves selVe once, rotate
+  handle → Qt::CrossCursor, resize handles → direction-based cursor, body → inverse-mapped
+  SizeAll; removed the old fixed kHandleCursors[8]. Deleted the three dead QRectF SelectionHandles
+  overloads (kept file-local handleCenter). `cmake --build build -j$(nproc)` → exit 0.
+- No-regression note: for identity transform elementLocalToTitle = translate(gpos) only, so the
+  inverse-map hit/cursor test reduces exactly to the previous AABB test. Cursor folding verified
+  by orchestrator (TL→FDiag, TR→BDiag). Interactive confirmation deferred to D1-6 GUI.
+- grep confirms only transform-overload SelectionHandles calls remain.
+
+### 2026-07-22 — D1-5a rotation/shear-correct resize (impl → reviewer APPROVE)
+- Impl: NEW `ui/widgets/ResizeMath.h` (pure inline `resizemath::anchorNorm`+`resizeSolve`);
+  registered header-only in CMakeLists (matches GradientHandlePainter.h convention). CanvasWidget
+  press-branch captures m_dragAnchorTitle/m_dragOrigCenterTitle/m_dragParentOffset from
+  elementLocalToTitle at drag start. applyResizeDrag rewritten: project mouse delta into local
+  axes via elementLinear().inverted(), call resizeSolve (anchor-fixed for corner/edge; center-fixed
+  for Ctrl), snapping gated to identity && snapping && !Ctrl (block otherwise byte-identical).
+  mouseRelease/keyPress unchanged. `cmake --build build -j$(nproc)` → exit 0.
+- Deterministic: scratchpad resize_test.cpp (links ResizeMath.h + Qt6 + cairo) →
+  `RESIZE TEST PASS (failures=0)`, exit 0. Gates: identity==old behavior; anchor world FIXED
+  under 90° rotation (corner) and under shearX=0.3+rot=20° and an edge handle; Ctrl keeps orig
+  center fixed. Orchestrator independently rebuilt+re-ran → PASS exit 0.
+- Reviewer APPROVED via independent algebraic derivation from makeElementTransform (R=Shear*Rotate
+  matches elementLinear; anchor solve = correct inversion of W(anchorLocal1)=anchorTitle; Ctrl R
+  terms cancel; identity reduces to old edge-fixed behavior so snapping stays valid). Non-blocking:
+  Ctrl-resize no longer snaps (was odd; improvement) — SURFACE TO USER. Degenerate Rinv (shear
+  det 0) → unprojected fallback, non-crashing.
+
+### 2026-07-22 — D1-5b on-canvas rotate drag (impl → reviewer APPROVE)
+- Impl: ResizeMath.h `rotateSolve(origDeg,startRad,curRad,snap15)`; DragMode::Rotate +
+  m_dragStartAngle/m_dragOrigRotation. mousePress routes kRotateHandle→Rotate (before resize),
+  capturing center (elementLocalToTitle.map(w/2,h/2)) + start angle; applyRotateDrag sets
+  rotation live via SetRotation; mouseMove dispatches Rotate; mouseRelease reverts-then-pushes
+  ONE SetElementRotationCmd(...,-1) discrete entry iff changed; keyPress/Release re-apply live
+  (Shift=15° snap). `cmake --build build -j$(nproc)` → exit 0.
+- Deterministic: scratchpad rotate_test.cpp → `ROTATE TEST PASS (failures=0)`, exit 0.
+- Reviewer APPROVED (this gesture is NOT qt-auto-test-injectable, so review is the primary
+  verification): undo revert-then-push correct (before=orig via revert, after=final; -1 disables
+  merge — confirmed in UndoCommands.cpp); center-pivot capture → no press jump; routing/lifecycle
+  clean; no leaked/shadowed state. KNOWN COSMETIC (ship-fine, follow-up): atan2 seam can store a
+  rotation offset by ±360° (renders identically; only odd in the spinbox) — SURFACE TO USER.
+- Full rebuild at all-6-subtasks HEAD: `cmake --build build -j$(nproc)` → exit 0. All four
+  deterministic tests re-run together by orchestrator → transform/handles/resize/rotate all PASS.
+
+### 2026-07-22 — D1-6 verification (deterministic ×4 + qt-auto-test GUI)
+- Full editor rebuild at all-6-subtasks HEAD: `cmake --build build -j$(nproc)` → exit 0.
+- All 4 scratchpad deterministic tests rebuilt + re-run together by orchestrator:
+  transform_test / handles_test / resize_test / rotate_test → each `PASS (failures=0)`, exit 0.
+- GUI (qt-auto-test pid 1071302, NOT use-computer): Insert→Rectangle added element_1; set
+  Rotation=30° via ribbon spinbox (w0288) → selection box became a ROTATED QUAD exactly
+  overlaying the rendered rotated rectangle, 8 handles on the rotated corners/edges, rotate knob
+  projecting along the rotated up-vector (d1-04/05). Set Shear X → box tracked the sheared
+  PARALLELOGRAM with handles+knob following (d1-07). Deselected (empty-canvas click), then
+  clicked the rotated body → element_1 RESELECTED (d1-09), proving the inverse-map body hit-test
+  on a rotated element. Screenshots in session scratchpad d1-*.png.
+- NOT GUI-observed (Wayland canvas press-move-release not injectable — same limitation as P1-3):
+  the resize-drag and rotate-drag GESTURES. Both covered by the deterministic resize_test/
+  rotate_test (anchor-fixed under 90°+shear; rotate math) + reviewer APPROVE traces. Cursors
+  (not visible in screenshots) covered by code review + build.
+
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
   submodule bump so multiple items verify together.
@@ -222,6 +343,23 @@ Dark-only theme. Rotation & multi-select deferred.
 ALL planned P0 and P1 items are implemented, verified, and committed on branch `ux-audit-fixes`
 (one focused commit each). Engine work (E1-E4) is committed + pushed to the engine origin; the
 editor submodule was bumped to consume it.
+
+**D-1 (rotation/shear-correct canvas manipulation) is now COMPLETE and UNCOMMITTED** on the same
+branch — implemented across 6 subtasks (orchestrator + implementer/reviewer), all verified, but
+NOT yet committed (awaiting user go-ahead; no commit was requested). Changed files:
+`ui/widgets/CanvasWidget.{h,cpp}`, `ui/widgets/SelectionHandles.{h,cpp}`, new
+`ui/widgets/ResizeMath.h`, `CMakeLists.txt` (+ this TASK.md). One central `QTransform`
+(elementToWidgetTransform, numerically proven 0.0-error vs the engine Cairo render) drives the
+selection box, 8 handles, a new drag-to-rotate knob, inverse-map hit-test, direction-aware
+cursors, and a full rotation+shear-correct resize (anchor-fixed solve) + on-canvas rotate drag
+(SetElementRotationCmd). Snapping is gated to identity transforms. Verified: full build exit 0;
+4 deterministic tests PASS (transform/handles/resize incl. 90°+shear anchor-fixed/rotate);
+reviewer APPROVE on the two math-heavy subtasks (1, 5a) and the un-GUI-testable rotate drag (5b);
+live qt-auto-test GUI confirmed the overlay tracks rotation+shear and the rotated-body hit-test.
+Two items to surface to the user: (a) Ctrl-resize no longer snaps (intentional, minor improvement);
+(b) cosmetic — the on-canvas rotate drag can store a rotation offset by ±360° (renders identically,
+only odd in the spinbox); optional fmod normalization is a possible follow-up. Drag GESTURES were
+not GUI-injectable on this Wayland session (harness limit) — proven deterministically + by review.
 
 Done (12 commits after the plan doc):
 - P0-1 reuse engine ogt:: (de)serializers (27ad283) — roundtrip.cpp PASS
@@ -242,7 +380,7 @@ window-QAction key shortcuts and canvas drags aren't reliably injectable — ver
 buttons / deterministic tests instead; native+modal dialogs block qt-auto-test (dismiss via xdotool,
 screenshot via `import`).
 
-Deferred (NOT done, need separate approval — see PLAN.md): P2-1..5 and D-1 rotation-correct
-handles, D-2 multi-select, D-3 full tree parity, D-4 broader schema versioning. Minor follow-ups
+Deferred (NOT done, need separate approval — see PLAN.md): P2-1..5, D-2 multi-select, D-3 full
+tree parity, D-4 broader schema versioning. (D-1 is now done — see above.) Minor follow-ups
 noted in the Log: Animation Timing panel stale after structural undo (adjacent to P1-3); shortcuts
 reference dialog doesn't list the new Delete/Ctrl+D. Full clean rebuild at HEAD: see final Log entry.
