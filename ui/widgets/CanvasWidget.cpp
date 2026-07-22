@@ -17,8 +17,10 @@
 #include <QPainter>
 #include <QPen>
 #include <QPixmap>
+#include <QPolygonF>
 #include <QResizeEvent>
 #include <QTimer>
+#include <QTransform>
 #include <QUrl>
 #include <QWheelEvent>
 
@@ -34,6 +36,7 @@
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 
+#include "ResizeMath.h"
 #include "SelectionHandles.h"
 #include "icons.h"
 
@@ -47,6 +50,35 @@ static Rectangle globalBounds(const VisualElement& el)
     const Point pos = el.GetGlobalPosition();
     const Rectangle b = el.GetBounds();
     return {pos.x, pos.y, b.width, b.height};
+}
+
+// Element's own rect in LOCAL coordinates: (0,0,width,height).
+static QRectF localBoundsRect(const VisualElement& el)
+{
+    const Rectangle b = el.GetBounds();
+    return QRectF(0.0, 0.0, b.width, b.height);
+}
+
+// Maps element-LOCAL coords (0..w, 0..h) to WIDGET pixels.
+// lbX/lbY/lbW/lbH describe the letterbox rect; titleW/titleH the title size.
+// Mirrors the engine's Cairo render order exactly (see Transform::Apply in
+// engine/types.hpp): translate(cx,cy) -> shear -> rotate -> translate(-cx,-cy),
+// applied at the element's global position, itself placed within the
+// letterboxed title viewport.
+static QTransform makeElementTransform(
+    double gposX, double gposY, double w, double h,
+    double rotationDeg, double shearX, double shearY,
+    double lbX, double lbY, double lbW, double lbH, double titleW, double titleH)
+{
+    QTransform m;
+    m.translate(lbX, lbY);
+    m.scale(lbW / titleW, lbH / titleH);  // letterbox scale
+    m.translate(gposX, gposY);            // world position
+    m.translate(w / 2.0, h / 2.0);         // to center
+    m.shear(shearX, shearY);              // == cairo shearMatrix
+    m.rotate(rotationDeg);
+    m.translate(-w / 2.0, -h / 2.0);
+    return m;
 }
 
 static constexpr double kZoomMin = 0.05;
@@ -132,6 +164,36 @@ QRectF CanvasWidget::titleToWidget(const Rectangle& r) const
     const QRectF lb = letterboxRect();
     const double sx = lb.width() / titleW(), sy = lb.height() / titleH();
     return {lb.left() + r.x * sx, lb.top() + r.y * sy, r.width * sx, r.height * sy};
+}
+
+QTransform CanvasWidget::elementToWidgetTransform(const VisualElement& el) const
+{
+    const Point pos = el.GetGlobalPosition();
+    const Rectangle b = el.GetBounds();
+    const QRectF lb = letterboxRect();
+    return makeElementTransform(pos.x, pos.y, b.width, b.height,
+                                 el.GetRotation(), el.GetShearX(), el.GetShearY(),
+                                 lb.left(), lb.top(), lb.width(), lb.height(),
+                                 titleW(), titleH());
+}
+
+QTransform CanvasWidget::elementLinear(const VisualElement& el) const
+{
+    // Pure linear part (rotation+shear) matching the center-pivot transform's
+    // linear component, in title/world space. No translation.
+    QTransform r;
+    r.shear(el.GetShearX(), el.GetShearY());
+    r.rotate(el.GetRotation());
+    return r;
+}
+
+QTransform CanvasWidget::elementLocalToTitle(const VisualElement& el) const
+{
+    const Point pos = el.GetGlobalPosition();
+    const Rectangle b = el.GetBounds();
+    return makeElementTransform(pos.x, pos.y, b.width, b.height,
+                                el.GetRotation(), el.GetShearX(), el.GetShearY(),
+                                0.0, 0.0, titleW(), titleH(), titleW(), titleH());
 }
 
 // ── Zoom helpers ──────────────────────────────────────────────────────────────
@@ -284,11 +346,13 @@ SelectionId CanvasWidget::hitTest(QPointF titlePt) const
     for (int ei : order) {
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
         if (!ve) continue;
-        const Rectangle gb = globalBounds(*ve);
-        if (titlePt.x() >= gb.x && titlePt.x() <= gb.x + gb.width &&
-            titlePt.y() >= gb.y && titlePt.y() <= gb.y + gb.height) {
+        bool ok = false;
+        const QTransform inv = elementLocalToTitle(*ve).inverted(&ok);
+        if (!ok) continue;               // degenerate transform (e.g. shear det 0): skip
+        const QPointF lp = inv.map(titlePt);
+        const Rectangle b = ve->GetBounds();
+        if (lp.x() >= 0.0 && lp.x() <= b.width && lp.y() >= 0.0 && lp.y() <= b.height)
             return {SelectionId::Level::Element, ei};
-        }
     }
     return {};
 }
@@ -303,7 +367,7 @@ int CanvasWidget::hitHandle(QPointF widgetPt) const
         return -1;
     const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
     if (!ve) return -1;
-    return SelectionHandles::hitTest(widgetPt, titleToWidget(globalBounds(*ve)));
+    return SelectionHandles::hitTest(widgetPt, elementToWidgetTransform(*ve), localBoundsRect(*ve));
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -427,18 +491,22 @@ void CanvasWidget::drawElementOutlines(QPainter& p)
     const SelectionId sel = m_editorState->selection();
     const Title& t = m_doc->title();
     p.save();
-    p.setRenderHint(QPainter::Antialiasing, false);
+    p.setRenderHint(QPainter::Antialiasing, true);
     p.setBrush(Qt::NoBrush);
 
     for (int i = 1; i < (int)t.elements.size(); ++i) {
         if (i == sel.elementIndex) continue;
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
         if (!ve) continue;
-        const QRectF r = titleToWidget(globalBounds(*ve));
+        const QTransform xf = elementToWidgetTransform(*ve);
+        const QRectF lr = localBoundsRect(*ve);
+        QPolygonF poly;
+        poly << xf.map(lr.topLeft()) << xf.map(lr.topRight())
+             << xf.map(lr.bottomRight()) << xf.map(lr.bottomLeft());
         p.setPen(QPen(QColor(0, 0, 0, 84), 3.0, Qt::DashLine));
-        p.drawRect(r);
+        p.drawPolygon(poly);
         p.setPen(QPen(QColor(255, 255, 255, 178), 1.0, Qt::DashLine));
-        p.drawRect(r);
+        p.drawPolygon(poly);
     }
     p.restore();
 }
@@ -478,7 +546,7 @@ void CanvasWidget::paintEvent(QPaintEvent*)
             if (sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size()) {
                 const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
                 if (ve)
-                    SelectionHandles::draw(p, titleToWidget(globalBounds(*ve)),
+                    SelectionHandles::draw(p, elementToWidgetTransform(*ve), localBoundsRect(*ve),
                                            m_dragging ? m_dragHandle : -1,
                                            palette().highlight().color());
             }
@@ -608,7 +676,7 @@ void CanvasWidget::previewAtTime(bool isIn, bool isData, double t)
 
 void CanvasWidget::keyReleaseEvent(QKeyEvent* event)
 {
-    if (m_dragging && m_dragMode == DragMode::Resize) {
+    if (m_dragging && (m_dragMode == DragMode::Resize || m_dragMode == DragMode::Rotate)) {
         Qt::KeyboardModifiers mods = event->modifiers();
         switch (event->key()) {
         case Qt::Key_Shift:   mods &= ~Qt::ShiftModifier;   break;
@@ -616,7 +684,8 @@ void CanvasWidget::keyReleaseEvent(QKeyEvent* event)
         case Qt::Key_Alt:     mods &= ~Qt::AltModifier;     break;
         default: break;
         }
-        applyResizeDrag(m_lastDragWidgetPos, mods);
+        if (m_dragMode == DragMode::Resize) applyResizeDrag(m_lastDragWidgetPos, mods);
+        else applyRotateDrag(m_lastDragWidgetPos, mods);
         event->accept();
         return;
     }
@@ -625,8 +694,9 @@ void CanvasWidget::keyReleaseEvent(QKeyEvent* event)
 
 void CanvasWidget::keyPressEvent(QKeyEvent* event)
 {
-    if (m_dragging && m_dragMode == DragMode::Resize) {
-        applyResizeDrag(m_lastDragWidgetPos, event->modifiers());
+    if (m_dragging && (m_dragMode == DragMode::Resize || m_dragMode == DragMode::Rotate)) {
+        if (m_dragMode == DragMode::Resize) applyResizeDrag(m_lastDragWidgetPos, event->modifiers());
+        else applyRotateDrag(m_lastDragWidgetPos, event->modifiers());
         event->accept();
         return;
     }
@@ -709,8 +779,34 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    // 1. Resize handle hit?
+    // 1. Rotate handle hit?
     const int handle = hitHandle(wpos);
+    if (handle == SelectionHandles::kRotateHandle) {
+        const SelectionId sel = m_editorState->selection();
+        const Title& t = m_doc->title();
+        const auto* ve = (sel.level == SelectionId::Level::Element &&
+                          sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size())
+                         ? dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get())
+                         : nullptr;
+        if (ve) {
+            m_dragMode = DragMode::Rotate;
+            m_dragHandle = handle;
+            m_dragEi = sel.elementIndex;
+            m_dragOrigRotation = ve->GetRotation();
+            const QTransform x0 = elementLocalToTitle(*ve);
+            const Rectangle b = ve->GetBounds();
+            m_dragOrigCenterTitle = x0.map(QPointF(b.width / 2.0, b.height / 2.0));
+            const QPointF sp = widgetToTitle(wpos);
+            m_dragStartAngle = std::atan2(sp.y() - m_dragOrigCenterTitle.y(),
+                                          sp.x() - m_dragOrigCenterTitle.x());
+            m_lastDragWidgetPos = wpos;
+            m_dragging = true;
+            emit interactiveEditStarted();
+        }
+        return;
+    }
+
+    // 2. Resize handle hit?
     if (handle >= 0) {
         const SelectionId sel = m_editorState->selection();
         const Title& t = m_doc->title();
@@ -722,6 +818,18 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
         m_dragOrigBounds = ve ? ve->GetBounds() : Rectangle{};
         m_dragEi = sel.elementIndex;
         m_dragging = true;
+
+        if (ve) {
+            const QTransform x0 = elementLocalToTitle(*ve);
+            const double ow0 = m_dragOrigBounds.width, oh0 = m_dragOrigBounds.height;
+            double ax0, ay0;
+            resizemath::anchorNorm(handle, ax0, ay0);
+            m_dragAnchorTitle     = x0.map(QPointF(ax0 * ow0, ay0 * oh0));
+            m_dragOrigCenterTitle = x0.map(QPointF(ow0 / 2.0, oh0 / 2.0));
+            const Point gpos = ve->GetGlobalPosition();
+            m_dragParentOffset = QPointF(gpos.x - m_dragOrigBounds.x, gpos.y - m_dragOrigBounds.y);
+        }
+
         emit interactiveEditStarted();
         return;
     }
@@ -729,7 +837,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
     const SelectionId curSel = m_editorState->selection();
     const QPointF sp = widgetToTitle(wpos);
 
-    // 2. Always hit-test (top-most element under cursor wins), then decide
+    // 3. Always hit-test (top-most element under cursor wins), then decide
     //    whether to keep dragging the current selection or select the new hit.
     const SelectionId hit = hitTest(sp);
 
@@ -757,58 +865,38 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
 
 void CanvasWidget::applyResizeDrag(QPointF widgetPos, Qt::KeyboardModifiers mods)
 {
+    const Title& t = m_doc->title();
+    if (m_dragEi < 1 || m_dragEi >= (int)t.elements.size()) return;
+    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[m_dragEi].get());
+    if (!ve) return;
+
     const QPointF titlePt = widgetToTitle(widgetPos);
-    const double dx = titlePt.x() - m_dragStartTitle.x();
-    const double dy = titlePt.y() - m_dragStartTitle.y();
-    const double ox = m_dragOrigBounds.x, oy = m_dragOrigBounds.y;
-    const double ow = m_dragOrigBounds.width, oh = m_dragOrigBounds.height;
-    Rectangle newBounds = m_dragOrigBounds;
+    const QPointF deltaWorld = titlePt - m_dragStartTitle;
 
-    switch (m_dragHandle) {
-    case 0: newBounds.x = ox+dx; newBounds.y = oy+dy; newBounds.width = std::max(1.0,ow-dx); newBounds.height = std::max(1.0,oh-dy); break;
-    case 1: newBounds.y = oy+dy; newBounds.height = std::max(1.0,oh-dy); break;
-    case 2: newBounds.y = oy+dy; newBounds.width = std::max(1.0,ow+dx); newBounds.height = std::max(1.0,oh-dy); break;
-    case 3: newBounds.x = ox+dx; newBounds.width = std::max(1.0,ow-dx); break;
-    case 4: newBounds.width = std::max(1.0,ow+dx); break;
-    case 5: newBounds.x = ox+dx; newBounds.width = std::max(1.0,ow-dx); newBounds.height = std::max(1.0,oh+dy); break;
-    case 6: newBounds.height = std::max(1.0,oh+dy); break;
-    case 7: newBounds.width = std::max(1.0,ow+dx); newBounds.height = std::max(1.0,oh+dy); break;
-    default: break;
-    }
+    const QTransform R = elementLinear(*ve);
+    bool ok = false;
+    const QTransform Rinv = R.inverted(&ok);
+    const QPointF dl = ok ? (Rinv.map(deltaWorld) - Rinv.map(QPointF(0, 0))) : deltaWorld;
 
-    if ((mods & Qt::ShiftModifier) && oh > 0 &&
-        (m_dragHandle == 0 || m_dragHandle == 2 || m_dragHandle == 5 || m_dragHandle == 7)) {
-        const double scale = std::min(newBounds.width / ow, newBounds.height / oh);
-        newBounds.width = std::max(1.0, ow * scale);
-        newBounds.height = std::max(1.0, oh * scale);
-        switch (m_dragHandle) {
-        case 0: newBounds.x = ox+ow-newBounds.width; newBounds.y = oy+oh-newBounds.height; break;
-        case 2: newBounds.x = ox; newBounds.y = oy+oh-newBounds.height; break;
-        case 5: newBounds.x = ox+ow-newBounds.width; newBounds.y = oy; break;
-        case 7: newBounds.x = ox; newBounds.y = oy; break;
-        default: break;
-        }
-    }
+    Rectangle newBounds = resizemath::resizeSolve(
+        m_dragHandle, m_dragOrigBounds, R, dl.x(), dl.y(),
+        m_dragAnchorTitle, m_dragOrigCenterTitle, m_dragParentOffset,
+        (mods & Qt::ShiftModifier) != 0, (mods & Qt::ControlModifier) != 0);
 
-    if (mods & Qt::ControlModifier) {
-        const double cx = ox + ow / 2.0, cy = oy + oh / 2.0;
-        newBounds.width = std::max(1.0, 2.0*newBounds.width - ow);
-        newBounds.height = std::max(1.0, 2.0*newBounds.height - oh);
-        newBounds.x = cx - newBounds.width / 2.0;
-        newBounds.y = cy - newBounds.height / 2.0;
-    }
+    const bool identity = ve->GetRotation() == 0.0f && ve->GetShearX() == 0.0f && ve->GetShearY() == 0.0f;
+    if (identity && m_snappingEnabled && !(mods & Qt::ControlModifier)) {
+        const double ox = m_dragOrigBounds.x, oy = m_dragOrigBounds.y;
+        const double ow = m_dragOrigBounds.width, oh = m_dragOrigBounds.height;
 
-    if (m_snappingEnabled) {
         const double threshold = 8.0 * titleW() / letterboxRect().width();
         QList<double> candX = {0.0, titleW()/2.0, double(titleW())};
         QList<double> candY = {0.0, titleH()/2.0, double(titleH())};
         appendGuideCandidates(candX, candY);
-        const Title& t = m_doc->title();
         for (int i = 1; i < (int)t.elements.size(); ++i) {
             if (i == m_dragEi) continue;
-            const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
-            if (!ve) continue;
-            const Rectangle& ob = ve->GetBounds();
+            const auto* ove = dynamic_cast<const VisualElement*>(t.elements[i].get());
+            if (!ove) continue;
+            const Rectangle& ob = ove->GetBounds();
             candX << ob.x << ob.x+ob.width/2.0 << ob.x+ob.width;
             candY << ob.y << ob.y+ob.height/2.0 << ob.y+ob.height;
         }
@@ -835,10 +923,30 @@ void CanvasWidget::applyResizeDrag(QPointF widgetPos, Qt::KeyboardModifiers mods
     }
 
     const int ei = m_dragEi;
-    m_doc->applyMutation([ei, newBounds](Title& t) {
-        if (ei >= 1 && ei < (int)t.elements.size()) {
-            auto* sp = dynamic_cast<Spatial*>(t.elements[ei].get());
+    m_doc->applyMutation([ei, newBounds](Title& tt) {
+        if (ei >= 1 && ei < (int)tt.elements.size()) {
+            auto* sp = dynamic_cast<Spatial*>(tt.elements[ei].get());
             if (sp) sp->SetBounds(newBounds);
+        }
+    });
+}
+
+void CanvasWidget::applyRotateDrag(QPointF widgetPos, Qt::KeyboardModifiers mods)
+{
+    const Title& t = m_doc->title();
+    if (m_dragEi < 1 || m_dragEi >= (int)t.elements.size()) return;
+    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[m_dragEi].get());
+    if (!ve) return;
+    const QPointF sp = widgetToTitle(widgetPos);
+    const double curAngle = std::atan2(sp.y() - m_dragOrigCenterTitle.y(),
+                                       sp.x() - m_dragOrigCenterTitle.x());
+    const double newRot = resizemath::rotateSolve(m_dragOrigRotation, m_dragStartAngle,
+                                                  curAngle, (mods & Qt::ShiftModifier) != 0);
+    const int ei = m_dragEi;
+    m_doc->applyMutation([ei, newRot](Title& tt) {
+        if (ei >= 1 && ei < (int)tt.elements.size()) {
+            auto* sp2 = dynamic_cast<Spatial*>(tt.elements[ei].get());
+            if (sp2) sp2->SetRotation(static_cast<float>(newRot));
         }
     });
 }
@@ -864,6 +972,11 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent* event)
 
     if (m_dragMode == DragMode::Resize) {
         applyResizeDrag(wpos, event->modifiers());
+        return;
+    }
+
+    if (m_dragMode == DragMode::Rotate) {
+        applyRotateDrag(wpos, event->modifiers());
         return;
     }
 
@@ -916,6 +1029,28 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
     const auto* ve = dynamic_cast<const VisualElement*>(t.elements[m_dragEi].get());
     if (!ve) {
         m_dragMode = DragMode::None;
+        return;
+    }
+
+    if (m_dragMode == DragMode::Rotate) {
+        const float finalRot = ve->GetRotation();
+        const std::string eid = ve->GetId();
+        if (finalRot != m_dragOrigRotation) {
+            // revert to orig so SetElementRotationCmd captures the correct before-value
+            const int ei = m_dragEi;
+            const float orig = m_dragOrigRotation;
+            m_doc->applyMutation([ei, orig](Title& tt) {
+                if (ei >= 1 && ei < (int)tt.elements.size()) {
+                    auto* sp2 = dynamic_cast<Spatial*>(tt.elements[ei].get());
+                    if (sp2) sp2->SetRotation(orig);
+                }
+            });
+            m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, eid, finalRot, -1));
+        }
+        m_dragMode = DragMode::None;
+        m_dragHandle = -1;
+        m_dragEi = -1;
+        updateCursorForPos(event->position());
         return;
     }
 
@@ -1045,30 +1180,51 @@ void CanvasWidget::dropEvent(QDropEvent* event)
     event->acceptProposedAction();
 }
 
+// Pick a bidirectional resize cursor from a handle's outward direction (widget space, y-down).
+static Qt::CursorShape resizeCursorForAngle(double dx, double dy)
+{
+    double a = std::atan2(dy, dx) * 180.0 / M_PI;   // (-180,180]
+    a = std::fmod(a + 180.0, 180.0);                 // fold to [0,180) — cursor is bidirectional
+    if (a < 22.5 || a >= 157.5) return Qt::SizeHorCursor;
+    if (a < 67.5)               return Qt::SizeFDiagCursor;   // down-right / up-left  "\"
+    if (a < 112.5)              return Qt::SizeVerCursor;
+    return Qt::SizeBDiagCursor;                              // down-left / up-right  "/"
+}
+
 void CanvasWidget::updateCursorForPos(QPointF wpos)
 {
     if (m_paintModeActive) return; // cursor already set by setPaintMode(); don't override
 
-    static const Qt::CursorShape kHandleCursors[8] = {
-        Qt::SizeFDiagCursor, Qt::SizeVerCursor, Qt::SizeBDiagCursor, Qt::SizeHorCursor,
-        Qt::SizeHorCursor, Qt::SizeBDiagCursor, Qt::SizeVerCursor, Qt::SizeFDiagCursor};
+    const SelectionId sel = m_editorState->selection();
+    const VisualElement* selVe = nullptr;
+    if (sel.level == SelectionId::Level::Element) {
+        const Title& t = m_doc->title();
+        if (sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size())
+            selVe = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
+    }
 
     const int handle = hitHandle(wpos);
-    if (handle >= 0) { setCursor(kHandleCursors[handle]); return; }
+    if (handle == SelectionHandles::kRotateHandle) {
+        setCursor(Qt::CrossCursor);   // Qt has no native rotate cursor; CrossCursor is the stand-in
+        return;
+    }
+    if (handle >= 0 && selVe) {
+        const QTransform xf = elementToWidgetTransform(*selVe);
+        const QPointF center = xf.map(localBoundsRect(*selVe).center());
+        const QPointF hc = SelectionHandles::handleCenterT(handle, xf, localBoundsRect(*selVe));
+        setCursor(resizeCursorForAngle(hc.x() - center.x(), hc.y() - center.y()));
+        return;
+    }
 
-    const SelectionId sel = m_editorState->selection();
-    if (sel.level == SelectionId::Level::Element) {
-        const QPointF sp = widgetToTitle(wpos);
-        const Title& t = m_doc->title();
-        if (sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size()) {
-            const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
-            if (ve) {
-                const Rectangle gb = globalBounds(*ve);
-                if (sp.x() >= gb.x && sp.x() <= gb.x + gb.width &&
-                    sp.y() >= gb.y && sp.y() <= gb.y + gb.height) {
-                    setCursor(Qt::SizeAllCursor);
-                    return;
-                }
+    if (selVe) {
+        bool ok = false;
+        const QTransform inv = elementLocalToTitle(*selVe).inverted(&ok);
+        if (ok) {
+            const QPointF lp = inv.map(widgetToTitle(wpos));
+            const Rectangle b = selVe->GetBounds();
+            if (lp.x() >= 0.0 && lp.x() <= b.width && lp.y() >= 0.0 && lp.y() <= b.height) {
+                setCursor(Qt::SizeAllCursor);
+                return;
             }
         }
     }
