@@ -20,7 +20,8 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P0-2: selection retargets wrong element after delete/reorder — VERIFIED (code deb5b2b + GUI smoke)
 - [x] P0-3: ID rename not undoable + corrupts undo history — VERIFIED (impl+reviewer APPROVE + GUI)
 - [x] P0-4: editor-side missing-asset validation (complements E2) — VERIFIED (inline GUI + review)
-- [ ] P1-1..7: shortcuts, hit-slack, tree reset, undo merge, error surfacing, palette colors, DPR
+- [x] P1-1: Delete shortcut (Del/Backspace) + new Duplicate cmd (Ctrl+D) — VERIFIED (impl+review+GUI)
+- [ ] P1-2..7: hit-slack, tree reset, undo merge, error surfacing, palette colors, DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
 ## Log
@@ -98,6 +99,21 @@ Dark-only theme. Rotation & multi-select deferred.
   that blocks qt-auto-test's click call (had to dismiss via xdotool Escape). The save-error
   surfacing is a trivial reviewer-verified string append + the engine throw-before-write is
   deterministically proven by scratchpad/save_test.cpp (throws w/ path, no .ogt written).
+
+### 2026-07-22 — P1-1 Delete/Duplicate shortcuts (impl → reviewer APPROVE → GUI)
+- Impl: extracted `deleteSelectedElement()` + `insertElementCopy(json,offset)` from the delete
+  lambda / doPaste; new `onDuplicate()`; `m_deleteAction` (Del+Backspace) + `m_duplicateAction`
+  (Ctrl+D) as a Clipboard-panel small stack, enabled on hasElement. Build exit 0.
+- Reviewer APPROVED — critically confirmed Backspace/Delete do NOT steal keystrokes from text
+  fields: QLineEdit/QAbstractSpinBox/QPlainTextEdit all claim Delete+Backspace via
+  ShortcutOverride, suppressing the window-level QAction. No competing Del/Ctrl+D bindings.
+- GUI (qt-auto-test pid 487578): added element_1, Home tab → Duplicate/Delete buttons present &
+  ENABLED. Clicked Duplicate → element_2 created (offset copy), selected; ID=element_2,
+  X=Y=110.0px (orig 100 + 10 offset), z_order=1; undo label "Undo Add element" (undoable);
+  both rows in timeline (screenshot p11-dup2.png). ✓
+- Shortcut KEYS (Ctrl+D/Del/Backspace) not injectable via qt-auto-test (window QAction shortcuts
+  don't fire from synthetic child-widget key events); slots verified via button (Duplicate) and
+  P0-2 (Delete). Bindings + ShortcutOverride safety are code+reviewer-confirmed.
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after

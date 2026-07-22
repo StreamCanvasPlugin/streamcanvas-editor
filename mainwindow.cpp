@@ -388,6 +388,20 @@ void MainWindow::setupRibbon()
         addAction(m_copyAction);
 
         panel->addLargeWidget(makeSmallStack({m_cutAction, m_copyAction}));
+
+        m_duplicateAction = new QAction(themedIcon(Icons16::Action_Copy), "Duplicate", this);
+        m_duplicateAction->setEnabled(false);
+        m_duplicateAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        connect(m_duplicateAction, &QAction::triggered, this, &MainWindow::onDuplicate);
+        addAction(m_duplicateAction);
+
+        m_deleteAction = new QAction(themedIcon(Icons16::Action_Trash), "Delete", this);
+        m_deleteAction->setEnabled(false);
+        m_deleteAction->setShortcuts({QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)});
+        connect(m_deleteAction, &QAction::triggered, this, &MainWindow::deleteSelectedElement);
+        addAction(m_deleteAction);
+
+        panel->addLargeWidget(makeSmallStack({m_duplicateAction, m_deleteAction}));
     }
 
     // ── Insert tab ─────────────────────────────────────────────────────────────
@@ -653,14 +667,7 @@ void MainWindow::setupRibbon()
     m_ribbon->hideCategory(m_formatSection->imageCategory());
     m_ribbon->hideCategory(m_formatSection->qrCategory());
 
-    connect(m_formatSection, &RibbonFormatSection::deleteElementRequested, this, [this]() {
-        const SelectionId sel = m_editorTitle->selection();
-        if (sel.level != SelectionId::Level::Element) return;
-        const Title& t = m_doc->title();
-        if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return;
-        const std::string ei = t.elements[sel.elementIndex]->GetId();
-        m_doc->undoStack()->push(new RemoveElementCmd(m_doc, ei));
-    });
+    connect(m_formatSection, &RibbonFormatSection::deleteElementRequested, this, &MainWindow::deleteSelectedElement);
 
     connect(m_formatSection, &RibbonFormatSection::copyStyleModeToggled, this,
             [this](bool on, const std::string& srcEi) { m_canvas->setPaintMode(on, srcEi); });
@@ -790,6 +797,8 @@ void MainWindow::updateToolBarState(SelectionId id)
 
     if (m_cutAction)  m_cutAction->setEnabled(hasElement);
     if (m_copyAction) m_copyAction->setEnabled(hasElement);
+    if (m_duplicateAction) m_duplicateAction->setEnabled(hasElement);
+    if (m_deleteAction)    m_deleteAction->setEnabled(hasElement);
 
     bool canPaste = m_clipboard.has_value();
     if (!canPaste)
@@ -869,6 +878,66 @@ void MainWindow::onCut()
     }
 }
 
+void MainWindow::deleteSelectedElement()
+{
+    const SelectionId sel = m_editorTitle->selection();
+    if (sel.level != SelectionId::Level::Element) return;
+    const Title& t = m_doc->title();
+    if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return;
+    const std::string ei = t.elements[sel.elementIndex]->GetId();
+    m_doc->undoStack()->push(new RemoveElementCmd(m_doc, ei));
+}
+
+void MainWindow::insertElementCopy(nlohmann::json cb, double offset)
+{
+    const Title& t = m_doc->title();
+    std::string origType = cb.value("type", "rectangle");
+    std::string prefix = "element_";
+    if (origType == "text")       prefix = "text_";
+    else if (origType == "image") prefix = "image_";
+    else if (origType == "qr_code") prefix = "qr_";
+
+    int maxN = 0;
+    for (int i = 1; i < (int)t.elements.size(); ++i) {
+        const std::string& eid = t.elements[i]->GetId();
+        if (eid.rfind(prefix, 0) == 0)
+            try { maxN = std::max(maxN, std::stoi(eid.substr(prefix.size()))); } catch (...) {}
+    }
+    std::string newId = prefix + std::to_string(maxN + 1);
+
+    cb["id"] = newId;
+    cb["z_order"] = std::max(0, (int)t.elements.size() - 1);
+    if (offset != 0.0) {
+        if (cb.contains("x")) cb["x"] = cb["x"].get<double>() + offset;
+        if (cb.contains("y")) cb["y"] = cb["y"].get<double>() + offset;
+    }
+
+    m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(cb)));
+
+    const Title& t2 = m_doc->title();
+    for (int i = 1; i < (int)t2.elements.size(); ++i)
+        if (t2.elements[i]->GetId() == newId) {
+            m_editorTitle->setSelection({SelectionId::Level::Element, i});
+            break;
+        }
+    updateToolBarState(m_editorTitle->selection());
+}
+
+void MainWindow::onDuplicate()
+{
+    const SelectionId sel = m_editorTitle->selection();
+    const Title& t = m_doc->title();
+    if (sel.level != SelectionId::Level::Element ||
+        sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size())
+        return;
+    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
+    if (!ve) return;
+    nlohmann::json cb = TitleDocument::elementToJson(*ve);
+    cb.erase("mask");
+    cb.erase("parent");
+    insertElementCopy(std::move(cb), 10.0);
+}
+
 void MainWindow::doPaste(bool inPlace)
 {
     using json = nlohmann::json;
@@ -882,36 +951,7 @@ void MainWindow::doPaste(bool inPlace)
         const double offset = inPlace ? 0.0 : 10.0;
 
         if (clipType == "element") {
-            const Title& t = m_doc->title();
-            std::string origType = cb.value("type", "rectangle");
-            std::string prefix = "element_";
-            if (origType == "text")     prefix = "text_";
-            else if (origType == "image")    prefix = "image_";
-            else if (origType == "qr_code")  prefix = "qr_";
-
-            int maxN = 0;
-            for (int i = 1; i < (int)t.elements.size(); ++i) {
-                const std::string& eid = t.elements[i]->GetId();
-                if (eid.rfind(prefix, 0) == 0)
-                    try { maxN = std::max(maxN, std::stoi(eid.substr(prefix.size()))); } catch (...) {}
-            }
-            std::string newId = prefix + std::to_string(maxN + 1);
-
-            cb["id"] = newId;
-            cb["z_order"] = std::max(0, (int)t.elements.size() - 1);
-            if (offset != 0.0) {
-                if (cb.contains("x")) cb["x"] = cb["x"].get<double>() + offset;
-                if (cb.contains("y")) cb["y"] = cb["y"].get<double>() + offset;
-            }
-
-            m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(cb)));
-
-            const Title& t2 = m_doc->title();
-            for (int i = 1; i < (int)t2.elements.size(); ++i)
-                if (t2.elements[i]->GetId() == newId) {
-                    m_editorTitle->setSelection({SelectionId::Level::Element, i});
-                    break;
-                }
+            insertElementCopy(std::move(cb), offset);
         }
 
         updateToolBarState(m_editorTitle->selection());

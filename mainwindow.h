@@ -34,6 +34,7 @@ private slots:
     void onSaveAs();
     void onCopy();
     void onCut();
+    void onDuplicate();
 
 private:
     void setupMenuBar();
@@ -42,6 +43,8 @@ private:
     void updateToolBarState(SelectionId sel);
     bool maybeSave();
     void doPaste(bool inPlace);
+    void deleteSelectedElement();
+    void insertElementCopy(nlohmann::json cb, double offset);
 
     TitleDocument* m_doc;
     EditorTitle*   m_editorTitle;
@@ -67,6 +70,8 @@ private:
     QAction* m_redoAction{nullptr};
     QAction* m_cutAction{nullptr};
     QAction* m_copyAction{nullptr};
+    QAction* m_duplicateAction{nullptr};
+    QAction* m_deleteAction{nullptr};
     QAction* m_pasteAction{nullptr};
     QAction* m_pasteInPlaceAction{nullptr};
     QAction* m_shortcutsAction{nullptr};
