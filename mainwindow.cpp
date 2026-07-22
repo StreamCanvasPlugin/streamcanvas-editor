@@ -301,6 +301,8 @@ void MainWindow::setupRibbon()
             "<tr><td>Ctrl+X</td><td>Cut selected element</td></tr>"
             "<tr><td>Ctrl+V</td><td>Paste (offset +10 px)</td></tr>"
             "<tr><td>Ctrl+Shift+V</td><td>Paste in place</td></tr>"
+            "<tr><td>Ctrl+D</td><td>Duplicate selected element</td></tr>"
+            "<tr><td>Delete / Backspace</td><td>Delete selected element</td></tr>"
             "</table><h3>View</h3><table>"
             "<tr><td>Ctrl+=</td><td>Zoom in</td></tr>"
             "<tr><td>Ctrl+−</td><td>Zoom out</td></tr>"
