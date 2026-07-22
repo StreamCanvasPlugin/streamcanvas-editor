@@ -135,13 +135,14 @@ void SelectionHandles::draw(QPainter& p, const QTransform& xf, const QRectF& loc
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(knob, kRotateRadius, kRotateRadius);
 
-        p.setBrush(isActive ? highlight : Qt::white);
+        // Green fill so the rotate knob reads distinctly from the resize handles.
+        p.setBrush(isActive ? QColor(120, 240, 150) : QColor(52, 199, 89));
         p.setPen(QPen(Qt::white, 1.5));
         p.drawEllipse(knob, kRotateRadius, kRotateRadius);
     }
 
-    // Square handles 0-7 — AA off to keep the crisp look of the original squares.
-    p.setRenderHint(QPainter::Antialiasing, false);
+    // Handles 0-7 — circles (AA on) to match the rotate knob.
+    p.setRenderHint(QPainter::Antialiasing, true);
     for (int pass = 0; pass < 2; ++pass) {
         for (int i = 0; i < kHandleCount; ++i) {
             const bool isActive = (i == activeHandle);
@@ -154,11 +155,11 @@ void SelectionHandles::draw(QPainter& p, const QTransform& xf, const QRectF& loc
 
             p.setPen(QPen(QColor(0, 0, 0, 100), 5.0));
             p.setBrush(Qt::NoBrush);
-            p.drawRect(r);
+            p.drawEllipse(r);
 
             p.setBrush(isActive ? highlight : Qt::white);
             p.setPen(QPen(Qt::white, 1.5));
-            p.drawRect(r);
+            p.drawEllipse(r);
         }
     }
 

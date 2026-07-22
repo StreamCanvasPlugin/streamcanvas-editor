@@ -100,11 +100,20 @@ inline double normalizeDeg(double d)
 }
 
 // Rotation drag: returns the new rotation (degrees). angles in radians (atan2 of the
-// cursor about the element center). snap15 → snap the result to the nearest 15°.
+// cursor about the element center).
+//   snap15 (Shift held) → hard-snap to the nearest 15°.
+//   otherwise           → magnetic soft-snap to the nearest 45° increment when the raw
+//                         angle lands within kSoftSnap45 of one; free rotation elsewhere.
 inline double rotateSolve(double origRotDeg, double startAngleRad, double curAngleRad, bool snap15)
 {
     double deg = origRotDeg + (curAngleRad - startAngleRad) * 180.0 / kPi;
-    if (snap15) deg = std::round(deg / 15.0) * 15.0;
+    if (snap15) {
+        deg = std::round(deg / 15.0) * 15.0;
+    } else {
+        constexpr double kSoftSnap45 = 4.0;  // degrees of pull toward each 45° increment
+        const double nearest45 = std::round(deg / 45.0) * 45.0;
+        if (std::abs(deg - nearest45) <= kSoftSnap45) deg = nearest45;
+    }
     return normalizeDeg(deg);
 }
 
