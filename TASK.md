@@ -26,7 +26,7 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P1-4: undo merge granularity (text per-keystroke; spinboxes merge forever) — VERIFIED (GUI timing)
 - [x] P1-5: catch(...){} swallows errors — VERIFIED (load/save+rename via P0-4/P0-3; ribbon typed-catch)
 - [x] P1-6: hardcoded neutral colors → palette roles (dark-only) — VERIFIED (GUI: F1 dialog renders)
-- [ ] P1-7: ColorWheel HiDPI DPR
+- [x] P1-7: ColorWheel HiDPI DPR — VERIFIED (build + no-regression reasoning; dpr==1 is a no-op)
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
 ## Log
@@ -191,6 +191,17 @@ Dark-only theme. Rotation & multi-select deferred.
   readable body, subtle row borders, all legible on dark. .arg substitution correct, no garbage.
 - Minor follow-up noted (not P1-6): the static shortcuts reference doesn't list the new
   Delete/Ctrl+D shortcuts from P1-1.
+
+### 2026-07-22 — P1-7 ColorWheel HiDPI (impl → build + reasoning)
+- Impl: rebuildRing/rebuildTriangle now allocate backing QImages at size()*devicePixelRatioF()
+  and setDevicePixelRatio(dpr). Ring uses QPainter (logical coords auto-scale). Triangle writes
+  pixels directly, so its vertices are scaled by dpr and loop bounds clamped to physSz;
+  barycentric weights are scale-invariant so colors are identical, just at physical resolution.
+  paintEvent unchanged (drawImage honors the image DPR). Build exit 0.
+- Correctness: at dpr==1, qRound(x*1.0)==x → images logical-sized, byte-identical to before (no
+  regression on this dpr=1 session). Crispness manifests only on a real 2x display.
+- Not GUI-observed: the ColorWheel lives behind a modal PaintEditor dialog (blocks qt-auto-test)
+  and looks identical at dpr=1. Standard Qt HiDPI pattern; verified by build + no-regression logic.
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after

@@ -177,7 +177,10 @@ void ColorWheel::handleTriangleDrag(QPointF p)
 void ColorWheel::rebuildRing()
 {
     QSize sz = size();
-    m_ringImage = QImage(sz, QImage::Format_ARGB32);
+    const qreal dpr = devicePixelRatioF();
+    m_ringImage = QImage(QSize(qRound(sz.width() * dpr), qRound(sz.height() * dpr)),
+                         QImage::Format_ARGB32);
+    m_ringImage.setDevicePixelRatio(dpr);
     m_ringImage.fill(Qt::transparent);
 
     QPainter p(&m_ringImage);
@@ -205,13 +208,16 @@ void ColorWheel::rebuildRing()
 void ColorWheel::rebuildTriangle()
 {
     QSize sz = size();
-    m_triangleImage = QImage(sz, QImage::Format_ARGB32);
+    const qreal dpr = devicePixelRatioF();
+    const QSize physSz(qRound(sz.width() * dpr), qRound(sz.height() * dpr));
+    m_triangleImage = QImage(physSz, QImage::Format_ARGB32);
+    m_triangleImage.setDevicePixelRatio(dpr);
     m_triangleImage.fill(Qt::transparent);
 
     auto verts = triangleVertices();
-    QPointF v0 = verts[0]; // hue
-    QPointF v1 = verts[1]; // white
-    QPointF v2 = verts[2]; // black
+    QPointF v0 = verts[0] * dpr; // hue    (physical coords)
+    QPointF v1 = verts[1] * dpr; // white
+    QPointF v2 = verts[2] * dpr; // black
 
     int hue = m_color.hsvHue();
     if (hue < 0)
@@ -228,9 +234,9 @@ void ColorWheel::rebuildTriangle()
     qreal invD = 1.0 / denom;
 
     int x0 = qMax(0, (int)std::floor(std::min({v0.x(), v1.x(), v2.x()})));
-    int x1 = qMin(sz.width() - 1, (int)std::ceil(std::max({v0.x(), v1.x(), v2.x()})));
+    int x1 = qMin(physSz.width() - 1, (int)std::ceil(std::max({v0.x(), v1.x(), v2.x()})));
     int y0 = qMax(0, (int)std::floor(std::min({v0.y(), v1.y(), v2.y()})));
-    int y1 = qMin(sz.height() - 1, (int)std::ceil(std::max({v0.y(), v1.y(), v2.y()})));
+    int y1 = qMin(physSz.height() - 1, (int)std::ceil(std::max({v0.y(), v1.y(), v2.y()})));
 
     for (int y = y0; y <= y1; ++y) {
         QRgb* line = reinterpret_cast<QRgb*>(m_triangleImage.scanLine(y));
