@@ -3,6 +3,7 @@
 #include <QObject>
 
 class TitleDocument;
+class IElement;
 
 struct SelectionId {
     enum class Level { None, Title, Element };
@@ -31,6 +32,9 @@ private slots:
     void validateSelection();
 
 private:
+    const IElement* elementForSelection(const SelectionId& id) const;
+
     TitleDocument* m_doc;
     SelectionId m_selection;
+    const IElement* m_selectedElement = nullptr;
 };
