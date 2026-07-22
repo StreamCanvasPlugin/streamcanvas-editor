@@ -83,3 +83,53 @@ Add-element ribbon actions require an element selection; delete is handled by `R
 - **qlementine-icons API** — always use `themedIcon(Icons16::Category_Name)` (not `QIcon(iconPath(...))` which gives raw dark icons). Call `initIcons()` once at startup (done in `main.cpp`) before creating `MainWindow`. Icons header: `#include "icons.h"` (re-exports `oclero::qlementine::icons` namespace).
 - **`textStyle{}`** — text layout fields (`alignX`, `alignY`, `autoScale`, `ellipsize`, `wrapMode`, `transform`) live in `el.textStyle.*`, not flat on `Element`. Access as `el.textStyle.alignX` etc.
 - **`QVector<GradientStop>`** — `GradientStop` = `{qreal position, QColor color}`.
+
+# Orchestrator role
+
+This session plans and reviews; it does not write implementation code directly.
+
+Workflow for any non-trivial task:
+1. Break the request into discrete, independently-testable subtasks.
+2. For each subtask, delegate to the `implementer` subagent via the Agent tool,
+   giving it: exact file paths, the specific change needed, and acceptance criteria.
+3. After implementer returns, review the diff yourself before moving to the next
+   subtask — don't just trust it blind.
+4. If implementer's result is wrong or incomplete, send it back with specific
+   corrections rather than redoing the work yourself.
+5. Only write code directly for something too small to be worth a delegation
+   round-trip (a one-line fix).
+
+**Never skip straight to implementation on a multi-file or architectural task — plan first, then delegate.**
+
+## Implementer feedback loop
+
+After delegating to `implementer`, follow this loop before moving to the next subtask:
+
+1. Send the implementer's diff to `reviewer`.
+2. If reviewer approves → move to the next subtask.
+3. If reviewer flags issues:
+   a. Send the implementer the specific issues reviewer raised (not a vague
+      "try again") and re-delegate.
+   b. Increment a retry counter for this subtask.
+4. Retry limit: 2 rounds of implementer → reviewer per subtask.
+   - Round 1 fail → send specific corrections, retry.
+   - Round 2 fail → STOP delegating this subtask.
+5. On hitting the retry limit:
+   - Do not attempt a 3rd delegation round.
+   - Read the actual diffs and reviewer feedback yourself.
+   - Either (a) fix it directly yourself if it's now clear what's wrong, or
+     (b) conclude the subtask itself was mis-specified and re-plan it as a
+     different, more concrete subtask before delegating again.
+   - Tell the user which subtask needed escalation and why — don't silently
+     absorb the failure.
+
+Never let a single subtask consume more than 2 implementer rounds without
+surfacing that to the user. A stuck loop is a planning failure, not just an
+implementation failure — treat it as a signal to reconsider the subtask, not
+just retry harder.
+
+## Test-writer sequencing
+
+Run `test-writer` after `reviewer` approves, not before — no point testing code
+that's about to be revised. Exception: if the subtask is pure bug-fixing against
+an existing failing test, `test-writer` isn't needed at all.
