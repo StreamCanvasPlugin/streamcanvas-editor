@@ -8,6 +8,7 @@
 class TitleDocument;
 class EditorTitle;
 class CanvasWidget;
+class TitleTreeView;
 class GraphicTimingEditor;
 class RibbonFormatSection;
 class QAction;
@@ -49,6 +50,7 @@ private:
     TitleDocument* m_doc;
     EditorTitle*   m_editorTitle;
     CanvasWidget*  m_canvas;
+    TitleTreeView* m_treeView{nullptr};
 
     // Title ribbon controls
     QLineEdit* m_titleNameEdit{nullptr};

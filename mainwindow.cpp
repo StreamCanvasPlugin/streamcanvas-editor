@@ -115,7 +115,8 @@ MainWindow::MainWindow(QWidget* parent)
     // Title tree — left dock
     auto* titleDock = new QDockWidget("Title", this);
     titleDock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetMovable);
-    titleDock->setWidget(new TitleTreeView(m_doc, m_editorTitle, titleDock));
+    m_treeView = new TitleTreeView(m_doc, m_editorTitle, titleDock);
+    titleDock->setWidget(m_treeView);
     addDockWidget(Qt::LeftDockWidgetArea, titleDock);
 
     setCorner(Qt::BottomLeftCorner,  Qt::LeftDockWidgetArea);
@@ -674,6 +675,11 @@ void MainWindow::setupRibbon()
     connect(m_canvas, &CanvasWidget::paintModeFinished, this, [this]() {
         m_formatSection->setPaintModeActive(false);
     });
+
+    connect(m_canvas, &CanvasWidget::interactiveEditStarted, this,
+            [this]() { m_treeView->setResetsSuppressed(true); });
+    connect(m_canvas, &CanvasWidget::interactiveEditFinished, this,
+            [this]() { m_treeView->setResetsSuppressed(false); });
 }
 
 // ── Menu bar ──────────────────────────────────────────────────────────────────

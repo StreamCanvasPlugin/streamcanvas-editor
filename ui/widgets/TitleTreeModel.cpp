@@ -16,10 +16,29 @@
 TitleTreeModel::TitleTreeModel(TitleDocument* doc, QObject* parent)
     : QAbstractItemModel(parent), m_doc(doc)
 {
-    connect(m_doc, &TitleDocument::documentChanged, this, [this]() {
+    connect(m_doc, &TitleDocument::documentChanged, this, &TitleTreeModel::onDocumentChanged);
+}
+
+void TitleTreeModel::onDocumentChanged()
+{
+    if (m_suppressResets) {
+        m_resetPending = true;
+        return;
+    }
+    beginResetModel();
+    endResetModel();
+}
+
+void TitleTreeModel::setResetsSuppressed(bool suppressed)
+{
+    if (m_suppressResets == suppressed)
+        return;
+    m_suppressResets = suppressed;
+    if (!suppressed && m_resetPending) {
+        m_resetPending = false;
         beginResetModel();
         endResetModel();
-    });
+    }
 }
 
 // ── Tree helpers ──────────────────────────────────────────────────────────────

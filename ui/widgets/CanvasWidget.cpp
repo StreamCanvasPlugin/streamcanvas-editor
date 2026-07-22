@@ -722,6 +722,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
         m_dragOrigBounds = ve ? ve->GetBounds() : Rectangle{};
         m_dragEi = sel.elementIndex;
         m_dragging = true;
+        emit interactiveEditStarted();
         return;
     }
 
@@ -750,6 +751,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
         m_dragOrigBounds = ve->GetBounds();
         m_dragEi = hit.elementIndex;
         m_dragging = true;
+        emit interactiveEditStarted();
     }
 }
 
@@ -901,6 +903,7 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
     }
 
     m_dragging = false;
+    emit interactiveEditFinished();
     m_snapLinesX.clear();
     m_snapLinesY.clear();
 

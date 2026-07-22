@@ -13,6 +13,8 @@ class TitleTreeView : public QTreeView {
 public:
     explicit TitleTreeView(TitleDocument* doc, EditorTitle* editorTitle, QWidget* parent = nullptr);
 
+    void setResetsSuppressed(bool suppressed);
+
 protected:
     bool event(QEvent* e) override;
     void contextMenuEvent(QContextMenuEvent* event) override;

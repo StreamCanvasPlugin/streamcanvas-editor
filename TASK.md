@@ -22,7 +22,8 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P0-4: editor-side missing-asset validation (complements E2) — VERIFIED (inline GUI + review)
 - [x] P1-1: Delete shortcut (Del/Backspace) + new Duplicate cmd (Ctrl+D) — VERIFIED (impl+review+GUI)
 - [x] P1-2: selection-handle hit-slack (+nearest-center tiebreak) — VERIFIED (deterministic test)
-- [ ] P1-3..7: tree reset, undo merge, error surfacing, palette colors, DPR
+- [x] P1-3: tree resets every doc change (flicker/lost selection) — VERIFIED (impl+review+GUI part b)
+- [ ] P1-4..7: undo merge, error surfacing, palette colors, DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
 ## Log
@@ -126,6 +127,24 @@ Dark-only theme. Rotation & multi-select deferred.
   (3,0) picks TL; exact TL/TC/TR still correct.
 - Reviewer round skipped for this 15-line pure-geometry change: exact-spec match + deterministic
   execution proof is stronger than a code read. (Not the pattern for logic-heavy items.)
+
+### 2026-07-22 — P1-3 tree reset coalescing (impl → reviewer APPROVE → GUI part b)
+- Impl (4 files): CanvasWidget emits interactiveEditStarted/Finished on drag begin/end;
+  TitleTreeModel.setResetsSuppressed() defers resets during a canvas drag (one reset on release);
+  TitleTreeView re-applies EditorTitle selection after EVERY modelReset (was lost on any reset);
+  MainWindow stores m_treeView and wires the two canvas signals. Build exit 0.
+- Reviewer APPROVED — critically confirmed no PERMANENT suppression stuck-ON: m_dragging cleared
+  only at the instrumented site; all started-without-finished paths (non-left release mid-drag,
+  m_previewTitle) self-heal on the next completed left drag. Tree drag-reorder NOT suppressed
+  (canvas signals don't fire). Selection re-apply: no recursion (m_syncingSelection guard),
+  scrollTo EnsureVisible doesn't steal scroll. Non-blocking note: m_treeView null at connect()
+  time but only deref'd at emit-time (during a drag) — harmless.
+- GUI (qt-auto-test pid 509569): PART B confirmed directly — selected element_1 in tree, changed
+  X 100->350 via spinbox (fires documentChanged->reset); tree KEPT element_1 highlighted
+  (p13-afteredit.png). Previously any reset cleared the tree highlight.
+- PART A (drag coalescing) not GUI-observed: portal-synthesized canvas drags on this Wayland
+  session land just off the element (deselect instead of move) — single clicks work, press-move-
+  release doesn't. Harness limitation, not a product bug. Coalescing logic is reviewer-verified.
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after

@@ -25,13 +25,21 @@ TitleTreeView::TitleTreeView(TitleDocument* doc, EditorTitle* editorTitle, QWidg
     setSelectionMode(QAbstractItemView::SingleSelection);
 
     expandAll();
-    connect(m_model, &QAbstractItemModel::modelReset, this, [this]() { expandAll(); });
+    connect(m_model, &QAbstractItemModel::modelReset, this, [this]() {
+        expandAll();
+        onEditorSelectionChanged(m_editorTitle->selection());
+    });
 
     connect(selectionModel(), &QItemSelectionModel::selectionChanged, this,
             &TitleTreeView::onViewSelectionChanged);
 
     connect(m_editorTitle, &EditorTitle::selectionChanged, this,
             &TitleTreeView::onEditorSelectionChanged);
+}
+
+void TitleTreeView::setResetsSuppressed(bool suppressed)
+{
+    m_model->setResetsSuppressed(suppressed);
 }
 
 void TitleTreeView::onViewSelectionChanged(const QItemSelection& selected,

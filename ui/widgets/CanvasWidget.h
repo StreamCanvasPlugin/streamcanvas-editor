@@ -73,6 +73,8 @@ public:
 
 signals:
     void paintModeFinished();
+    void interactiveEditStarted();
+    void interactiveEditFinished();
 
 protected:
     void paintEvent(QPaintEvent* event) override;

@@ -33,8 +33,14 @@ public:
     SelectionId selectionIdFor(const QModelIndex& index) const;
     QModelIndex indexForSelection(const SelectionId& sel) const;
 
+    void setResetsSuppressed(bool suppressed);
+
 private:
+    void onDocumentChanged();
+
     TitleDocument* m_doc;
+    bool m_suppressResets{false};
+    bool m_resetPending{false};
 
     // Returns indices into title.elements of direct children of parentEi
     // (parentEi == -1 means root). Sorted descending by zOrder (highest = row 0).
