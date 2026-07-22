@@ -43,6 +43,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPalette>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTextBrowser>
@@ -272,15 +273,20 @@ void MainWindow::setupRibbon()
         dlg->setWindowTitle("Keyboard Shortcuts");
         dlg->resize(500, 520);
         auto* browser = new QTextBrowser(dlg);
-        browser->setHtml(
+        const QPalette& pal = dlg->palette();
+        const QString cHead   = pal.color(QPalette::PlaceholderText).name(); // h3
+        const QString cBorder = pal.color(QPalette::Mid).name();             // td border
+        const QString cText   = pal.color(QPalette::Text).name();            // td body
+        const QString cKey    = pal.color(QPalette::BrightText).name();      // td:first key
+        browser->setHtml(QString(
             "<style>"
             "body { font-family: sans-serif; font-size: 13px; margin: 8px; }"
-            "h3 { margin-top: 14px; margin-bottom: 2px; color: #aaa; font-size: 12px;"
+            "h3 { margin-top: 14px; margin-bottom: 2px; color: %1; font-size: 12px;"
             "     text-transform: uppercase; letter-spacing: 1px; }"
             "table { border-collapse: collapse; width: 100%; margin-bottom: 4px; }"
-            "td { padding: 3px 6px; border-bottom: 1px solid #444; color: #ddd; }"
+            "td { padding: 3px 6px; border-bottom: 1px solid %2; color: %3; }"
             "td:first-child { font-family: monospace; font-weight: bold;"
-            "                 white-space: nowrap; color: #ccc; width: 200px; }"
+            "                 white-space: nowrap; color: %4; width: 200px; }"
             "</style>"
             "<h3>File</h3><table>"
             "<tr><td>Ctrl+N</td><td>New title</td></tr>"
@@ -315,7 +321,7 @@ void MainWindow::setupRibbon()
             "</table><h3>Misc</h3><table>"
             "<tr><td>F1</td><td>Show this shortcuts reference</td></tr>"
             "</table>"
-        );
+        ).arg(cHead, cBorder, cText, cKey));
         auto* layout = new QVBoxLayout(dlg);
         layout->addWidget(browser);
         auto* btns = new QDialogButtonBox(QDialogButtonBox::Close, dlg);

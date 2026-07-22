@@ -31,6 +31,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QPainter>
+#include <QPalette>
 #include <QPixmap>
 #include <QPlainTextEdit>
 #include <QSignalBlocker>
@@ -961,7 +962,10 @@ void RibbonFormatSection::onDocumentChanged()
     // ID field
     bool hasChildren = !el->GetChildren().empty();
     m_idEdit->setReadOnly(hasChildren);
-    m_idEdit->setStyleSheet(hasChildren ? "QLineEdit { color: #888; font-style: italic; }" : "");
+    m_idEdit->setStyleSheet(hasChildren
+        ? QString("QLineEdit { color: %1; font-style: italic; }")
+            .arg(m_idEdit->palette().color(QPalette::PlaceholderText).name())
+        : QString());
     m_idEdit->setText(QString::fromStdString(el->GetId()));
 
     // Fit-to-children + padding

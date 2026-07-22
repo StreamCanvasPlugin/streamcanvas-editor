@@ -1,11 +1,13 @@
 #include "transformeditor.h"
 #include <QGridLayout>
 #include <QLabel>
+#include <QPalette>
 
 static QLabel* sectionLabel(const QString& text)
 {
     auto* lbl = new QLabel(text);
-    lbl->setStyleSheet("QLabel { font-weight: bold; color: #aaa; }");
+    lbl->setStyleSheet(QString("QLabel { font-weight: bold; color: %1; }")
+        .arg(lbl->palette().color(QPalette::PlaceholderText).name()));
     return lbl;
 }
 

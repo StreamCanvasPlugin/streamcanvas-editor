@@ -25,7 +25,8 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P1-3: tree resets every doc change (flicker/lost selection) — VERIFIED (impl+review+GUI part b)
 - [x] P1-4: undo merge granularity (text per-keystroke; spinboxes merge forever) — VERIFIED (GUI timing)
 - [x] P1-5: catch(...){} swallows errors — VERIFIED (load/save+rename via P0-4/P0-3; ribbon typed-catch)
-- [ ] P1-6..7: palette colors, DPR
+- [x] P1-6: hardcoded neutral colors → palette roles (dark-only) — VERIFIED (GUI: F1 dialog renders)
+- [ ] P1-7: ColorWheel HiDPI DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
 ## Log
@@ -176,6 +177,20 @@ Dark-only theme. Rotation & multi-select deferred.
   Added #include <QDebug>. grep confirms 0 bare catch(...) remain. Build exit 0.
 - Verified by build + diff review (mechanical uniform change). No behavior change for the common
   stale-id path; only unexpected exceptions now surface in the log.
+
+### 2026-07-22 — P1-6 route neutral colors through palette (dark-only)
+- Impl: 4 neutral text/border literals → palette roles (no light-theme branch):
+  transformeditor sectionLabel #aaa → PlaceholderText; painteditor "Brand Colors" gray →
+  PlaceholderText; RibbonFormatSection read-only id #888 → PlaceholderText; F1 shortcuts HTML
+  #aaa/#444/#ddd/#ccc → PlaceholderText/Mid/Text/BrightText via QString().arg(cHead,cBorder,
+  cText,cKey) (width:100% left intact — % not followed by a digit). Added <QPalette>. Build exit 0.
+- Kept functional colors: ColorLineEdit error flash, image-path warning #c0392b, checkerboard,
+  swatch rings, timeline accents (out of scope this pass).
+- GUI (qt-auto-test pid 538340, external import for the modal): opened Help→Keyboard Shortcuts;
+  dialog renders correctly (p16-shortcuts.png) — dimmed section headers, bright key column,
+  readable body, subtle row borders, all legible on dark. .arg substitution correct, no garbage.
+- Minor follow-up noted (not P1-6): the static shortcuts reference doesn't list the new
+  Delete/Ctrl+D shortcuts from P1-1.
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
