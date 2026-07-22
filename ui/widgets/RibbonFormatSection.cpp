@@ -38,6 +38,7 @@
 #include <QStandardItemModel>
 #include <QCompleter>
 #include <QStyledItemDelegate>
+#include <QTimer>
 #include <QToolButton>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -188,6 +189,16 @@ RibbonFormatSection::RibbonFormatSection(TitleDocument* doc, SARibbonBar* ribbon
     buildQrTab(ribbon);
 
     connect(m_doc, &TitleDocument::documentChanged, this, &RibbonFormatSection::onDocumentChanged);
+
+    m_mergeIdleTimer = new QTimer(this);
+    m_mergeIdleTimer->setSingleShot(true);
+    connect(m_mergeIdleTimer, &QTimer::timeout, this, [this]() { ++m_mergeGen; });
+}
+
+int RibbonFormatSection::mergeTag(int base)
+{
+    if (m_mergeIdleTimer) m_mergeIdleTimer->start(600);
+    return base + m_mergeGen * 100000;   // base tags are < 100000, so no cross-field collision
 }
 
 static QGridLayout* addGroup(SARibbonCategory* category, const QString& name)
@@ -1010,7 +1021,7 @@ void RibbonFormatSection::onXChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.x = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::X));
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::X)));
     } catch (...) {}
 }
 
@@ -1020,7 +1031,7 @@ void RibbonFormatSection::onYChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.y = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::Y));
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::Y)));
     } catch (...) {}
 }
 
@@ -1030,7 +1041,7 @@ void RibbonFormatSection::onWChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.width = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::W));
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::W)));
     } catch (...) {}
 }
 
@@ -1040,14 +1051,14 @@ void RibbonFormatSection::onHChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.height = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::H));
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::H)));
     } catch (...) {}
 }
 
 void RibbonFormatSection::onRotChanged(double v)
 {
     if (m_updating || m_elementId.empty()) return;
-    m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, m_elementId, static_cast<float>(v)));
+    m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, m_elementId, static_cast<float>(v), mergeTag(ElemMergeTag::Rotation)));
 }
 
 void RibbonFormatSection::onZOrderChanged(int v)
@@ -1055,7 +1066,7 @@ void RibbonFormatSection::onZOrderChanged(int v)
     if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<int>(
         m_doc, m_elementId, v,
-        [](VisualElement& e) -> int& { return e.zOrder; }, "zOrder", ElemMergeTag::ZOrder));
+        [](VisualElement& e) -> int& { return e.zOrder; }, "zOrder", mergeTag(ElemMergeTag::ZOrder)));
 }
 
 void RibbonFormatSection::onOpacityChanged(double v)
@@ -1063,7 +1074,7 @@ void RibbonFormatSection::onOpacityChanged(double v)
     if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v / 100.0),
-        [](VisualElement& e) -> float& { return e.opacity; }, "opacity", ElemMergeTag::Opacity));
+        [](VisualElement& e) -> float& { return e.opacity; }, "opacity", mergeTag(ElemMergeTag::Opacity)));
 }
 
 void RibbonFormatSection::onFillPaintChanged(const Paint& p)
@@ -1083,7 +1094,7 @@ void RibbonFormatSection::onStrokeWidthChanged(double v)
     if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
-        [](VisualElement& e) -> float& { return e.strokeWidth; }, "strokeWidth", ElemMergeTag::StrokeW));
+        [](VisualElement& e) -> float& { return e.strokeWidth; }, "strokeWidth", mergeTag(ElemMergeTag::StrokeW)));
 }
 
 void RibbonFormatSection::onCornerRadiusChanged()
@@ -1167,7 +1178,7 @@ void RibbonFormatSection::onShearXChanged(double v)
     try {
         VisualElement& el = m_doc->getElement(m_elementId);
         m_doc->undoStack()->push(new SetElementShearCmd(
-            m_doc, m_elementId, static_cast<float>(v), el.GetShearY(), ElemMergeTag::ShearX));
+            m_doc, m_elementId, static_cast<float>(v), el.GetShearY(), mergeTag(ElemMergeTag::ShearX)));
     } catch (...) {}
 }
 
@@ -1177,7 +1188,7 @@ void RibbonFormatSection::onShearYChanged(double v)
     try {
         VisualElement& el = m_doc->getElement(m_elementId);
         m_doc->undoStack()->push(new SetElementShearCmd(
-            m_doc, m_elementId, el.GetShearX(), static_cast<float>(v), ElemMergeTag::ShearY));
+            m_doc, m_elementId, el.GetShearX(), static_cast<float>(v), mergeTag(ElemMergeTag::ShearY)));
     } catch (...) {}
 }
 
@@ -1236,7 +1247,7 @@ void RibbonFormatSection::onFontSizeChanged(double v)
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
         [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).font.size; },
-        "font_size", ElemMergeTag::StrokeW + 10));
+        "font_size", mergeTag(ElemMergeTag::StrokeW + 10)));
 }
 
 void RibbonFormatSection::onFontWeightChanged(int index)
@@ -1339,7 +1350,7 @@ void RibbonFormatSection::onLineSpacingChanged(double v)
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
         [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.lineSpacing; },
-        "line_spacing", ElemMergeTag::LineSpacing));
+        "line_spacing", mergeTag(ElemMergeTag::LineSpacing)));
 }
 
 void RibbonFormatSection::onCharSpacingChanged(double v)
@@ -1348,7 +1359,7 @@ void RibbonFormatSection::onCharSpacingChanged(double v)
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
         [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.letterSpacing; },
-        "letter_spacing", ElemMergeTag::CharSpacing));
+        "letter_spacing", mergeTag(ElemMergeTag::CharSpacing)));
 }
 
 void RibbonFormatSection::onContentChanged()
@@ -1362,12 +1373,12 @@ void RibbonFormatSection::onContentChanged()
             m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
                 m_doc, m_elementId, text,
                 [](VisualElement& e) -> std::string& { return static_cast<TextElement&>(e).text; },
-                "text"));
+                "text", mergeTag(ElemMergeTag::TextContent)));
         } else if (dynamic_cast<QrElement*>(&el)) {
             m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
                 m_doc, m_elementId, text,
                 [](VisualElement& e) -> std::string& { return static_cast<QrElement&>(e).text; },
-                "text"));
+                "text", mergeTag(ElemMergeTag::TextContent)));
         }
     } catch (...) {}
 }

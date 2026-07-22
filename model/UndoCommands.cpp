@@ -136,8 +136,8 @@ bool SetElementBoundsCmd::mergeWith(const QUndoCommand* other)
 // ─────────────────────────────────────────────────────────────────────────────
 
 SetElementRotationCmd::SetElementRotationCmd(TitleDocument* doc, std::string ei, float after,
-                                             QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_after(after)
+                                             int mergeTag, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_after(after), m_mergeTag(mergeTag)
 {
     setText("Set rotation");
     try { m_before = m_doc->getElement(m_ei).GetRotation(); } catch (...) { m_before = after; }
@@ -157,7 +157,7 @@ void SetElementRotationCmd::redo()
     });
 }
 
-int  SetElementRotationCmd::id() const { return ElemMergeTag::Rotation; }
+int  SetElementRotationCmd::id() const { return m_mergeTag; }
 
 bool SetElementRotationCmd::mergeWith(const QUndoCommand* other)
 {

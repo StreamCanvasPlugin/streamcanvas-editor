@@ -3,6 +3,7 @@
 #include "engine/types.hpp"
 #include <QObject>
 #include <QSize>
+#include <QTimer>
 #include <string>
 
 class TitleDocument;
@@ -112,9 +113,17 @@ private:
     // Returns true if the path is empty or valid, false if invalid.
     bool updateImagePathValidity(const QString& path);
 
+    // Folds m_mergeGen into `base` and restarts the idle timer. Used to bound
+    // how long consecutive spinbox/text edits merge into a single undo step:
+    // a pause > 600ms bumps m_mergeGen, starting a fresh undo entry.
+    int mergeTag(int base);
+
     TitleDocument* m_doc{nullptr};
     std::string    m_elementId;
     bool           m_updating{false};
+
+    int     m_mergeGen{0};
+    QTimer* m_mergeIdleTimer{nullptr};
 
     SARibbonCategory* m_elemCategory{nullptr};
     SARibbonCategory* m_styleCategory{nullptr};

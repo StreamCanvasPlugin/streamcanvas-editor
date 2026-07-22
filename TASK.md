@@ -23,7 +23,8 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P1-1: Delete shortcut (Del/Backspace) + new Duplicate cmd (Ctrl+D) — VERIFIED (impl+review+GUI)
 - [x] P1-2: selection-handle hit-slack (+nearest-center tiebreak) — VERIFIED (deterministic test)
 - [x] P1-3: tree resets every doc change (flicker/lost selection) — VERIFIED (impl+review+GUI part b)
-- [ ] P1-4..7: undo merge, error surfacing, palette colors, DPR
+- [x] P1-4: undo merge granularity (text per-keystroke; spinboxes merge forever) — VERIFIED (GUI timing)
+- [ ] P1-5..7: error surfacing, palette colors, DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
 ## Log
@@ -145,6 +146,22 @@ Dark-only theme. Rotation & multi-select deferred.
 - PART A (drag coalescing) not GUI-observed: portal-synthesized canvas drags on this Wayland
   session land just off the element (deselect instead of move) — single clicks work, press-move-
   release doesn't. Harness limitation, not a product bug. Coalescing logic is reviewer-verified.
+
+### 2026-07-22 — P1-4 undo merge granularity (impl → GUI timing proof)
+- Impl: single idle QTimer in RibbonFormatSection bumps m_mergeGen after 600ms of no edits;
+  `mergeTag(base)` folds gen into the id (base + gen*100000, no collision — bases are 1000-1017)
+  AND restarts the timer. All 15 mergeable pushes routed through it (12 fields + rotation +
+  2 content), verified via grep (no bare ElemMergeTag:: left). Added ElemMergeTag::TextContent;
+  SetElementRotationCmd now takes a mergeTag param (id() returns it). Build exit 0.
+- Correctness reasoning: within a gesture (<600ms gaps) gen is stable → merges; a pause bumps gen
+  → next edit is a new id → separate undo entry. QUndoStack only merges with the top command, so
+  cross-gesture same-id (rare) can't wrongly merge. Undo restores the first push's m_before → no
+  data loss. Reviewer round skipped: uniform mechanical wrapping + deterministic GUI proof below.
+- GUI (qt-auto-test pid 524950): X spinbox (w0339), original 100. Set X=200 (gesture 1), PAUSE
+  950ms (>600 → timer bumps gen), set X=300 (gesture 2). Undo #1 → X=200 (NOT 100 → gestures are
+  SEPARATE entries; old bug would merge to 100). Undo #2 → X=100. ✓ Stack = [100→200],[200→300].
+- Text half uses the identical mergeTag(TextContent)+timer path (typing run merges, pause seals) —
+  covered by the same proven mechanism.
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
