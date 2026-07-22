@@ -21,7 +21,9 @@
 #include <QDialog>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFontDatabase>
+#include <QImageReader>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -980,6 +982,7 @@ void RibbonFormatSection::onDocumentChanged()
 
     if (const auto* ie = dynamic_cast<const ImageElement*>(el)) {
         m_imagePathEdit->setText(QString::fromStdString(ie->imagePath));
+        updateImagePathValidity(m_imagePathEdit->text());
         m_scaleMode->setCurrentIndex(scaleModeToComboIndex(ie->imageScaleMode));
     }
 
@@ -1369,6 +1372,26 @@ void RibbonFormatSection::onContentChanged()
     } catch (...) {}
 }
 
+bool RibbonFormatSection::updateImagePathValidity(const QString& path)
+{
+    if (path.isEmpty()) {
+        m_imagePathEdit->setStyleSheet(QString());
+        m_imagePathEdit->setToolTip(QString());
+        return true;
+    }
+    QFileInfo fi(path);
+    const bool ok = fi.exists() && fi.isFile() && QImageReader(path).canRead();
+    if (ok) {
+        m_imagePathEdit->setStyleSheet(QString());
+        m_imagePathEdit->setToolTip(path);
+    } else {
+        // Semantic warning color (functional, kept even in the dark-only theme).
+        m_imagePathEdit->setStyleSheet(QStringLiteral("QLineEdit { border: 1px solid #c0392b; }"));
+        m_imagePathEdit->setToolTip(tr("Image file not found or unreadable:\n%1").arg(path));
+    }
+    return ok;
+}
+
 void RibbonFormatSection::onImagePathChanged()
 {
     if (m_updating || m_elementId.empty()) return;
@@ -1377,6 +1400,12 @@ void RibbonFormatSection::onImagePathChanged()
         m_doc, m_elementId, path,
         [](VisualElement& e) -> std::string& { return static_cast<ImageElement&>(e).imagePath; },
         "image_path"));
+
+    if (!updateImagePathValidity(m_imagePathEdit->text())) {
+        QToolTip::showText(
+            m_imagePathEdit->mapToGlobal(QPoint(0, m_imagePathEdit->height())),
+            m_imagePathEdit->toolTip(), m_imagePathEdit);
+    }
 }
 
 void RibbonFormatSection::onScaleModeChanged(int index)

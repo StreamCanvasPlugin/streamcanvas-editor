@@ -22,9 +22,11 @@ TitleDocument::TitleDocument(QObject* parent) : QObject(parent)
 
 bool TitleDocument::load(const QString& path)
 {
+    m_lastError.clear();
     try {
         m_title = Title::Load(path.toStdString());
-    } catch (const std::exception&) {
+    } catch (const std::exception& e) {
+        m_lastError = QString::fromStdString(e.what());
         return false;
     }
 
@@ -61,9 +63,11 @@ bool TitleDocument::save()
 
 bool TitleDocument::saveAs(const QString& path)
 {
+    m_lastError.clear();
     try {
         m_title.Save(path.toStdString());
-    } catch (...) {
+    } catch (const std::exception& e) {
+        m_lastError = QString::fromStdString(e.what());
         return false;
     }
 

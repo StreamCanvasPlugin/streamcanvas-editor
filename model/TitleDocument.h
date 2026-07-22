@@ -29,6 +29,7 @@ public:
     VisualElement& getElement(const std::string& elementId);
     QString filePath() const { return m_filePath; }
     bool isModified() const { return m_modified; }
+    QString lastError() const { return m_lastError; }
 
     // Display name (maps to title.id for persistence)
     QString titleName() const;
@@ -62,6 +63,7 @@ private:
     QUndoStack m_undoStack;
     QString m_filePath;
     bool m_modified{false};
+    QString m_lastError;
     QList<QColor> m_brandColors;
 
     void applyFitToChildren();

@@ -19,7 +19,7 @@ Dark-only theme. Rotation & multi-select deferred.
       (mirror of E1 applied to submodule working tree; formal submodule bump pending)
 - [x] P0-2: selection retargets wrong element after delete/reorder — VERIFIED (code deb5b2b + GUI smoke)
 - [x] P0-3: ID rename not undoable + corrupts undo history — VERIFIED (impl+reviewer APPROVE + GUI)
-- [ ] P0-4: editor-side missing-asset validation (complements E2)
+- [x] P0-4: editor-side missing-asset validation (complements E2) — VERIFIED (inline GUI + review)
 - [ ] P1-1..7: shortcuts, hit-slack, tree reset, undo merge, error surfacing, palette colors, DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
@@ -81,6 +81,23 @@ Dark-only theme. Rotation & multi-select deferred.
   "element_2", tree unchanged, undo label stayed "Undo Add element" (NO rename cmd pushed). ✓
 - No committed test infra in repo (no CTest/gtest/QTest); test-writer skipped, consistent with
   P0-1/P0-2 — verified deterministically via undo-label + field-text evidence instead.
+
+### 2026-07-22 — P0-4 missing-asset validation + error surfacing (impl → reviewer APPROVE → GUI)
+- Impl: `RibbonFormatSection::updateImagePathValidity()` (QFileInfo + QImageReader::canRead) →
+  red border + warning tooltip on a missing/unreadable path, non-blocking (command still pushed);
+  called from onImagePathChanged (tooltip popup on invalid) and the image refresh (state only).
+  `TitleDocument::lastError()` captures engine `e.what()` (catch narrowed from `...` to
+  `const std::exception&`); onOpen/onSave/onSaveAs append the real cause. Build exit 0.
+- Reviewer APPROVED. Critically verified the catch-narrowing is safe: traced every throw on the
+  engine Save/Load path — all std::exception-derived (runtime_error, nlohmann json, filesystem);
+  the zipper lib never throws (bool status codes only). No non-std throw can now escape.
+- GUI (qt-auto-test pid 472218): added image_1, Image tab → set path "/tmp/does-not-exist-xyz.png"
+  + Return → Path field shows a RED BORDER, value still applied (field+model hold the path)
+  (screenshot p04-badpath.png). ✓ Inline non-blocking validation confirmed live.
+- Save-error dialog NOT script-verified: the "Save Title As" QFileDialog is a native/portal modal
+  that blocks qt-auto-test's click call (had to dismiss via xdotool Escape). The save-error
+  surfacing is a trivial reviewer-verified string append + the engine throw-before-write is
+  deterministically proven by scratchpad/save_test.cpp (throws w/ path, no .ogt written).
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after

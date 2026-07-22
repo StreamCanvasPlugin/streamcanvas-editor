@@ -106,6 +106,12 @@ private:
     void populateRefCombos();
     void loadFonts();
 
+    // Updates m_imagePathEdit's warning visual state for the given path.
+    // Empty path = neutral (no styling). Non-empty but missing/unreadable =
+    // red border + warning tooltip. Valid = cleared styling, tooltip = the path.
+    // Returns true if the path is empty or valid, false if invalid.
+    bool updateImagePathValidity(const QString& path);
+
     TitleDocument* m_doc{nullptr};
     std::string    m_elementId;
     bool           m_updating{false};

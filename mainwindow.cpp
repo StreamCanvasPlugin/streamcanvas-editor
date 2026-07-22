@@ -707,18 +707,25 @@ void MainWindow::onOpen()
     QString path = QFileDialog::getOpenFileName(this, "Open Title", QString(),
                                                 "StreamCanvas Title (*.ogt);;All Files (*)");
     if (path.isEmpty()) return;
-    if (!m_doc->load(path))
+    if (!m_doc->load(path)) {
+        const QString detail = m_doc->lastError();
         QMessageBox::warning(this, "Open Failed",
-                             QString("Could not open file:\n%1").arg(path));
-    else
+            detail.isEmpty() ? QString("Could not open file:\n%1").arg(path)
+                             : QString("Could not open file:\n%1\n\n%2").arg(path, detail));
+    } else {
         m_editorTitle->setSelection(SelectionId{});
+    }
 }
 
 void MainWindow::onSave()
 {
     if (m_doc->filePath().isEmpty()) { onSaveAs(); return; }
-    if (!m_doc->save())
-        QMessageBox::warning(this, "Save Failed", "Could not save the file.");
+    if (!m_doc->save()) {
+        const QString detail = m_doc->lastError();
+        QMessageBox::warning(this, "Save Failed",
+            detail.isEmpty() ? QString("Could not save the file.")
+                             : QString("Could not save the file.\n\n%1").arg(detail));
+    }
 }
 
 void MainWindow::onSaveAs()
@@ -728,11 +735,14 @@ void MainWindow::onSaveAs()
     if (path.isEmpty()) return;
     if (!path.endsWith(".ogt", Qt::CaseInsensitive))
         path += ".ogt";
-    if (!m_doc->saveAs(path))
+    if (!m_doc->saveAs(path)) {
+        const QString detail = m_doc->lastError();
         QMessageBox::warning(this, "Save Failed",
-                             QString("Could not save file:\n%1").arg(path));
-    else
+            detail.isEmpty() ? QString("Could not save file:\n%1").arg(path)
+                             : QString("Could not save file:\n%1\n\n%2").arg(path, detail));
+    } else {
         updateWindowTitle();
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
