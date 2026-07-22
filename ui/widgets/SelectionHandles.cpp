@@ -47,11 +47,23 @@ QRectF SelectionHandles::handleRect(int handleIndex, const QRectF& elementInWidg
 
 int SelectionHandles::hitTest(QPointF widgetPt, const QRectF& elementInWidget)
 {
+    int best = -1;
+    double bestDist = 0.0;
     for (int i = 0; i < kHandleCount; ++i) {
-        if (handleRect(i, elementInWidget).contains(widgetPt))
-            return i;
+        const QRectF r = handleRect(i, elementInWidget)
+                             .adjusted(-kHitSlack, -kHitSlack, kHitSlack, kHitSlack);
+        if (!r.contains(widgetPt))
+            continue;
+        const QPointF c = handleCenter(i, elementInWidget);
+        const double dx = widgetPt.x() - c.x();
+        const double dy = widgetPt.y() - c.y();
+        const double d = dx * dx + dy * dy;
+        if (best < 0 || d < bestDist) {
+            best = i;
+            bestDist = d;
+        }
     }
-    return -1;
+    return best;
 }
 
 void SelectionHandles::draw(QPainter& p, const QRectF& elementInWidget, int activeHandle,

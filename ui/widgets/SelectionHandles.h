@@ -12,6 +12,7 @@ class QPainter;
 struct SelectionHandles {
     static constexpr int kHandleSize = 8;
     static constexpr int kHandleCount = 8;
+    static constexpr int kHitSlack = 4;   // extra px around each handle for hit-testing
 
     // Return the rect (in widget coordinates) for a given handle index,
     // computed from the element's bounding rect already in widget coords.

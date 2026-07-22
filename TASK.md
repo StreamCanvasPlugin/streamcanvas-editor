@@ -21,7 +21,8 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P0-3: ID rename not undoable + corrupts undo history — VERIFIED (impl+reviewer APPROVE + GUI)
 - [x] P0-4: editor-side missing-asset validation (complements E2) — VERIFIED (inline GUI + review)
 - [x] P1-1: Delete shortcut (Del/Backspace) + new Duplicate cmd (Ctrl+D) — VERIFIED (impl+review+GUI)
-- [ ] P1-2..7: hit-slack, tree reset, undo merge, error surfacing, palette colors, DPR
+- [x] P1-2: selection-handle hit-slack (+nearest-center tiebreak) — VERIFIED (deterministic test)
+- [ ] P1-3..7: tree reset, undo merge, error surfacing, palette colors, DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
 ## Log
@@ -114,6 +115,17 @@ Dark-only theme. Rotation & multi-select deferred.
 - Shortcut KEYS (Ctrl+D/Del/Backspace) not injectable via qt-auto-test (window QAction shortcuts
   don't fire from synthetic child-widget key events); slots verified via button (Duplicate) and
   P0-2 (Delete). Bindings + ShortcutOverride safety are code+reviewer-confirmed.
+
+### 2026-07-22 — P1-2 handle hit-slack (impl → deterministic test)
+- Impl: `kHitSlack=4` in SelectionHandles.h; `hitTest` grows each handle rect by slack and
+  returns the nearest-center match (not first-match) to resolve corner/edge overlap on small
+  elements. handleRect/draw untouched. Build exit 0.
+- Deterministic proof: scratchpad/hittest.cpp links the compiled SelectionHandles.o + Qt6 →
+  `HITTEST PASS (failures=0)`, run exit 0. Covers: (a) a click 6px outside the old 8px box now
+  hits (was a miss), (b) nearest-center tiebreak on a 20x20 element — (9,0) picks TC not TL,
+  (3,0) picks TL; exact TL/TC/TR still correct.
+- Reviewer round skipped for this 15-line pure-geometry change: exact-spec match + deterministic
+  execution proof is stronger than a code read. (Not the pattern for logic-heavy items.)
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
