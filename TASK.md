@@ -24,7 +24,8 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P1-2: selection-handle hit-slack (+nearest-center tiebreak) — VERIFIED (deterministic test)
 - [x] P1-3: tree resets every doc change (flicker/lost selection) — VERIFIED (impl+review+GUI part b)
 - [x] P1-4: undo merge granularity (text per-keystroke; spinboxes merge forever) — VERIFIED (GUI timing)
-- [ ] P1-5..7: error surfacing, palette colors, DPR
+- [x] P1-5: catch(...){} swallows errors — VERIFIED (load/save+rename via P0-4/P0-3; ribbon typed-catch)
+- [ ] P1-6..7: palette colors, DPR
 - [ ] Delete dead ui/graphicproperties.{h,cpp}
 
 ## Log
@@ -162,6 +163,19 @@ Dark-only theme. Rotation & multi-select deferred.
   SEPARATE entries; old bug would merge to 100). Undo #2 → X=100. ✓ Stack = [100→200],[200→300].
 - Text half uses the identical mergeTag(TextContent)+timer path (typing run merges, pause seals) —
   covered by the same proven mechanism.
+
+### 2026-07-22 — P1-5 error surfacing (mostly delivered by P0-4/P0-3; ribbon cleanup)
+- The two high-value P1-5 targets were already done: load/save show the engine's real cause
+  (P0-4 TitleDocument::lastError + dialogs); the rename catch(...){} was removed with proper
+  validation (P0-3). This commit finishes the remaining ribbon swallows.
+- Impl: all 17 `catch (...)` in RibbonFormatSection.cpp narrowed to
+  `catch (const std::runtime_error&)` (the EXPECTED stale-element-id case from getElement — stays
+  silent, no noise) + a trailing `catch (const std::exception& e) { qWarning() << e.what(); }` so
+  a genuinely unexpected exception is logged instead of blindly eaten (and never propagates out of
+  a Qt slot). The one catch-with-return (onDocumentChanged) preserves return on both arms.
+  Added #include <QDebug>. grep confirms 0 bare catch(...) remain. Build exit 0.
+- Verified by build + diff review (mechanical uniform change). No behavior change for the common
+  stale-id path; only unexpected exceptions now surface in the log.
 
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
