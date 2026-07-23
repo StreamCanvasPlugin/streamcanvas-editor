@@ -739,7 +739,29 @@ deferred (playhead is a visual marker only this pass).
   - Select All → AnimationTimingPanel/AnimationTimelineEditor/ClipPropertiesPanel all
     enabled=False (multi-select disable). (multi.png)
 
+#### 2026-07-23 (follow-up: playback + zoom controls + fixes)
+User feedback: restore play/stop + speed, add zoom controls, taller/non-bold clips, and a
+live-drag-repaint bug ("dragging doesn't repaint while moving").
+- Root-caused the drag bug: paintEvent drew the dragged row from `m_rows[r].def` (only updated on
+  release), not the live `m_dragDef`. Fixed: paint the dragged row from `m_dragDef`.
+- AnimationTimelineEditor: kRowH 26→32 (taller), clip label bold→non-bold; new API
+  zoomPercent/setZoomPercent/zoomToFit/contentDuration/setPlayhead/playhead + signals
+  zoomChanged/playheadMoved; Ctrl+wheel now emits zoomChanged; user playhead drag emits playheadMoved.
+- AnimationTimingPanel: top strip gains Play/Stop button, Speed QSpinBox (%), Zoom QSpinBox (%),
+  Fit button; QTimer playback advancing a playhead to `contentDuration()` (total across all elements
+  for the current slot) driving canvas preview via new signals scrubTimeChanged/previewStopped;
+  playhead drag also previews; multi-select halts playback.
+- MainWindow: re-wired scrubTimeChanged→CanvasWidget::previewAtTime, previewStopped→stopAnimationPreview.
+- Build EVIDENCE: `cmake --build build -j$(nproc)` exit 0.
+- GUI EVIDENCE (qt-auto-test, news_lower_third): toolbar shows Show/▶/Speed/Zoom/Fit (toolbar.png);
+  Fit fills viewport with content (fit.png); zoom spin 200% rescales ruler (zoom200.png);
+  MID-DRAG screenshot (button held) shows the bar tracking the cursor — live repaint fixed
+  (middrag.png), release commits Delay 0.88 (afterdrag.png); Play → button ■, playhead advances at
+  40% speed, canvas renders preview frames (play_mid.png/canvas_mid.png); Stop → button ▶, canvas
+  returns to composed visible lower-third (canvas_final.png). Labels render non-bold, rows taller.
+
 ### Unverified / Pending
 - Not GUI-exercised this pass (lower risk, code-reviewed): left/right handle resize, context-menu
-  type/easing edit, side-panel field edit push, Data In/Data Out slots, playhead drag.
-- Not committed yet (changes are in the working tree only).
+  type/easing edit, side-panel field edit push, Data In/Data Out slots.
+- Cosmetic: zoomToFit can compute >1000% but the Zoom spin caps at 1000% (display clamp only; the
+  timeline uses the true pps). Bump the spin max if exact display is wanted.

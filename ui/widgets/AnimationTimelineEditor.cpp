@@ -20,11 +20,12 @@ namespace {
 
 constexpr int kRulerH = 22;
 constexpr int kGutterW = 140;
-constexpr int kRowH = 26;
+constexpr int kRowH = 32;
 constexpr int kHandleZoneWidth = 14;
 constexpr int kPadPx = 400;
 constexpr double kMinPps = 2.0;
 constexpr double kMaxPps = 2000.0;
+constexpr double kBasePps = 120.0;
 
 QString animationTypeName(AnimationType t)
 {
@@ -85,7 +86,7 @@ void qUtilsDrawButton(QPainter    *painter,
         painter->setClipRect(textRect);
 
         QFont font = painter->font();
-        font.setBold(true);
+        font.setBold(false);
         painter->setFont(font);
 
         QFontMetrics fm(font);
@@ -280,6 +281,8 @@ void AnimationTimelineEditor::paintEvent(QPaintEvent*)
             continue;
 
         const Row& row = m_rows[r];
+        const AnimationDef& drawDef =
+            (m_dragZone != DragZone::None && r == m_dragRow) ? m_dragDef : row.def;
 
         QColor rowBg = (r % 2 == 0) ? QColor(38, 38, 38) : QColor(34, 34, 34);
         if (r == m_activeRow)
@@ -290,7 +293,7 @@ void AnimationTimelineEditor::paintEvent(QPaintEvent*)
             p.drawRect(QRect(kGutterW, y, vw - kGutterW - 1, kRowH - 1));
         }
 
-        if (row.def.type == AnimationType::None) {
+        if (drawDef.type == AnimationType::None) {
             const int x0 = timeToX(0.0);
             const int x1 = timeToX(0.5);
             QRect ph(x0, y + 3, std::max(4, x1 - x0), kRowH - 6);
@@ -302,11 +305,11 @@ void AnimationTimelineEditor::paintEvent(QPaintEvent*)
             p.drawRect(ph);
             p.restore();
         } else {
-            const int x0 = timeToX(row.def.delay);
-            const int x1 = timeToX(row.def.delay + row.def.duration);
+            const int x0 = timeToX(drawDef.delay);
+            const int x1 = timeToX(drawDef.delay + drawDef.duration);
             QRect br(x0, y + 3, x1 - x0, kRowH - 6);
             qUtilsDrawButton(&p, br, QColor(241, 162, 24), false,
-                              animationTypeName(row.def.type), 3);
+                              animationTypeName(drawDef.type), 3);
         }
     }
     p.restore();
@@ -474,6 +477,7 @@ void AnimationTimelineEditor::mousePressEvent(QMouseEvent* event)
         m_draggingPlayhead = true;
         m_playheadTime = std::max(0.0, xToTime(event->pos().x()));
         viewport()->update();
+        emit playheadMoved(m_playheadTime);
         event->accept();
         return;
     }
@@ -502,6 +506,7 @@ void AnimationTimelineEditor::mouseMoveEvent(QMouseEvent* event)
     if (m_draggingPlayhead) {
         m_playheadTime = std::max(0.0, xToTime(event->pos().x()));
         viewport()->update();
+        emit playheadMoved(m_playheadTime);
         event->accept();
         return;
     }
@@ -583,6 +588,7 @@ void AnimationTimelineEditor::wheelEvent(QWheelEvent* event)
         updateScrollRanges();
         horizontalScrollBar()->setValue(int(tCursor * m_pps) - (pos.x() - kGutterW));
         viewport()->update();
+        emit zoomChanged(zoomPercent());
         event->accept();
         return;
     }
@@ -684,4 +690,50 @@ void AnimationTimelineEditor::scrollRowIntoView(int row)
         v = bottomNeeded;
     }
     verticalScrollBar()->setValue(std::max(0, v));
+}
+
+int AnimationTimelineEditor::zoomPercent() const
+{
+    return int(std::lround(m_pps / kBasePps * 100.0));
+}
+
+void AnimationTimelineEditor::setZoomPercent(int percent)
+{
+    const double desiredPps = kBasePps * percent / 100.0;
+    const double clampedPps = std::clamp(desiredPps, kMinPps, kMaxPps);
+
+    const double tLeft = xToTime(kGutterW);
+    m_pps = clampedPps;
+    updateScrollRanges();
+    horizontalScrollBar()->setValue(int(tLeft * m_pps));
+    viewport()->update();
+    emit zoomChanged(zoomPercent());
+}
+
+void AnimationTimelineEditor::zoomToFit()
+{
+    double dur = contentDuration();
+    if (dur <= 0.01)
+        dur = 2.0;
+
+    const int availPx = std::max(50, viewport()->width() - kGutterW - 20);
+    m_pps = std::clamp(availPx / dur, kMinPps, kMaxPps);
+    horizontalScrollBar()->setValue(0);
+    updateScrollRanges();
+    viewport()->update();
+    emit zoomChanged(zoomPercent());
+}
+
+double AnimationTimelineEditor::contentDuration() const
+{
+    double maxEnd = 0.0;
+    for (const auto& r : m_rows)
+        maxEnd = std::max(maxEnd, double(r.def.delay + r.def.duration));
+    return std::max(0.0, maxEnd);
+}
+
+void AnimationTimelineEditor::setPlayhead(double t)
+{
+    m_playheadTime = std::max(0.0, t);
+    viewport()->update();
 }

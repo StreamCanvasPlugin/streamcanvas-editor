@@ -137,6 +137,13 @@ MainWindow::MainWindow(QWidget* parent)
     timingDock->setWidget(m_timingPanel);
     addDockWidget(Qt::BottomDockWidgetArea, timingDock);
 
+    connect(m_timingPanel, &AnimationTimingPanel::scrubTimeChanged, this,
+            [this](bool isIn, bool isData, double t) {
+        m_canvas->previewAtTime(isIn, isData, t);
+    });
+    connect(m_timingPanel, &AnimationTimingPanel::previewStopped,
+            m_canvas, &CanvasWidget::stopAnimationPreview);
+
     setupMenuBar();
     updateWindowTitle();
 

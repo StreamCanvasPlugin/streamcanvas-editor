@@ -3,6 +3,10 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QSpinBox>
+#include <QTimer>
 #include <QUndoStack>
 #include <QVBoxLayout>
 
@@ -26,10 +30,42 @@ AnimationTimingPanel::AnimationTimingPanel(TitleDocument* doc, EditorTitle* sel,
     m_slotCombo->addItem(tr("Data In"));
     m_slotCombo->addItem(tr("Data Out"));
 
+    m_playBtn = new QPushButton(QStringLiteral("▶"), this);
+    m_playBtn->setFixedWidth(34);
+
+    m_speedSpin = new QSpinBox(this);
+    m_speedSpin->setRange(10, 400);
+    m_speedSpin->setSuffix(tr(" %"));
+    m_speedSpin->setValue(100);
+    m_speedSpin->setFixedWidth(70);
+    m_speedSpin->setToolTip(tr("Playback speed"));
+
+    m_zoomSpin = new QSpinBox(this);
+    m_zoomSpin->setRange(10, 1000);
+    m_zoomSpin->setSuffix(tr(" %"));
+    m_zoomSpin->setValue(100);
+    m_zoomSpin->setFixedWidth(80);
+    m_zoomSpin->setToolTip(tr("Zoom"));
+
+    m_fitBtn = new QPushButton(tr("Fit"), this);
+    m_fitBtn->setFixedWidth(44);
+    m_fitBtn->setToolTip(tr("Zoom to fit all clips"));
+
+    m_playTimer = new QTimer(this);
+    m_playTimer->setInterval(16);
+
     auto* topStrip = new QHBoxLayout();
     topStrip->setContentsMargins(4, 4, 4, 4);
     topStrip->addWidget(new QLabel(tr("Show:"), this));
     topStrip->addWidget(m_slotCombo);
+    topStrip->addStretch(1);
+    topStrip->addWidget(m_playBtn);
+    topStrip->addWidget(new QLabel(tr("Speed"), this));
+    topStrip->addWidget(m_speedSpin);
+    topStrip->addStretch(1);
+    topStrip->addWidget(new QLabel(tr("Zoom"), this));
+    topStrip->addWidget(m_zoomSpin);
+    topStrip->addWidget(m_fitBtn);
     topStrip->addStretch(1);
 
     auto* row = new QHBoxLayout();
@@ -64,6 +100,34 @@ AnimationTimingPanel::AnimationTimingPanel(TitleDocument* doc, EditorTitle* sel,
 
     connect(m_doc, &TitleDocument::documentChanged, this, &AnimationTimingPanel::onDocumentChanged);
 
+    connect(m_playBtn, &QPushButton::clicked, this, [this]() {
+        if (m_playing) {
+            stopPlayback();
+        } else {
+            startPlayback();
+        }
+    });
+    connect(m_playTimer, &QTimer::timeout, this, &AnimationTimingPanel::onPlayTick);
+
+    connect(m_zoomSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            [this](int value) { m_timeline->setZoomPercent(value); });
+    connect(m_timeline, &AnimationTimelineEditor::zoomChanged, this, [this](int percent) {
+        const QSignalBlocker blocker(m_zoomSpin);
+        m_zoomSpin->setValue(percent);
+    });
+    connect(m_fitBtn, &QPushButton::clicked, this, [this]() { m_timeline->zoomToFit(); });
+
+    connect(m_timeline, &AnimationTimelineEditor::playheadMoved, this, [this](double t) {
+        bool isIn, isData;
+        slotFlags(isIn, isData);
+        emit scrubTimeChanged(isIn, isData, t);
+    });
+
+    {
+        const QSignalBlocker blocker(m_zoomSpin);
+        m_zoomSpin->setValue(m_timeline->zoomPercent());
+    }
+
     m_slotCombo->setCurrentIndex(0);
     onSelectionChanged();
 }
@@ -82,6 +146,7 @@ void AnimationTimingPanel::onDocumentChanged()
 void AnimationTimingPanel::onSelectionChanged()
 {
     if (m_sel->selectionCount() > 1) {
+        if (m_playing) stopPlayback();
         setEnabled(false);
         return;
     }
@@ -153,4 +218,49 @@ void AnimationTimingPanel::pushAnimCmd(int elementIndex, AnimationDef def)
     }
 
     m_doc->undoStack()->push(new SetElementAnimCmd(m_doc, id, target, def));
+}
+
+void AnimationTimingPanel::slotFlags(bool& isIn, bool& isData) const
+{
+    switch (m_timeline->slot()) {
+        case AnimationTimelineEditor::Slot::In: isIn = true; isData = false; break;
+        case AnimationTimelineEditor::Slot::Out: isIn = false; isData = false; break;
+        case AnimationTimelineEditor::Slot::DataIn: isIn = true; isData = true; break;
+        case AnimationTimelineEditor::Slot::DataOut: isIn = false; isData = true; break;
+    }
+}
+
+void AnimationTimingPanel::startPlayback()
+{
+    m_playing = true;
+    m_playBtn->setText(QStringLiteral("■"));
+    m_scrubTime = 0.0;
+    m_playTimer->start();
+}
+
+void AnimationTimingPanel::stopPlayback()
+{
+    m_playing = false;
+    m_playBtn->setText(QStringLiteral("▶"));
+    m_playTimer->stop();
+    m_scrubTime = 0.0;
+    m_timeline->setPlayhead(0.0);
+    emit previewStopped();
+}
+
+void AnimationTimingPanel::onPlayTick()
+{
+    const double speed = m_speedSpin->value() / 100.0;
+    m_scrubTime += (m_playTimer->interval() / 1000.0) * speed;
+    const double total = m_timeline->contentDuration();
+    bool isIn, isData;
+    slotFlags(isIn, isData);
+    if (total <= 0.0 || m_scrubTime >= total) {
+        m_timeline->setPlayhead(total);
+        emit scrubTimeChanged(isIn, isData, total);
+        stopPlayback();
+        return;
+    }
+    m_timeline->setPlayhead(m_scrubTime);
+    emit scrubTimeChanged(isIn, isData, m_scrubTime);
 }

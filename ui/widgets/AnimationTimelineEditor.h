@@ -21,10 +21,19 @@ public:
     void focusElement(int elementIndex); // set active row + scroll it into view + emit activeClipChanged
     void clearActive();                // no active row; emit activeClipChanged(false, {})
 
+    int  zoomPercent() const;              // round(m_pps / kBasePps * 100)
+    void setZoomPercent(int percent);      // clamp so m_pps stays in [kMinPps,kMaxPps]; keep left edge fixed; update ranges; repaint; emit zoomChanged(actualPercent)
+    void zoomToFit();                      // fit all clips (contentDuration) into the viewport clip area; reset pan to 0; emit zoomChanged
+    double contentDuration() const;        // max(delay+duration) over m_rows, >= 0
+    void setPlayhead(double t);            // set m_playheadTime = max(0,t); viewport()->update(); NO signal
+    double playhead() const { return m_playheadTime; }
+
 signals:
     void activeClipChanged(bool valid, AnimationDef def);   // active row's clip -> side panel
     void rowClicked(int elementIndex);                       // user clicked a row/clip
     void clipEdited(int elementIndex, AnimationTimelineEditor::Slot slot, AnimationDef def);
+    void zoomChanged(int percent);
+    void playheadMoved(double t);          // emitted only when the USER drags the playhead (not from setPlayhead)
 
 protected:
     void paintEvent(QPaintEvent*) override;
