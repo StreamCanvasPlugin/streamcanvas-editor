@@ -11,7 +11,7 @@ class TitleDocument;
 class EditorTitle;
 class CanvasWidget;
 class TitleTreeView;
-class GraphicTimingEditor;
+class AnimationTimingPanel;
 class RibbonFormatSection;
 class QAction;
 class QCloseEvent;
@@ -69,7 +69,7 @@ private:
 
     RibbonFormatSection* m_formatSection{nullptr};
 
-    GraphicTimingEditor* m_timingEditor{nullptr};
+    AnimationTimingPanel* m_timingPanel{nullptr};
 
     QAction* m_newAction{nullptr};
     QAction* m_openAction{nullptr};

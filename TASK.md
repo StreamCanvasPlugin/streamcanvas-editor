@@ -684,3 +684,62 @@ Deferred (NOT done, need separate approval — see PLAN.md): P2-1..5, D-2 multi-
 tree parity, D-4 broader schema versioning. (D-1 is now done — see above.) Minor follow-ups
 noted in the Log: Animation Timing panel stale after structural undo (adjacent to P1-3); shortcuts
 reference dialog doesn't list the new Delete/Ctrl+D. Full clean rebuild at HEAD: see final Log entry.
+
+---
+
+## Animation Timeline Editor Rewrite (Blender-NLA style) — plan approved 2026-07-23
+Plan file: ~/.claude-personal/plans/plan-the-animationtimingeditor-rewrite-r-snazzy-harp.md
+This is the "future redesign" flagged by the P2-4 exclusion note above. Replaces the old
+per-element-bar `GraphicTimingEditor`/`AnimationTimingEditor`/`ScrubRuler` with a single
+custom-painted `QAbstractScrollArea` timeline (ruler + name gutter + clip rows + visual playhead),
+a slot combo (In/Out/Data In/Data Out), zoom + infinite horizontal scroll, and a right-side
+clip-properties panel. Selection-driven focus; multi-select disables the editor. Scrub PREVIEW
+deferred (playhead is a visual marker only this pass).
+
+### Plan (all delegated to implementer, reviewed)
+- [x] New `ClipPropertiesPanel.{h,cpp}` — Type/Easing combos + Delay/Duration spinboxes; guarded
+      `setClip`; full-def `clipChanged`. Reviewer: clean.
+- [x] New `AnimationTimelineEditor.{h,cpp}` — QAbstractScrollArea canvas; coord model, paint,
+      zoom/pan/wheel, drag (deferred push on release), context menu. Reviewer: 2 Majors fixed
+      (see Log), Minors triaged out.
+- [x] New `AnimationTimingPanel.{h,cpp}` — dock container; slot combo, composes timeline + panel,
+      subscribes to EditorTitle + documentChanged, pushes `SetElementAnimCmd`.
+- [x] MainWindow + CMake swap; delete the 6 old widget files.
+
+### Log
+#### 2026-07-23
+- Created 3 new widget pairs via parallel implementers; fixed a wrong include
+  (`"UiUtils.h"` → `"ui/UiUtils.h"`) in ClipPropertiesPanel.cpp (repo include root is project root).
+- Reviewer on the 2 leaf widgets → applied 2 Major fixes to AnimationTimelineEditor.cpp:
+  (1) vertical scroll range was short by `kRulerH` (last rows unreachable) — added kRulerH to
+  content extent in `updateScrollRanges` + reworked `scrollRowIntoView`; (2) `rebuild()` now
+  re-resolves the active row by `elementIndex` (was position-indexed → could track wrong element
+  after a mid-list removal).
+- Integration + build: swapped CMakeLists source list (3 new pairs), repointed mainwindow.h/.cpp
+  to `AnimationTimingPanel`/`m_timingPanel`, removed the old `m_timingEditor` load/clear + 3
+  connect blocks, `git rm` the 6 old files.
+- Build EVIDENCE: `cmake -B build -DCMAKE_BUILD_TYPE=Debug` exit 0; `cmake --build build -j$(nproc)`
+  exit 0 (all targets linked). Orchestrator independent re-verify: `grep` for
+  `m_timingEditor|GraphicTimingEditor|class AnimationTimingEditor|ScrubRuler` across mainwindow.*
+  + ui/ + model/ → 0 live-source matches; 6 old files absent, 6 new files present;
+  `cmake --build build` → "ninja: no work to do" exit 0; binary present (48MB).
+
+- GUI smoke test EVIDENCE (qt-auto-test, scene `templates/news_lower_third.ogt`, pid live, no crash):
+  - Panel renders: slot combo "Show: In", adaptive ruler ticks, playhead at t=0, clip panel
+    disabled when nothing selected. (panel.png)
+  - Rows render: 6 element rows; `mask` shows the None dashed placeholder; others show orange
+    clips at correct delays/durations. (panel2.png)
+  - Click clip → row highlights + selection syncs + clip panel populates
+    (bg_white In = Wipe Right / Ease Out / 0.00 / 0.75). (panelB.png)
+  - Slot combo In→Out updates all rows; active row preserved; panel refreshes to Out clip
+    (Wipe Left / Ease In / 0.50 / 0.50) — verifies the active-row-by-identity fix. (panelOut.png)
+  - Ctrl+wheel zoom-about-cursor rescales ruler + pans to keep cursor time in view. (zoomIn.png)
+  - Drag clip body → Delay 0.50→1.04, Duration unchanged; single Ctrl+Z reverts to 0.50
+    (one-undo-per-drag). (drag.png/undo.png)
+  - Select All → AnimationTimingPanel/AnimationTimelineEditor/ClipPropertiesPanel all
+    enabled=False (multi-select disable). (multi.png)
+
+### Unverified / Pending
+- Not GUI-exercised this pass (lower risk, code-reviewed): left/right handle resize, context-menu
+  type/easing edit, side-panel field edit push, Data In/Data Out slots, playhead drag.
+- Not committed yet (changes are in the working tree only).

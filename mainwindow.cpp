@@ -4,7 +4,7 @@
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 #include "ui/widgets/CanvasWidget.h"
-#include "ui/widgets/GraphicTimingEditor.h"
+#include "ui/widgets/AnimationTimingPanel.h"
 #include "ui/widgets/RibbonFormatSection.h"
 #include "ui/widgets/TitleTreeView.h"
 #include "ui/UiUtils.h"
@@ -133,38 +133,9 @@ MainWindow::MainWindow(QWidget* parent)
     // Animation timing — bottom dock
     auto* timingDock = new QDockWidget("Animation Timing", this);
     timingDock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetMovable);
-    m_timingEditor = new GraphicTimingEditor(m_doc, timingDock);
-    timingDock->setWidget(m_timingEditor);
+    m_timingPanel = new AnimationTimingPanel(m_doc, m_editorTitle, timingDock);
+    timingDock->setWidget(m_timingPanel);
     addDockWidget(Qt::BottomDockWidgetArea, timingDock);
-
-    connect(m_timingEditor, &GraphicTimingEditor::animationChanged,
-            [this](int elementIndex, bool isIn, bool isData, AnimationType type, Easing easing,
-                   float delay, float duration) {
-        const Title& t = m_doc->title();
-        if (elementIndex < 1 || elementIndex >= (int)t.elements.size()) return;
-        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[elementIndex].get());
-        if (!ve) return;
-        const std::string ei = ve->GetId();
-        AnimationDef def;
-        SetElementAnimCmd::Target target;
-        if (isData) {
-            def = isIn ? ve->dataInAnimation : ve->dataOutAnimation;
-            target = isIn ? SetElementAnimCmd::Target::DataAnimIn : SetElementAnimCmd::Target::DataAnimOut;
-        } else {
-            def = isIn ? ve->inAnimation : ve->outAnimation;
-            target = isIn ? SetElementAnimCmd::Target::AnimIn : SetElementAnimCmd::Target::AnimOut;
-        }
-        def.type = type; def.easing = easing; def.delay = delay; def.duration = duration;
-        m_doc->undoStack()->push(new SetElementAnimCmd(m_doc, ei, target, def));
-    });
-
-    connect(m_timingEditor, &GraphicTimingEditor::scrubTimeChanged,
-            [this](float t) {
-        m_canvas->previewAtTime(m_timingEditor->isIn(), m_timingEditor->isDataAnim(), double(t));
-    });
-
-    connect(m_timingEditor, &GraphicTimingEditor::previewStopped,
-            m_canvas, &CanvasWidget::stopAnimationPreview);
 
     setupMenuBar();
     updateWindowTitle();
@@ -959,7 +930,6 @@ void MainWindow::onSelectionChanged(SelectionId id)
         const bool isQr    = dynamic_cast<const QrElement*>(el)    != nullptr;
 
         m_formatSection->setSelection(el->GetId());
-        m_timingEditor->load();
 
         m_ribbon->showCategory(m_formatSection->elementCategory());
         m_ribbon->showCategory(m_formatSection->styleCategory());
@@ -978,7 +948,6 @@ void MainWindow::onSelectionChanged(SelectionId id)
         m_ribbon->hideCategory(m_formatSection->textCategory());
         m_ribbon->hideCategory(m_formatSection->imageCategory());
         m_ribbon->hideCategory(m_formatSection->qrCategory());
-        m_timingEditor->clear();
     }
 }
 
