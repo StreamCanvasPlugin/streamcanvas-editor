@@ -120,6 +120,12 @@ MainWindow::MainWindow(QWidget* parent)
     titleDock->setWidget(m_treeView);
     addDockWidget(Qt::LeftDockWidgetArea, titleDock);
 
+    connect(m_treeView, &TitleTreeView::duplicateRequested, this, &MainWindow::onDuplicate);
+    connect(m_treeView, &TitleTreeView::cutRequested, this, &MainWindow::onCut);
+    connect(m_treeView, &TitleTreeView::copyRequested, this, &MainWindow::onCopy);
+    connect(m_treeView, &TitleTreeView::pasteRequested, this, [this]() { doPaste(false); });
+    connect(m_treeView, &TitleTreeView::pasteInPlaceRequested, this, [this]() { doPaste(true); });
+
     setCorner(Qt::BottomLeftCorner,  Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
 
@@ -453,6 +459,29 @@ void MainWindow::setupRibbon()
         panel->addLargeWidget(makeSmallStack({m_alignLeftAction, m_alignHCenterAction, m_alignRightAction}));
         panel->addLargeWidget(makeSmallStack({m_alignTopAction, m_alignVMiddleAction, m_alignBottomAction}));
         panel->addLargeWidget(makeSmallStack({m_distributeHAction, m_distributeVAction}));
+
+        using ZOp = zorderops::ReorderOp;
+        auto mkReorder = [this](const auto& icon, const QString& label, ZOp op,
+                                const QKeySequence& shortcut = {}) {
+            auto* a = new QAction(themedIcon(icon), label, this);
+            a->setEnabled(false);
+            if (!shortcut.isEmpty()) a->setShortcut(shortcut);
+            connect(a, &QAction::triggered, this, [this, op]() { reorderActive(op); });
+            addAction(a);
+            return a;
+        };
+
+        m_bringToFrontAction = mkReorder(Icons16::Action_BringToFront, "Bring to Front", ZOp::ToFront,
+                                         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketRight));
+        m_bringForwardAction = mkReorder(Icons16::Navigation_StepFront, "Bring Forward", ZOp::Forward,
+                                         QKeySequence(Qt::CTRL | Qt::Key_BracketRight));
+        m_sendBackwardAction = mkReorder(Icons16::Navigation_StepBack, "Send Backward", ZOp::Backward,
+                                         QKeySequence(Qt::CTRL | Qt::Key_BracketLeft));
+        m_sendToBackAction   = mkReorder(Icons16::Action_BringToBack, "Send to Back", ZOp::ToBack,
+                                         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketLeft));
+
+        panel->addLargeWidget(makeSmallStack({m_bringToFrontAction, m_bringForwardAction}));
+        panel->addLargeWidget(makeSmallStack({m_sendBackwardAction, m_sendToBackAction}));
     }
 
     // ── Insert tab ─────────────────────────────────────────────────────────────
@@ -777,6 +806,16 @@ void MainWindow::onOpen()
                              : QString("Could not open file:\n%1\n\n%2").arg(path, detail));
     } else {
         m_editorTitle->setSelection(SelectionId{});
+
+        const Title::LoadDiagnostic& diag = m_doc->lastLoadDiagnostic();
+        if (diag.severity != Title::LoadDiagnostic::Severity::None) {
+            const bool isWarning = diag.severity == Title::LoadDiagnostic::Severity::Warning;
+            auto* msgBox = new QMessageBox(
+                isWarning ? QMessageBox::Warning : QMessageBox::Information,
+                "Schema version", QString::fromStdString(diag.message), QMessageBox::Ok, this);
+            msgBox->setAttribute(Qt::WA_DeleteOnClose);
+            msgBox->show();
+        }
     }
 }
 
@@ -875,6 +914,27 @@ void MainWindow::updateToolBarState(SelectionId id)
     if (m_alignBottomAction)  m_alignBottomAction->setEnabled(canAlign);
     if (m_distributeHAction)  m_distributeHAction->setEnabled(canDistribute);
     if (m_distributeVAction)  m_distributeVAction->setEnabled(canDistribute);
+
+    // Reorder actions: single active element with >=2 siblings (same sibling
+    // definition as TitleTreeModel::childrenOf).
+    bool canReorder = false;
+    if (id.level == SelectionId::Level::Element) {
+        const Title& t = m_doc->title();
+        if (id.elementIndex >= 1 && id.elementIndex < (int)t.elements.size()) {
+            const IElement* activeEl = t.elements[id.elementIndex].get();
+            if (const IElement* parentEl = activeEl->GetParent()) {
+                int siblingCount = 0;
+                for (const IElement* child : parentEl->GetChildren())
+                    if (dynamic_cast<const VisualElement*>(child))
+                        ++siblingCount;
+                canReorder = siblingCount >= 2;
+            }
+        }
+    }
+    if (m_bringToFrontAction) m_bringToFrontAction->setEnabled(canReorder);
+    if (m_bringForwardAction) m_bringForwardAction->setEnabled(canReorder);
+    if (m_sendBackwardAction) m_sendBackwardAction->setEnabled(canReorder);
+    if (m_sendToBackAction)   m_sendToBackAction->setEnabled(canReorder);
 }
 
 void MainWindow::onSelectionChanged(SelectionId id)
@@ -1245,4 +1305,13 @@ void MainWindow::distributeSelected(bool horizontal)
             m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, c.id, c.b));
         m_doc->undoStack()->endMacro();
     }
+}
+
+void MainWindow::reorderActive(zorderops::ReorderOp op)
+{
+    const SelectionId sel = m_editorTitle->selection();
+    if (sel.level != SelectionId::Level::Element) return;
+    const Title& t = m_doc->title();
+    if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return;
+    zorderops::applyReorder(m_doc, t.elements[sel.elementIndex].get(), op);
 }

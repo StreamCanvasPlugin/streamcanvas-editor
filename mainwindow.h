@@ -2,6 +2,7 @@
 
 #include "model/EditorTitle.h"
 #include "ui/widgets/AlignMath.h"
+#include "ui/widgets/ZOrderOps.h"
 #include <SARibbonMainWindow.h>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -41,6 +42,7 @@ private slots:
     void updateSelectionStatus();
     void alignSelected(alignmath::AlignMode mode);
     void distributeSelected(bool horizontal);
+    void reorderActive(zorderops::ReorderOp op);
 
 private:
     void setupMenuBar();
@@ -89,6 +91,10 @@ private:
     QAction* m_alignBottomAction{nullptr};
     QAction* m_distributeHAction{nullptr};
     QAction* m_distributeVAction{nullptr};
+    QAction* m_bringToFrontAction{nullptr};
+    QAction* m_bringForwardAction{nullptr};
+    QAction* m_sendBackwardAction{nullptr};
+    QAction* m_sendToBackAction{nullptr};
     QAction* m_pasteAction{nullptr};
     QAction* m_pasteInPlaceAction{nullptr};
     QAction* m_shortcutsAction{nullptr};

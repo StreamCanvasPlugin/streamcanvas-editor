@@ -1,5 +1,6 @@
 #include "TitleTreeView.h"
 #include "TitleTreeModel.h"
+#include "ZOrderOps.h"
 
 #include "engine/title.h"
 #include "model/EditorTitle.h"
@@ -12,6 +13,7 @@
 #include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QMenu>
+#include <QMouseEvent>
 
 #include <algorithm>
 
@@ -26,6 +28,13 @@ TitleTreeView::TitleTreeView(TitleDocument* doc, EditorTitle* editorTitle, QWidg
     setDragDropMode(QAbstractItemView::InternalMove);
     setDefaultDropAction(Qt::MoveAction);
     setSelectionMode(QAbstractItemView::ExtendedSelection);
+    setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
+
+    // Column 1 is the narrow, fixed-width lock column; column 0 (name) stretches.
+    header()->setStretchLastSection(false);
+    header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    header()->setSectionResizeMode(1, QHeaderView::Fixed);
+    setColumnWidth(1, 28);
 
     expandAll();
     connect(m_model, &QAbstractItemModel::modelReset, this, [this]() {
@@ -38,6 +47,30 @@ TitleTreeView::TitleTreeView(TitleDocument* doc, EditorTitle* editorTitle, QWidg
 
     connect(m_editorTitle, &EditorTitle::selectionSetChanged, this,
             &TitleTreeView::onEditorSelectionSetChanged);
+}
+
+void TitleTreeView::mousePressEvent(QMouseEvent* event)
+{
+    // A left-click in the lock column toggles that element's locked state
+    // WITHOUT disturbing the row selection. Column 1 is non-selectable, so
+    // letting the base view process the click would issue a ClearAndSelect
+    // against a non-selectable index and drop the current selection.
+    if (event->button() == Qt::LeftButton) {
+        const QModelIndex idx = indexAt(event->pos());
+        if (idx.isValid() && idx.column() == 1) {
+            const SelectionId sid = m_model->selectionIdFor(idx);
+            if (sid.level == SelectionId::Level::Element) {
+                const Title& t = m_doc->title();
+                if (sid.elementIndex >= 1 && sid.elementIndex < (int)t.elements.size()) {
+                    const std::string id = t.elements[sid.elementIndex]->GetId();
+                    m_doc->setElementLocked(id, !m_doc->isElementLocked(id));
+                }
+            }
+            event->accept();
+            return;
+        }
+    }
+    QTreeView::mousePressEvent(event);
 }
 
 void TitleTreeView::setResetsSuppressed(bool suppressed)
@@ -170,7 +203,48 @@ void TitleTreeView::contextMenuEvent(QContextMenuEvent* event)
 
     menu.addSeparator();
 
-    // ── Remove ───────────────────────────────────────────────────────────────
+    // ── Order ────────────────────────────────────────────────────────────────
+    {
+        // Sibling count computed the same way TitleTreeModel::childrenOf does:
+        // direct children of the same parent, VisualElements only.
+        int siblingCount = 0;
+        if (elementSelected && sel.elementIndex >= 1 &&
+            sel.elementIndex < (int)m_doc->title().elements.size()) {
+            const IElement* activeEl = m_doc->title().elements[sel.elementIndex].get();
+            if (const IElement* parentEl = activeEl->GetParent()) {
+                for (const IElement* child : parentEl->GetChildren())
+                    if (dynamic_cast<const VisualElement*>(child))
+                        ++siblingCount;
+            }
+        }
+        const bool canReorder = elementSelected && siblingCount >= 2;
+
+        QMenu* orderMenu = menu.addMenu("Order");
+        orderMenu->setEnabled(canReorder);
+
+        auto addOrderAction = [this, orderMenu](const QString& label, zorderops::ReorderOp op) {
+            QAction* a = orderMenu->addAction(label);
+            connect(a, &QAction::triggered, this, [this, op]() {
+                const SelectionId s = m_editorTitle->selection();
+                if (s.level != SelectionId::Level::Element) return;
+                const Title& t = m_doc->title();
+                if (s.elementIndex < 1 || s.elementIndex >= (int)t.elements.size()) return;
+                zorderops::applyReorder(m_doc, t.elements[s.elementIndex].get(), op);
+            });
+        };
+        addOrderAction("Bring to Front", zorderops::ReorderOp::ToFront);
+        addOrderAction("Bring Forward",  zorderops::ReorderOp::Forward);
+        addOrderAction("Send Backward",  zorderops::ReorderOp::Backward);
+        addOrderAction("Send to Back",   zorderops::ReorderOp::ToBack);
+    }
+
+    menu.addSeparator();
+
+    // ── Duplicate / Remove ───────────────────────────────────────────────────
+    QAction* duplicateAction = menu.addAction("Duplicate");
+    duplicateAction->setEnabled(elementSelected);
+    connect(duplicateAction, &QAction::triggered, this, [this]() { emit duplicateRequested(); });
+
     QAction* removeAction = menu.addAction("Remove");
     removeAction->setEnabled(elementSelected);
     connect(removeAction, &QAction::triggered, this, [this]() {
@@ -190,6 +264,23 @@ void TitleTreeView::contextMenuEvent(QContextMenuEvent* event)
             m_doc->undoStack()->endMacro();
         }
     });
+
+    menu.addSeparator();
+
+    // ── Clipboard ────────────────────────────────────────────────────────────
+    QAction* cutAction = menu.addAction("Cut");
+    cutAction->setEnabled(elementSelected);
+    connect(cutAction, &QAction::triggered, this, [this]() { emit cutRequested(); });
+
+    QAction* copyAction = menu.addAction("Copy");
+    copyAction->setEnabled(elementSelected);
+    connect(copyAction, &QAction::triggered, this, [this]() { emit copyRequested(); });
+
+    QAction* pasteAction = menu.addAction("Paste");
+    connect(pasteAction, &QAction::triggered, this, [this]() { emit pasteRequested(); });
+
+    QAction* pasteInPlaceAction = menu.addAction("Paste in Place");
+    connect(pasteInPlaceAction, &QAction::triggered, this, [this]() { emit pasteInPlaceRequested(); });
 
     menu.exec(event->globalPos());
 }

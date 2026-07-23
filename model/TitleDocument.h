@@ -30,6 +30,9 @@ public:
     QString filePath() const { return m_filePath; }
     bool isModified() const { return m_modified; }
     QString lastError() const { return m_lastError; }
+    // Schema-version compatibility diagnostic from the most recent load()
+    // (severity None when the file loaded cleanly, or on failure).
+    const Title::LoadDiagnostic& lastLoadDiagnostic() const { return m_lastLoadDiagnostic; }
 
     // Display name (maps to title.id for persistence)
     QString titleName() const;
@@ -50,6 +53,11 @@ public:
     void setBrandColors(const QList<QColor>& colors);
     static QList<QColor> defaultBrandColors();
 
+    // Per-element lock state — persisted in title.metadata["locked_ids"], but
+    // intentionally NOT on the undo stack (locking/unlocking is not undoable).
+    bool isElementLocked(const std::string& id) const;
+    void setElementLocked(const std::string& id, bool locked);
+
     // Serialization of a single element to JSON (for clipboard/undo snapshots)
     static nlohmann::json elementToJson(const VisualElement& el);
 
@@ -64,6 +72,7 @@ private:
     QString m_filePath;
     bool m_modified{false};
     QString m_lastError;
+    Title::LoadDiagnostic m_lastLoadDiagnostic;
     QList<QColor> m_brandColors;
 
     void applyFitToChildren();

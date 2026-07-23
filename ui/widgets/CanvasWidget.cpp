@@ -341,6 +341,15 @@ static double snapEdge(double edge, const QList<double>& cands, double threshold
 
 // ── Hit testing ───────────────────────────────────────────────────────────────
 
+bool CanvasWidget::isActiveSelectionLocked() const
+{
+    const SelectionId sel = m_editorState->selection();
+    if (sel.level != SelectionId::Level::Element) return false;
+    const Title& t = m_doc->title();
+    if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return false;
+    return m_doc->isElementLocked(t.elements[sel.elementIndex]->GetId());
+}
+
 SelectionId CanvasWidget::hitTest(QPointF titlePt) const
 {
     const Title& t = m_doc->title();
@@ -358,6 +367,7 @@ SelectionId CanvasWidget::hitTest(QPointF titlePt) const
     for (int ei : order) {
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
         if (!ve) continue;
+        if (m_doc->isElementLocked(ve->GetId())) continue;   // locked: not click-selectable on canvas
         bool ok = false;
         const QTransform inv = elementLocalToTitle(*ve).inverted(&ok);
         if (!ok) continue;               // degenerate transform (e.g. shear det 0): skip
@@ -380,6 +390,7 @@ std::vector<int> CanvasWidget::elementsInMarquee(const QRectF& widgetRect) const
     for (int i = 1; i < (int)t.elements.size(); ++i) {
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
         if (!ve) continue;
+        if (m_doc->isElementLocked(ve->GetId())) continue;   // locked: excluded from marquee selection
         const QTransform xf = elementToWidgetTransform(*ve);
         const QRectF lr = localBoundsRect(*ve);
         QPolygonF poly;
@@ -786,6 +797,7 @@ void CanvasWidget::keyPressEvent(QKeyEvent* event)
 
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
         if (!ve) return;
+        if (m_doc->isElementLocked(ve->GetId())) { event->accept(); return; }  // locked: not nudgeable
 
         Rectangle b = ve->GetBounds();
         b.x += dx;
@@ -796,12 +808,21 @@ void CanvasWidget::keyPressEvent(QKeyEvent* event)
     }
 
     // Multi-selection nudge: one undo macro per key press (cross-press
-    // coalescing via kArrowMergeTag does not apply to macros).
-    m_doc->undoStack()->beginMacro("Move elements");
+    // coalescing via kArrowMergeTag does not apply to macros). Locked members
+    // stay put; only unlocked members move.
+    std::vector<int> movable;
     for (int gi : m_editorState->selectedIndices()) {
         if (gi < 1 || gi >= (int)t.elements.size()) continue;
         const auto* gve = dynamic_cast<const VisualElement*>(t.elements[gi].get());
         if (!gve) continue;
+        if (m_doc->isElementLocked(gve->GetId())) continue;
+        movable.push_back(gi);
+    }
+    if (movable.empty()) { event->accept(); return; }
+
+    m_doc->undoStack()->beginMacro("Move elements");
+    for (int gi : movable) {
+        const auto* gve = static_cast<const VisualElement*>(t.elements[gi].get());
         Rectangle b = gve->GetBounds();
         b.x += dx;
         b.y += dy;
@@ -859,7 +880,9 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
 
     // 1. Rotate/resize handle hit? Handles only exist for a single selection
     //    (2+ selected is move-only), so don't grab an invisible handle otherwise.
-    const int handle = (m_editorState->selectionCount() <= 1) ? hitHandle(wpos) : -1;
+    //    A locked active element (e.g. selected via the tree) can't be dragged.
+    const int handle = (m_editorState->selectionCount() <= 1 && !isActiveSelectionLocked())
+                       ? hitHandle(wpos) : -1;
     if (handle == SelectionHandles::kRotateHandle) {
         const SelectionId sel = m_editorState->selection();
         const Title& t = m_doc->title();
@@ -962,7 +985,8 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
             for (int gi : m_editorState->selectedIndices()) {
                 if (gi < 1 || gi >= (int)t.elements.size()) continue;
                 const auto* gve = dynamic_cast<const VisualElement*>(t.elements[gi].get());
-                if (gve) m_dragGroup.emplace_back(gi, gve->GetBounds());
+                if (gve && !m_doc->isElementLocked(gve->GetId()))   // locked members stay put
+                    m_dragGroup.emplace_back(gi, gve->GetBounds());
             }
         }
 
@@ -1407,7 +1431,8 @@ void CanvasWidget::updateCursorForPos(QPointF wpos)
             selVe = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
     }
 
-    const int handle = (m_editorState->selectionCount() <= 1) ? hitHandle(wpos) : -1;
+    const int handle = (m_editorState->selectionCount() <= 1 && !isActiveSelectionLocked())
+                       ? hitHandle(wpos) : -1;
     if (handle == SelectionHandles::kRotateHandle) {
         setCursor(Qt::CrossCursor);   // Qt has no native rotate cursor; CrossCursor is the stand-in
         return;

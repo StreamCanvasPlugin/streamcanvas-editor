@@ -85,6 +85,65 @@ multi (no group-resize box; single-select keeps full resize/rotate); ribbon show
       2 distribute (Action_Distribute* icons) in 3 makeSmallStack columns (3+3+2), connected to
       alignSelected(mode)/distributeSelected(bool); updateToolBarState gates align≥2, distribute≥3.
 
+### D-3 — Tree layers-panel parity (minus visibility, user-deferred) (plan approved 2026-07-22)
+Plan file: ~/.claude-personal/plans/plan-d-3-except-visibility-starry-teacup.md. Editor-only.
+- [x] D3-1: in-place tree rename (ItemIsEditable childless-only, EditRole, setData mirrors ribbon
+      validation → SetElementIdCmd; DoubleClicked/EditKeyPressed) — VERIFIED (build exit 0 +
+      reviewer APPROVE: validation parity with ribbon, ribbon re-syncs via pointer revalidation).
+- [x] D3-2: reorder Bring-to-Front/Forward/Backward/To-Back — new ui/widgets/ZOrderOps.h
+      (applyReorder reuses SetElementFieldCmd<int> zOrder + dropMimeData renumber pattern);
+      tree "Order" submenu + Home→Arrange ribbon (4 actions, Ctrl+]/[/Shift) — VERIFIED (build
+      exit 0 + reviewer APPROVE: renumber parity with drag-drop, ops/clamping/undo correct).
+- [x] D3-3: context-menu Duplicate + Cut/Copy/Paste/Paste-in-Place — 5 new TitleTreeView signals
+      wired to existing MainWindow onDuplicate/onCut/onCopy/doPaste — VERIFIED (build exit 0 +
+      orchestrator diff-review; pure wiring to already-reviewed slots).
+- [x] D3-4: lock — TitleDocument isElementLocked/setElementLocked via metadata["locked_ids"]
+      (applyMutation, non-undoable, brand_colors precedent); TitleTreeModel 2nd column
+      (Action_Lock / faded Action_Unlock, column-aware flags); TitleTreeView click-toggle +
+      28px fixed col; CanvasWidget hitTest/marquee skip locked + isActiveSelectionLocked gates
+      handle-grab/cursor — build exit 0; reviewer IN PROGRESS. (Interactive halves — click-toggle,
+      col sizing, canvas guard — finished by orchestrator after the implementer agent hit a
+      session limit mid-task; TitleDocument API + tree column had already landed.)
+
+### D-4 — .ogt schema versioning / forward-compat (engine-side, ~/Projects/obs-graphics-engine)
+Plan file: same. Full forward-compat (user-chosen). Engine clone; push to MIT origin GATED on user.
+- [x] D4-1: unknown-key preservation — VisualElement + Title `extra` json; ParseElement captures
+      leftover keys (known-key sets), SerializeElement/Save merge back ("known keys win") —
+      VERIFIED (engine build exit 0 + scratchpad unknown_key_roundtrip PASS + reviewer APPROVE:
+      byte-identical when no unknowns, sets exhaustive). Known gap: nested keys inside
+      fill/stroke/shadow sub-objects still dropped (out of scope).
+- [x] D4-2: major/minor version + read policy — kOgtSchemaMajor/Minor, dual-write
+      schema_version{major,minor}+legacy version int; ClassifySchema (Ok/OlderMigrate/NewerMinor/
+      NewerMajor); NewerMajor=load-degraded (not reject) — VERIFIED (build exit 0 +
+      schema_version_test 22 checks PASS + reviewer APPROVE, one note folded into D4-3).
+- [x] D4-3: MigrateTitleJson scaffold (no-op identity today, call site + extension point) +
+      version-resolution hardening (is_number_integer guards → malformed schema_version degrades,
+      no throw) — build exit 0; migration_hardening_test PASS (+ D4-1/D4-2 regressions re-run PASS
+      by orchestrator); reviewer IN PROGRESS. (Impl agent hit a session limit after tests passed.)
+- [x] D4-4: structured load diagnostic (engine→editor) replacing fprintf(stderr) — CODE COMPLETE,
+      reviewed by orchestrator. Engine: Title::LoadDiagnostic{Severity{None,Info,Warning},message}
+      struct + m_loadDiagnostic member + GetLoadDiagnostic(); Load populates Info(NewerMinor)/
+      Warning(NewerMajor), removes both stderr warnings — engine build exit 0. Editor:
+      TitleDocument::lastLoadDiagnostic() (mirrors lastError pattern) set in load(); MainWindow::onOpen
+      shows non-blocking heap QMessageBox (WA_DeleteOnClose+show()) on severity!=None.
+      Editor build FAILS exit 1 — EXPECTED & VERIFIED to be ONLY the submodule-pin issue: every error
+      is `Title::LoadDiagnostic`/`GetLoadDiagnostic` missing because engine/ submodule is still pinned
+      pre-D4-4 (grep LoadDiagnostic engine/title.h → 0). Compiles once D4-6 bumps the submodule.
+- [x] D4-5: document versioning policy in engine/CLAUDE.md — DONE. Added "## Schema versioning &
+      forward compatibility" section to /home/diego/Projects/obs-graphics-engine/CLAUDE.md (version
+      constants, minor/major bump policy, unknown-field-preservation guarantee, ClassifySchema read
+      policy table, migration hooks, LoadDiagnostic). Docs only — no build impact.
+- [~] D4-6: submodule bump + build + verify. User approved "Commit + bump + push to MIT origin"
+      (2026-07-23). Engine committed `7ad3032` (4 content files: title.cpp/.h, visual_element.h,
+      CLAUDE.md — filemode-only churn on ~48 other files deliberately EXCLUDED). Submodule bumped
+      LOCALLY to 7ad3032 via `git fetch <clone> master` (editor engine/ HEAD=7ad3032, LoadDiagnostic
+      present). Editor rebuild `cmake --build build` → exit 0. Engine D4 verify (scratchpad
+      d4_verify, links libengine.a) → 9/9 checks PASS + diagnostic bands: current=None,
+      newer-minor=Info, newer-major=Warning (correct messages). ⛔ PUSH TO MIT ORIGIN BLOCKED: no
+      git creds in this env (`fatal: could not read Username for https://github.com`; no gh, only
+      empty `cache` helper) — user must push. Editor-repo commit of the submodule gitlink + D-3/D-4
+      editor work NOT yet done (awaiting editor commit-strategy decision).
+
 ## Log
 ### 2026-07-21
 - Branch `ux-audit-fixes` created (exit 0); engine submodule populated (48 files); editor
@@ -400,7 +459,45 @@ multi (no group-resize box; single-select keeps full resize/rotate); ribbon show
   multi-highlight rendering path was reviewer-verified; on-canvas the 3 selected boxes were shown
   (highlight outline is subtle against the fill at this zoom).
 
+### 2026-07-23 — D-4 complete (D4-4/5) + engine commit + local submodule bump + D-4 verified
+- D4-4 (implementer agent a54e51d4): engine `Title::LoadDiagnostic{Severity,message}` + member +
+  `GetLoadDiagnostic()`; Load populates Info(NewerMinor)/Warning(NewerMajor), both stderr warnings
+  removed. Editor `TitleDocument::lastLoadDiagnostic()` + `MainWindow::onOpen` non-blocking
+  QMessageBox. Reviewed by orchestrator (diffs clean, mirror lastError pattern).
+- D4-5: versioning policy section added to engine/CLAUDE.md (docs only).
+- Engine commit `7ad3032` (4 content files only; ~48 filemode-only diffs excluded via
+  `git -c core.fileMode=false add`). Submodule bumped LOCALLY (fetch from clone; editor engine/
+  HEAD=7ad3032). Editor rebuild `cmake --build build -j$(nproc)` → **exit 0** (was failing pre-bump
+  ONLY on the missing LoadDiagnostic symbol — now resolved).
+- Deterministic D-4 verify (`scratchpad/d4_verify.cpp`, links `build/libengine.a`,
+  `g++ -std=c++20`, compile+run exit 0):
+  `ALL TESTS PASS (0 failures)` — 9 checks: element unknown-key preservation (`glow` scalar +
+  `future_obj` object survive parse→serialize; known w/h intact); full Title Save→Load round-trip
+  (id, dims, metadata `custom_key`, and metadata `locked_ids` = D3-4 lock persistence); diagnostic
+  None for current file. Plus band checks by patching a saved .ogt's schema_version:
+  `1.5 → SEVERITY=Info`, `2.0 → SEVERITY=Warning` (both with correct messages).
+- ⛔ Push to MIT origin BLOCKED on credentials (`fatal: could not read Username for
+  https://github.com`; no `gh`, only empty `cache` helper). Commit `7ad3032` is local-only until
+  the user pushes.
+- D-3 GUI verification (editor pid 3015811 via qt-auto-test): added 3 rectangles (element_1/2/3);
+  tree renders the **lock column** (faded open padlock per row). Lock-column click TOGGLE verified
+  by screenshot: clicking element_2's lock cell → icon became solid/closed (opaque) → clicking again
+  → reverted to faded/open, with the element_3 selection strip preserved throughout (D3-4). Rename
+  (D3-1) inline editor DID open (edit state observed) but the synthetic double-click/F2 + keystrokes
+  are focus-fragile under the Wayland portal (known harness limit) — so **the USER manually
+  confirmed live: renaming, locking, and selecting all work** (2026-07-23). Reorder buttons present
+  and correctly placed in the Home→Arrange panel (Bring to Front/Forward, Send Backward/to Back);
+  reorder + duplicate/clipboard execution not screenshot-verified (harness focus fragility) —
+  reviewer-APPROVED logic, pending a user spot-check.
+
 ## Unverified / Pending
+- **PUSH `7ad3032` to engine MIT origin** — user must run it (no creds in this env). Until pushed,
+  the editor submodule gitlink points at a local-only commit.
+- **Editor-repo commit** of the submodule bump + all D-3/D-4 editor work — NOT done, awaiting
+  editor commit-strategy decision.
+- **D-3 GUI**: rename/lock/select USER-CONFIRMED live (2026-07-23) + lock-toggle screenshot-verified.
+  Reorder + duplicate/clipboard execution NOT screenshot-verified (harness focus fragility) —
+  buttons/menu items present & reviewer-approved; pending user spot-check.
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
   submodule bump so multiple items verify together.
 - Submodule handoff (commit E1..E4 in engine → push → bump editor submodule) NOT done; will
@@ -412,6 +509,19 @@ multi (no group-resize box; single-select keeps full resize/rotate); ribbon show
 | (none yet) | | | |
 
 ## Current State
+**D-3 + D-4 COMPLETE (implemented + verified), NOT yet committed in the editor repo.** Branch
+`ux-audit-fixes`.
+- D-3 (tree layers parity): rename (D3-1), reorder (D3-2), duplicate+clipboard (D3-3), lock column
+  (D3-4) all implemented; editor builds exit 0. GUI: rename/lock/select USER-CONFIRMED live +
+  lock-toggle screenshot-verified; reorder/duplicate reviewer-approved, user spot-check pending.
+- D-4 (.ogt versioning): D4-1..D4-5 done. Engine committed `7ad3032` (local only). Editor submodule
+  bumped LOCALLY to 7ad3032; editor builds exit 0. Deterministic verify: 9/9 checks PASS + diagnostic
+  bands (None/Info/Warning) correct.
+- **TWO USER ACTIONS OUTSTANDING**: (1) `git push origin master` in ~/Projects/obs-graphics-engine
+  (creds needed — this env can't). (2) Decide editor commit strategy, then commit the submodule bump
+  + all D-3/D-4 editor work. Everything below (P0/P1/D-1/D-2) is prior context.
+
+---
 ALL planned P0 and P1 items are implemented, verified, and committed on branch `ux-audit-fixes`
 (one focused commit each). Engine work (E1-E4) is committed + pushed to the engine origin; the
 editor submodule was bumped to consume it.

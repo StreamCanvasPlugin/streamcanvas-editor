@@ -124,6 +124,8 @@ private:
     // Hit testing
     SelectionId hitTest(QPointF titlePt) const;
     int hitHandle(QPointF widgetPt) const;
+    // True when the active/anchor selected element is locked (blocks canvas drag).
+    bool isActiveSelectionLocked() const;
     // Elements (indices into title.elements) whose widget-space quad
     // intersects the given widget-space rubber-band rect.
     std::vector<int> elementsInMarquee(const QRectF& widgetRect) const;

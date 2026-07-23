@@ -29,6 +29,7 @@ bool TitleDocument::load(const QString& path)
         m_lastError = QString::fromStdString(e.what());
         return false;
     }
+    m_lastLoadDiagnostic = m_title.GetLoadDiagnostic();
 
     // Load brand colors from metadata, fall back to defaults
     if (m_title.metadata.contains("brand_colors") && m_title.metadata["brand_colors"].is_array()) {
@@ -109,6 +110,43 @@ void TitleDocument::setBrandColors(const QList<QColor>& colors)
     m_title.metadata["brand_colors"] = arr;
     setModified(true);
     emit documentChanged();
+}
+
+bool TitleDocument::isElementLocked(const std::string& id) const
+{
+    if (!m_title.metadata.contains("locked_ids") || !m_title.metadata["locked_ids"].is_array())
+        return false;
+    for (const auto& v : m_title.metadata["locked_ids"]) {
+        if (v.is_string() && v.get<std::string>() == id)
+            return true;
+    }
+    return false;
+}
+
+void TitleDocument::setElementLocked(const std::string& id, bool locked)
+{
+    // Lock is persisted (metadata) but intentionally not on the undo stack.
+    applyMutation([&](Title& t) {
+        nlohmann::json& arr = t.metadata["locked_ids"];
+        if (!arr.is_array())
+            arr = nlohmann::json::array();
+
+        bool present = false;
+        for (const auto& v : arr) {
+            if (v.is_string() && v.get<std::string>() == id) { present = true; break; }
+        }
+
+        if (locked && !present) {
+            arr.push_back(id);
+        } else if (!locked && present) {
+            nlohmann::json filtered = nlohmann::json::array();
+            for (const auto& v : arr) {
+                if (!(v.is_string() && v.get<std::string>() == id))
+                    filtered.push_back(v);
+            }
+            arr = filtered;
+        }
+    });
 }
 
 // static

@@ -15,9 +15,17 @@ public:
 
     void setResetsSuppressed(bool suppressed);
 
+signals:
+    void duplicateRequested();
+    void cutRequested();
+    void copyRequested();
+    void pasteRequested();
+    void pasteInPlaceRequested();
+
 protected:
     bool event(QEvent* e) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
 
 private slots:
     void onViewSelectionChanged(const QItemSelection& selected, const QItemSelection& deselected);
