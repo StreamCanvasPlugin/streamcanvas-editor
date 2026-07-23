@@ -763,5 +763,20 @@ live-drag-repaint bug ("dragging doesn't repaint while moving").
 ### Unverified / Pending
 - Not GUI-exercised this pass (lower risk, code-reviewed): left/right handle resize, context-menu
   type/easing edit, side-panel field edit push, Data In/Data Out slots.
-- Cosmetic: zoomToFit can compute >1000% but the Zoom spin caps at 1000% (display clamp only; the
-  timeline uses the true pps). Bump the spin max if exact display is wanted.
+
+### Follow-ups (NOT done — recorded for a later pass)
+- **Scrub → reset-to-Visible affordance (REQUIRED).** Dragging the playhead scrubs the canvas into
+  animation-preview state and leaves it there; there is currently no explicit way to return the
+  elements to the Visible/editable state after scrubbing (only the Stop button does, and it also
+  resets the playhead to 0). Need a dedicated "reset to visible" control (or make any canvas edit /
+  deselect restore Visible) so the user can scrub and then keep editing. Ties into decision #5 of
+  the original plan ("be able to go back to the visible state").
+- **Zoom spin display cap (cosmetic).** zoomToFit can compute >1000% on very short content, but the
+  Zoom spinbox caps its DISPLAY at 1000% (the timeline still uses the true pps). Raise the spin max
+  if an exact readout is wanted.
+- **Observed crash (needs investigation).** The running editor instance used for the GUI smoke test
+  terminated with SIGSEGV (exit 139) after the test session (launcher log: "Segmentation fault ...
+  qt-auto-test launch -- ./build/stream-canvas-editor"). Not reproduced or root-caused; no stack
+  captured. Unclear whether it was on shutdown, tied to the qt-auto-test agent lib, or a real
+  timeline/preview defect. Flag for a focused repro (run under gdb / a debug build) before trusting
+  playback+preview in production.
