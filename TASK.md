@@ -774,9 +774,11 @@ live-drag-repaint bug ("dragging doesn't repaint while moving").
 - **Zoom spin display cap (cosmetic).** zoomToFit can compute >1000% on very short content, but the
   Zoom spinbox caps its DISPLAY at 1000% (the timeline still uses the true pps). Raise the spin max
   if an exact readout is wanted.
-- **Observed crash (needs investigation).** The running editor instance used for the GUI smoke test
-  terminated with SIGSEGV (exit 139) after the test session (launcher log: "Segmentation fault ...
-  qt-auto-test launch -- ./build/stream-canvas-editor"). Not reproduced or root-caused; no stack
-  captured. Unclear whether it was on shutdown, tied to the qt-auto-test agent lib, or a real
-  timeline/preview defect. Flag for a focused repro (run under gdb / a debug build) before trusting
-  playback+preview in production.
+- **Segfault on app close (INVESTIGATE).** The editor terminated with SIGSEGV (exit 139) at the end
+  of the GUI smoke session (launcher log: "Segmentation fault ... qt-auto-test launch --
+  ./build/stream-canvas-editor"). Investigate the crash on CLOSING the app across the matrix:
+  (a) with a title open vs. no title open, and (b) with unsaved changes vs. a clean/saved project.
+  Not yet reproduced or root-caused; no stack captured. Unclear whether it's a pre-existing
+  shutdown-order issue, tied to the qt-auto-test agent lib, or related to the new timeline/preview
+  (e.g. dangling QTimer/preview-title teardown). Do a focused repro under gdb / a debug build and
+  capture a backtrace for each matrix cell.
