@@ -21,7 +21,7 @@ protected:
 
 private slots:
     void onViewSelectionChanged(const QItemSelection& selected, const QItemSelection& deselected);
-    void onEditorSelectionChanged(SelectionId id);
+    void onEditorSelectionSetChanged();
 
 private:
     TitleDocument* m_doc;

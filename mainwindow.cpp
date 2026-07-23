@@ -169,6 +169,7 @@ MainWindow::MainWindow(QWidget* parent)
         });
 
     connect(m_editorTitle, &EditorTitle::selectionChanged, this, &MainWindow::onSelectionChanged);
+    connect(m_editorTitle, &EditorTitle::selectionSetChanged, this, &MainWindow::updateSelectionStatus);
 
     connect(m_formatSection, &RibbonFormatSection::elementIdChanged,
             [this](const std::string&) {
@@ -411,6 +412,47 @@ void MainWindow::setupRibbon()
         addAction(m_deleteAction);
 
         panel->addLargeWidget(makeSmallStack({m_duplicateAction, m_deleteAction}));
+
+        m_selectAllAction = new QAction(themedIcon(Icons16::Action_SelectAll), "Select All", this);
+        m_selectAllAction->setShortcut(QKeySequence::SelectAll);
+        m_selectAllAction->setEnabled(false);
+        connect(m_selectAllAction, &QAction::triggered, this, &MainWindow::selectAllElements);
+        addAction(m_selectAllAction);
+        panel->addLargeWidget(makeSmallStack({m_selectAllAction}));
+    }
+
+    {   // Arrange panel — align / distribute a multi-selection
+        auto* panel = homeCat->addPanel("Arrange");
+
+        using AM = alignmath::AlignMode;
+        auto mkAlign = [this](const auto& icon, const QString& label, AM mode) {
+            auto* a = new QAction(themedIcon(icon), label, this);
+            a->setEnabled(false);
+            connect(a, &QAction::triggered, this, [this, mode]() { alignSelected(mode); });
+            addAction(a);
+            return a;
+        };
+
+        m_alignLeftAction    = mkAlign(Icons16::Action_AlignLeft,            "Align Left",     AM::Left);
+        m_alignHCenterAction = mkAlign(Icons16::Action_AlignCenterHorizontal,"Align Center",   AM::HCenter);
+        m_alignRightAction   = mkAlign(Icons16::Action_AlignRight,           "Align Right",    AM::Right);
+        m_alignTopAction     = mkAlign(Icons16::Action_AlignTop,             "Align Top",      AM::Top);
+        m_alignVMiddleAction = mkAlign(Icons16::Action_AlignCenterVertical,  "Align Middle",   AM::VMiddle);
+        m_alignBottomAction  = mkAlign(Icons16::Action_AlignBottom,          "Align Bottom",   AM::Bottom);
+
+        m_distributeHAction = new QAction(themedIcon(Icons16::Action_DistributeHorizontal), "Distribute Horizontally", this);
+        m_distributeHAction->setEnabled(false);
+        connect(m_distributeHAction, &QAction::triggered, this, [this]() { distributeSelected(true); });
+        addAction(m_distributeHAction);
+
+        m_distributeVAction = new QAction(themedIcon(Icons16::Action_DistributeVertical), "Distribute Vertically", this);
+        m_distributeVAction->setEnabled(false);
+        connect(m_distributeVAction, &QAction::triggered, this, [this]() { distributeSelected(false); });
+        addAction(m_distributeVAction);
+
+        panel->addLargeWidget(makeSmallStack({m_alignLeftAction, m_alignHCenterAction, m_alignRightAction}));
+        panel->addLargeWidget(makeSmallStack({m_alignTopAction, m_alignVMiddleAction, m_alignBottomAction}));
+        panel->addLargeWidget(makeSmallStack({m_distributeHAction, m_distributeVAction}));
     }
 
     // ── Insert tab ─────────────────────────────────────────────────────────────
@@ -807,18 +849,32 @@ void MainWindow::updateWindowTitle()
 
 void MainWindow::updateToolBarState(SelectionId id)
 {
-    const bool hasElement = (id.level == SelectionId::Level::Element);
+    const bool hasElement = (m_editorTitle->selectionCount() > 0);
 
     if (m_cutAction)  m_cutAction->setEnabled(hasElement);
     if (m_copyAction) m_copyAction->setEnabled(hasElement);
     if (m_duplicateAction) m_duplicateAction->setEnabled(hasElement);
     if (m_deleteAction)    m_deleteAction->setEnabled(hasElement);
+    if (m_selectAllAction)
+        m_selectAllAction->setEnabled((int)m_doc->title().elements.size() > 1);
 
     bool canPaste = m_clipboard.has_value();
     if (!canPaste)
         canPaste = clipboardHasExternalImage();
     if (m_pasteAction)        m_pasteAction->setEnabled(canPaste);
     if (m_pasteInPlaceAction) m_pasteInPlaceAction->setEnabled(canPaste);
+
+    const int selCount = m_editorTitle->selectionCount();
+    const bool canAlign = selCount >= 2;
+    const bool canDistribute = selCount >= 3;
+    if (m_alignLeftAction)    m_alignLeftAction->setEnabled(canAlign);
+    if (m_alignHCenterAction) m_alignHCenterAction->setEnabled(canAlign);
+    if (m_alignRightAction)   m_alignRightAction->setEnabled(canAlign);
+    if (m_alignTopAction)     m_alignTopAction->setEnabled(canAlign);
+    if (m_alignVMiddleAction) m_alignVMiddleAction->setEnabled(canAlign);
+    if (m_alignBottomAction)  m_alignBottomAction->setEnabled(canAlign);
+    if (m_distributeHAction)  m_distributeHAction->setEnabled(canDistribute);
+    if (m_distributeVAction)  m_distributeVAction->setEnabled(canDistribute);
 }
 
 void MainWindow::onSelectionChanged(SelectionId id)
@@ -859,6 +915,26 @@ void MainWindow::onSelectionChanged(SelectionId id)
     }
 }
 
+void MainWindow::selectAllElements()
+{
+    const Title& t = m_doc->title();
+    std::vector<int> indices;
+    for (int i = 1; i < (int)t.elements.size(); ++i)
+        if (dynamic_cast<const VisualElement*>(t.elements[i].get()))
+            indices.push_back(i);
+    if (indices.empty()) return;
+    m_editorTitle->setMultiSelection(indices, indices.back());
+}
+
+void MainWindow::updateSelectionStatus()
+{
+    const int n = m_editorTitle->selectionCount();
+    if (n > 1)
+        statusBar()->showMessage(QString("%1 elements selected").arg(n));
+    else
+        statusBar()->clearMessage();
+}
+
 // ── Clipboard ─────────────────────────────────────────────────────────────────
 
 void MainWindow::onCopy()
@@ -894,15 +970,26 @@ void MainWindow::onCut()
 
 void MainWindow::deleteSelectedElement()
 {
-    const SelectionId sel = m_editorTitle->selection();
-    if (sel.level != SelectionId::Level::Element) return;
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.empty()) return;
     const Title& t = m_doc->title();
-    if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return;
-    const std::string ei = t.elements[sel.elementIndex]->GetId();
-    m_doc->undoStack()->push(new RemoveElementCmd(m_doc, ei));
+    // Resolve to string ids FIRST — removals shift positional indices.
+    std::vector<std::string> ids;
+    for (int i : indices)
+        if (i >= 1 && i < (int)t.elements.size())
+            ids.push_back(t.elements[i]->GetId());
+    if (ids.empty()) return;
+    if (ids.size() == 1) {
+        m_doc->undoStack()->push(new RemoveElementCmd(m_doc, ids[0]));
+    } else {
+        m_doc->undoStack()->beginMacro("Delete elements");
+        for (const auto& id : ids)
+            m_doc->undoStack()->push(new RemoveElementCmd(m_doc, id));
+        m_doc->undoStack()->endMacro();
+    }
 }
 
-void MainWindow::insertElementCopy(nlohmann::json cb, double offset)
+std::string MainWindow::insertElementCopyImpl(nlohmann::json cb, double offset)
 {
     const Title& t = m_doc->title();
     std::string origType = cb.value("type", "rectangle");
@@ -927,6 +1014,12 @@ void MainWindow::insertElementCopy(nlohmann::json cb, double offset)
     }
 
     m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(cb)));
+    return newId;
+}
+
+void MainWindow::insertElementCopy(nlohmann::json cb, double offset)
+{
+    std::string newId = insertElementCopyImpl(std::move(cb), offset);
 
     const Title& t2 = m_doc->title();
     for (int i = 1; i < (int)t2.elements.size(); ++i)
@@ -939,17 +1032,36 @@ void MainWindow::insertElementCopy(nlohmann::json cb, double offset)
 
 void MainWindow::onDuplicate()
 {
-    const SelectionId sel = m_editorTitle->selection();
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.empty()) return;
     const Title& t = m_doc->title();
-    if (sel.level != SelectionId::Level::Element ||
-        sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size())
-        return;
-    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
-    if (!ve) return;
-    nlohmann::json cb = TitleDocument::elementToJson(*ve);
-    cb.erase("mask");
-    cb.erase("parent");
-    insertElementCopy(std::move(cb), 10.0);
+    std::vector<nlohmann::json> sources;
+    for (int i : indices) {
+        if (i < 1 || i >= (int)t.elements.size()) continue;
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        nlohmann::json cb = TitleDocument::elementToJson(*ve);
+        cb.erase("mask");
+        cb.erase("parent");
+        sources.push_back(std::move(cb));
+    }
+    if (sources.empty()) return;
+    if (sources.size() == 1) { insertElementCopy(std::move(sources[0]), 10.0); return; }
+
+    m_doc->undoStack()->beginMacro("Duplicate elements");
+    std::vector<std::string> newIds;
+    for (auto& src : sources)
+        newIds.push_back(insertElementCopyImpl(std::move(src), 10.0));
+    m_doc->undoStack()->endMacro();
+
+    const Title& t2 = m_doc->title();
+    std::vector<int> newIndices;
+    for (const auto& id : newIds)
+        for (int i = 1; i < (int)t2.elements.size(); ++i)
+            if (t2.elements[i]->GetId() == id) { newIndices.push_back(i); break; }
+    if (!newIndices.empty())
+        m_editorTitle->setMultiSelection(newIndices, newIndices.back());
+    updateToolBarState(m_editorTitle->selection());
 }
 
 void MainWindow::doPaste(bool inPlace)
@@ -1054,4 +1166,83 @@ void MainWindow::doPaste(bool inPlace)
         }
 
     updateToolBarState(m_editorTitle->selection());
+}
+
+void MainWindow::alignSelected(alignmath::AlignMode mode)
+{
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.size() < 2) return;
+    const Title& t = m_doc->title();
+    std::vector<QRectF> boxes;
+    std::vector<std::string> ids;
+    std::vector<Rectangle> bounds;
+    for (int i : indices) {
+        if (i < 1 || i >= (int)t.elements.size()) continue;
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        boxes.push_back(m_canvas->elementTitleAABB(*ve));
+        ids.push_back(ve->GetId());
+        bounds.push_back(ve->GetBounds());
+    }
+    if (boxes.size() < 2) return;
+    const std::vector<QPointF> deltas = alignmath::alignDeltas(boxes, mode);
+
+    // Collect the actual changes first so we never open an empty macro.
+    struct Change { std::string id; Rectangle b; };
+    std::vector<Change> changes;
+    for (std::size_t k = 0; k < ids.size(); ++k) {
+        if (deltas[k].isNull()) continue;
+        Rectangle b = bounds[k];
+        b.x += deltas[k].x();
+        b.y += deltas[k].y();
+        changes.push_back({ids[k], b});
+    }
+    if (changes.empty()) return;
+    if (changes.size() == 1) {
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, changes[0].id, changes[0].b));
+    } else {
+        m_doc->undoStack()->beginMacro("Align elements");
+        for (const auto& c : changes)
+            m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, c.id, c.b));
+        m_doc->undoStack()->endMacro();
+    }
+}
+
+void MainWindow::distributeSelected(bool horizontal)
+{
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.size() < 3) return;
+    const Title& t = m_doc->title();
+    std::vector<QRectF> boxes;
+    std::vector<std::string> ids;
+    std::vector<Rectangle> bounds;
+    for (int i : indices) {
+        if (i < 1 || i >= (int)t.elements.size()) continue;
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        boxes.push_back(m_canvas->elementTitleAABB(*ve));
+        ids.push_back(ve->GetId());
+        bounds.push_back(ve->GetBounds());
+    }
+    if (boxes.size() < 3) return;
+    const std::vector<QPointF> deltas = alignmath::distributeDeltas(boxes, horizontal);
+
+    struct Change { std::string id; Rectangle b; };
+    std::vector<Change> changes;
+    for (std::size_t k = 0; k < ids.size(); ++k) {
+        if (deltas[k].isNull()) continue;
+        Rectangle b = bounds[k];
+        b.x += deltas[k].x();
+        b.y += deltas[k].y();
+        changes.push_back({ids[k], b});
+    }
+    if (changes.empty()) return;
+    if (changes.size() == 1) {
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, changes[0].id, changes[0].b));
+    } else {
+        m_doc->undoStack()->beginMacro("Distribute elements");
+        for (const auto& c : changes)
+            m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, c.id, c.b));
+        m_doc->undoStack()->endMacro();
+    }
 }

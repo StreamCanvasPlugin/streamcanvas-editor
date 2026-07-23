@@ -46,6 +46,7 @@ set(PROJECT_SOURCES
         ui/painteditor.h ui/painteditor.cpp
         ui/widgets/CanvasWidget.h ui/widgets/CanvasWidget.cpp
         ui/widgets/ResizeMath.h
+        ui/widgets/AlignMath.h
         ui/widgets/TitleTreeModel.h ui/widgets/TitleTreeModel.cpp
         ui/widgets/TitleTreeView.h ui/widgets/TitleTreeView.cpp
         ui/widgets/SelectionHandles.h ui/widgets/SelectionHandles.cpp

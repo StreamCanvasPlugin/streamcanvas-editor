@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <QElapsedTimer>
 #include <QImage>
@@ -73,6 +75,10 @@ public:
     // Paint (copy-style) mode
     void setPaintMode(bool active, const std::string& sourceElementId);
 
+    // Axis-aligned bounding box of the element in TITLE/world space, accounting
+    // for rotation/shear (used by align/distribute math).
+    QRectF elementTitleAABB(const VisualElement& el) const;
+
 signals:
     void paintModeFinished();
     void interactiveEditStarted();
@@ -118,6 +124,9 @@ private:
     // Hit testing
     SelectionId hitTest(QPointF titlePt) const;
     int hitHandle(QPointF widgetPt) const;
+    // Elements (indices into title.elements) whose widget-space quad
+    // intersects the given widget-space rubber-band rect.
+    std::vector<int> elementsInMarquee(const QRectF& widgetRect) const;
 
     // Rendering
     void renderStaticTitle();
@@ -191,12 +200,23 @@ private:
     int m_dragEi{-1};  // index into title.elements (1-based)
     bool m_dragging{false};
 
+    // Group-move support: (elementIndex, origBounds) for every member of a
+    // multi-selection move, INCLUDING the active element (m_dragEi). Empty
+    // means an ordinary single-element move.
+    std::vector<std::pair<int, Rectangle>> m_dragGroup;
+
     QPointF m_dragAnchorTitle;      // world pos of the resize anchor (opposite handle), captured at press
     QPointF m_dragOrigCenterTitle;  // world pos of the element center at press (for Ctrl-symmetric resize / rotate)
     QPointF m_dragParentOffset;     // P: parent global offset (gpos - local bounds x/y)
 
     double m_dragStartAngle{0.0};   // cursor angle about element center at rotate-drag start (radians)
     float  m_dragOrigRotation{0.0f};// element rotation at rotate-drag start (degrees)
+
+    // ── Rubber-band marquee selection ─────────────────────────────────────────
+    bool m_marqueeActive{false};
+    QPointF m_marqueeStartWidget;
+    QPointF m_marqueeCurWidget;
+    bool m_marqueeAdditive{false};
 
     // ── Paint (copy-style) mode ───────────────────────────────────────────────
     bool m_paintModeActive{false};

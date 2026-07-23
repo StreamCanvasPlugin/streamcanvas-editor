@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/EditorTitle.h"
+#include "ui/widgets/AlignMath.h"
 #include <SARibbonMainWindow.h>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -36,6 +37,10 @@ private slots:
     void onCopy();
     void onCut();
     void onDuplicate();
+    void selectAllElements();
+    void updateSelectionStatus();
+    void alignSelected(alignmath::AlignMode mode);
+    void distributeSelected(bool horizontal);
 
 private:
     void setupMenuBar();
@@ -46,6 +51,7 @@ private:
     void doPaste(bool inPlace);
     void deleteSelectedElement();
     void insertElementCopy(nlohmann::json cb, double offset);
+    std::string insertElementCopyImpl(nlohmann::json cb, double offset);
 
     TitleDocument* m_doc;
     EditorTitle*   m_editorTitle;
@@ -74,6 +80,15 @@ private:
     QAction* m_copyAction{nullptr};
     QAction* m_duplicateAction{nullptr};
     QAction* m_deleteAction{nullptr};
+    QAction* m_selectAllAction{nullptr};
+    QAction* m_alignLeftAction{nullptr};
+    QAction* m_alignHCenterAction{nullptr};
+    QAction* m_alignRightAction{nullptr};
+    QAction* m_alignTopAction{nullptr};
+    QAction* m_alignVMiddleAction{nullptr};
+    QAction* m_alignBottomAction{nullptr};
+    QAction* m_distributeHAction{nullptr};
+    QAction* m_distributeVAction{nullptr};
     QAction* m_pasteAction{nullptr};
     QAction* m_pasteInPlaceAction{nullptr};
     QAction* m_shortcutsAction{nullptr};

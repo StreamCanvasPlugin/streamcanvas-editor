@@ -37,6 +37,54 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] D1-5b: rotate drag mode (DragMode::Rotate, kRotateHandle press → SetElementRotationCmd) — VERIFIED (impl build exit 0 + rotate_test PASS; reviewer pass for the un-GUI-testable drag gesture)
 - [x] D1-6: verification (4 deterministic tests + qt-auto-test GUI) — VERIFIED (rotation+shear overlay + hit-test confirmed live; drag gestures via deterministic tests)
 
+### D-2 — Multi-select (canvas marquee + tree ExtendedSelection + group ops) (plan approved 2026-07-22)
+Plan file: ~/.claude-personal/plans/plan-d-2-golden-jellyfish.md. Additive layer: keep
+`EditorTitle::m_selection` as the active/anchor (ribbon + all single-select readers untouched),
+add a pointer-anchored selection SET on top. Scope (user): include align/distribute; MOVE-ONLY on
+multi (no group-resize box; single-select keeps full resize/rotate); ribbon shows the active element.
+- [x] D2-1: multi-selection model in EditorTitle (selectedIndices/toggle/setMultiSelection/
+      selectionSetChanged; validateSelection re-anchors the whole set) — VERIFIED (impl build exit 0
+      + reviewer APPROVE: single-select regression-free, active-always-a-member invariant, no
+      under-emit). Contract note: setMultiSelection promotes front() if activeIndex not in indices.
+- [x] D2-2: canvas marquee + multi-element highlight (handle box only when count==1) — VERIFIED
+      (impl build exit 0 + reviewer APPROVE). Reviewer caught + orchestrator fixed: gate hitHandle
+      in mousePress + updateCursorForPos on selectionCount()<=1 so 2+ selection can't grab an
+      invisible resize/rotate handle on the anchor (rebuild exit 0). Marquee uses
+      QPainterPath::intersects (rotated-quad correct, both containment directions).
+- [x] D2-3: canvas group move drag + keyboard nudge (N SetElementBoundsCmd under one macro) —
+      VERIFIED (impl build exit 0 + reviewer APPROVE: group built at press; snapped active-delta
+      applied to all members from captured origs, no frame accumulation; release commits changed
+      members under one macro, revert-before-push captures correct before-value; m_dragGroup cleared
+      on every exit path. Group arrow-nudge = one macro per press (no cross-press coalescing, noted).
+- [x] D2-4: group delete + duplicate (id-based, index-shift-safe macros) — VERIFIED (impl build
+      exit 0 + orchestrator diff-review; reviewer round skipped per P1-2/D1-3 mechanical-change
+      precedent). delete: ids resolved BEFORE removal (RemoveElementCmd by-id, shift-safe), single
+      fast-path unchanged, multi under one macro. duplicate: insertElementCopy split into
+      insertElementCopyImpl (id-returning, no selection) + wrapper; multi loops under one macro then
+      setMultiSelection(newIndices, back()) keeps copies selected. updateToolBarState gates on
+      selectionCount()>0. NOTE: copy/cut still single-active (clipboard is one json) — deferred.
+- [x] D2-5: tree ExtendedSelection two-way sync — VERIFIED (impl build exit 0 + orchestrator
+      diff-review; recursion-safe both directions via m_syncingSelection guard — view→setMultiSelection
+      →selectionSetChanged→guarded; editor→select()→guarded). ExtendedSelection; onViewSelectionChanged
+      rebuilds from full selectedIndexes(); onEditorSelectionSetChanged (driven by selectionSetChanged)
+      selects all rows + sets current to active; Title/None fallback preserved; context-menu Remove
+      now multi-aware. Tree modifier-click is GUI-injectable → live-verified in final D2 pass.
+- [x] D2-6: ribbon shows active + Ctrl+A select-all + toolbar state — VERIFIED (impl build exit 0 +
+      orchestrator diff-review; trivial). Select All (Icons16::Action_SelectAll, QKeySequence::SelectAll)
+      → setMultiSelection over all VisualElements; enabled when elements.size()>1; "N elements selected"
+      status hint via selectionSetChanged. Ribbon already shows active element (onSelectionChanged
+      unchanged, approved).
+- [x] D2-7a: align/distribute MATH + canvas AABB helper + MainWindow apply — VERIFIED (impl build
+      exit 0 + orchestrator diff-review + deterministic align_test PASS (failures=0): 6 align modes,
+      distribute H/V, unsorted-index mapping, <3/empty edge cases). New AlignMath.h (pure, header-only,
+      registered in CMakeLists); CanvasWidget::elementTitleAABB reuses elementLocalToTitle (rotation/
+      shear-correct); MainWindow alignSelected(>=2)/distributeSelected(>=3) push SetElementBoundsCmd
+      (no pre-mutate; push applies + captures before), no empty macro, single-change fast path.
+- [x] D2-7b: Arrange ribbon UI (6 align + 2 distribute actions) + enable gating — VERIFIED (impl
+      build exit 0 + orchestrator diff-review). Home→Arrange panel: 6 align (Action_Align* icons) +
+      2 distribute (Action_Distribute* icons) in 3 makeSmallStack columns (3+3+2), connected to
+      alignSelected(mode)/distributeSelected(bool); updateToolBarState gates align≥2, distribute≥3.
+
 ## Log
 ### 2026-07-21
 - Branch `ux-audit-fixes` created (exit 0); engine submodule populated (48 files); editor
@@ -328,6 +376,30 @@ Dark-only theme. Rotation & multi-select deferred.
   rotate_test (anchor-fixed under 90°+shear; rotate math) + reviewer APPROVE traces. Cursors
   (not visible in screenshots) covered by code review + build.
 
+### 2026-07-22 — D-2 multi-select COMPLETE (7 subtasks) + full build + GUI verification
+- Full rebuild at D-2 HEAD: `cmake --build build -j$(nproc)` → exit 0 (`ninja: no work to do`, all
+  incremental compiles already clean across the 7 subtasks).
+- Deterministic: scratchpad/align_test.cpp (links AlignMath.h + Qt6Core) → `ALIGN TEST PASS
+  (failures=0)`, exit 0. Covers all 6 align modes (L/HC/R/T/VM/B numeric deltas), distribute H/V,
+  unsorted-input→original-index mapping, and <3/empty edge cases.
+- GUI (qt-auto-test pid 2016159, NOT use-computer; socket via `launch` preload — ptrace inject
+  fails but isn't needed): editor launches clean showing the new **Select All** button (Clipboard)
+  and the full **Arrange** panel (6 align + 2 distribute, correct icons), all disabled with no
+  selection (g0-launch.png). Added 3 rectangles via Insert→Rectangle. Clicked **Select All** →
+  all 3 tree rows highlighted (ExtendedSelection, D2-5), status bar "3 elements selected" (D2-6),
+  ribbon shows the active element_3 (D2-6), align buttons ENABLED (≥2 gate, D2-7b) (g1). Spread the
+  3 to distinct X/Y via the Transform spinboxes → 3 separate rectangles, all selected (g2). Clicked
+  **Align Left** → all 3 left edges snapped to x=100 (element_3 X 700→100 live), selection preserved
+  (g3-aligned.png); Undo button read **"Undo Align elements"** (ONE macro entry). Clicked Undo →
+  ALL 3 reverted together to the spread layout in a single step (g4-undo.png), Redo="Redo Align
+  elements". Confirms tree multi-select, Select All, status hint, ribbon-active, align enablement,
+  align execution (UI→alignSelected→AlignMath), and single-step group-undo all work live.
+- NOT GUI-observed (known Wayland harness limit, same as P1-3/D-1): the canvas MARQUEE and
+  GROUP-MOVE DRAG gestures (press-move-release not injectable). Covered by reviewer APPROVE (D2-2,
+  D2-3) + the marquee QPainterPath-intersects logic + group-move deterministic reasoning. The
+  multi-highlight rendering path was reviewer-verified; on-canvas the 3 selected boxes were shown
+  (highlight outline is subtle against the fill at this zoom).
+
 ## Unverified / Pending
 - GUI smoke (launch editor, copy/paste/undo/save) NOT yet run — deferred to one session after
   submodule bump so multiple items verify together.
@@ -343,6 +415,29 @@ Dark-only theme. Rotation & multi-select deferred.
 ALL planned P0 and P1 items are implemented, verified, and committed on branch `ux-audit-fixes`
 (one focused commit each). Engine work (E1-E4) is committed + pushed to the engine origin; the
 editor submodule was bumped to consume it.
+
+**D-2 (multi-select) is now COMPLETE and UNCOMMITTED** on the same branch (D-1 is also complete +
+uncommitted — see below). Implemented across 7 subtasks (orchestrator + implementer/reviewer),
+build exit 0, verified. Design: additive layer — `EditorTitle::m_selection` stays the active/anchor
+(ribbon + all single-select readers untouched); a pointer-anchored selection SET (`m_selectedElements`)
+layers on top with `selectedIndices()/isSelected/selectionCount/setMultiSelection/toggle/addToSelection`
++ a `selectionSetChanged()` signal; `validateSelection()` re-anchors the whole set by pointer.
+Scope (user-approved): includes align/distribute; MOVE-ONLY on multi (single-select keeps full
+resize/rotate handles — the handle box + hitHandle are gated to `selectionCount()<=1`); ribbon shows
+the active element. Changed files: `model/EditorTitle.{h,cpp}`, `ui/widgets/CanvasWidget.{h,cpp}`
+(marquee via QPainterPath-intersects, multi-highlight, group-move drag, `elementTitleAABB`),
+`ui/widgets/TitleTreeView.{h,cpp}` (ExtendedSelection two-way sync), `mainwindow.{h,cpp}` (group
+delete/duplicate macros, Ctrl+A Select All, "N selected" status, Arrange panel + align/distribute),
+new `ui/widgets/AlignMath.h` (pure, registered in CMakeLists), `CMakeLists.txt`, `TASK.md`.
+Verified: full build exit 0; deterministic align_test PASS (all 6 align modes + distribute H/V +
+edge cases); reviewer APPROVE on D2-1/D2-2/D2-3 (the state-machine + drag logic); orchestrator
+diff-review on the mechanical macro/UI subtasks (D2-4/5/6/7b); live qt-auto-test GUI confirmed tree
+multi-select, Select All, "3 elements selected" status, ribbon-active, align-button enablement,
+Align Left execution, and single-step group-undo ("Undo Align elements"). Canvas marquee/group-move
+DRAG gestures not Wayland-injectable (harness limit) — covered by reviewer + logic. Known
+limitation surfaced: copy/cut of a multi-selection stays single-active (clipboard holds one JSON;
+multi-clipboard deferred). Committed as 07961c8 (single focused D-2 commit — the subtasks
+intermingle within the same files, so per-subtask splitting wasn't clean). Not pushed.
 
 **D-1 (rotation/shear-correct canvas manipulation) is now COMPLETE and UNCOMMITTED** on the same
 branch — implemented across 6 subtasks (orchestrator + implementer/reviewer), all verified, but
