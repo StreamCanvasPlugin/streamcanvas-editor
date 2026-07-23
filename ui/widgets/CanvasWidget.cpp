@@ -37,6 +37,8 @@
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 
+#include "ui/UiUtils.h"
+
 #include "ResizeMath.h"
 #include "SelectionHandles.h"
 #include "icons.h"
@@ -85,6 +87,7 @@ static QTransform makeElementTransform(
 static constexpr double kZoomMin = 0.05;
 static constexpr double kZoomMax = 30.0;
 static constexpr double kZoomStep = 1.12;
+static constexpr double kFitMargin = 0.92;
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -229,7 +232,7 @@ void CanvasWidget::zoomToward(QPointF cursor, double factor)
 
 void CanvasWidget::zoomIn() { zoomToward(rect().center(), 1.25); }
 void CanvasWidget::zoomOut() { zoomToward(rect().center(), 1.0 / 1.25); }
-void CanvasWidget::fitToWindow() { m_zoom = 1.0; m_panOffset = {}; update(); }
+void CanvasWidget::fitToWindow() { m_zoom = kFitMargin; m_panOffset = {}; update(); }
 
 // ── Paint (copy-style) mode ───────────────────────────────────────────────────
 
@@ -1358,37 +1361,40 @@ void CanvasWidget::dropEvent(QDropEvent* event)
         m_doc->undoStack()->beginMacro("Drop Images");
 
     std::string firstNewId;
-    for (int idx = 0; idx < imagePaths.size(); ++idx) {
-        const QString& imagePath = imagePaths[idx];
-        QImage img(imagePath);
+    {
+        WaitCursor wc;
+        for (int idx = 0; idx < imagePaths.size(); ++idx) {
+            const QString& imagePath = imagePaths[idx];
+            QImage img(imagePath);
 
-        // Find unique element ID
-        int maxN = 0;
-        const Title& t = m_doc->title();
-        for (int i = 1; i < (int)t.elements.size(); ++i) {
-            const std::string& eid = t.elements[i]->GetId();
-            if (eid.rfind("image_", 0) == 0)
-                try { maxN = std::max(maxN, std::stoi(eid.substr(6))); } catch (...) {}
+            // Find unique element ID
+            int maxN = 0;
+            const Title& t = m_doc->title();
+            for (int i = 1; i < (int)t.elements.size(); ++i) {
+                const std::string& eid = t.elements[i]->GetId();
+                if (eid.rfind("image_", 0) == 0)
+                    try { maxN = std::max(maxN, std::stoi(eid.substr(6))); } catch (...) {}
+            }
+            const std::string newId = "image_" + std::to_string(maxN + 1);
+            if (idx == 0) firstNewId = newId;
+
+            double w = img.isNull() ? 200.0 : img.width();
+            double h = img.isNull() ? 200.0 : img.height();
+            if (w > titleW()) { h = h * titleW() / w; w = titleW(); }
+            if (h > titleH()) { w = w * titleH() / h; h = titleH(); }
+
+            const double x = titlePt.x() - w / 2.0 + idx * 20.0;
+            const double y = titlePt.y() - h / 2.0 + idx * 20.0;
+            const int zOrder = static_cast<int>(m_doc->title().elements.size()) - 1;
+
+            using json = nlohmann::json;
+            json j = {{"id", newId}, {"type", "image"},
+                      {"x", x}, {"y", y}, {"w", w}, {"h", h},
+                      {"z_order", zOrder},
+                      {"image_path", imagePath.toStdString()},
+                      {"scale_mode", "contain"}};
+            m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
         }
-        const std::string newId = "image_" + std::to_string(maxN + 1);
-        if (idx == 0) firstNewId = newId;
-
-        double w = img.isNull() ? 200.0 : img.width();
-        double h = img.isNull() ? 200.0 : img.height();
-        if (w > titleW()) { h = h * titleW() / w; w = titleW(); }
-        if (h > titleH()) { w = w * titleH() / h; h = titleH(); }
-
-        const double x = titlePt.x() - w / 2.0 + idx * 20.0;
-        const double y = titlePt.y() - h / 2.0 + idx * 20.0;
-        const int zOrder = static_cast<int>(m_doc->title().elements.size()) - 1;
-
-        using json = nlohmann::json;
-        json j = {{"id", newId}, {"type", "image"},
-                  {"x", x}, {"y", y}, {"w", w}, {"h", h},
-                  {"z_order", zOrder},
-                  {"image_path", imagePath.toStdString()},
-                  {"scale_mode", "contain"}};
-        m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
     }
 
     if (needsMacro)

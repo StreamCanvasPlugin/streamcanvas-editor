@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QToolButton>
+#include <QApplication>
 
 // ── UpdateGuard ───────────────────────────────────────────────────────────────
 // RAII guard that sets a bool flag on construction and clears it on
@@ -21,6 +22,17 @@ struct UpdateGuard {
     UpdateGuard& operator=(const UpdateGuard&) = delete;
 private:
     bool& m_flag;
+};
+
+// ── WaitCursor ────────────────────────────────────────────────────────────────
+// RAII guard that pushes a Qt::WaitCursor override on construction and pops
+// it on destruction — use around blocking file/image I/O so the user sees a
+// busy cursor instead of the app appearing to hang.
+struct WaitCursor {
+    WaitCursor() { QApplication::setOverrideCursor(Qt::WaitCursor); }
+    ~WaitCursor() { QApplication::restoreOverrideCursor(); }
+    WaitCursor(const WaitCursor&) = delete;
+    WaitCursor& operator=(const WaitCursor&) = delete;
 };
 
 // ── Widget factories ──────────────────────────────────────────────────────────

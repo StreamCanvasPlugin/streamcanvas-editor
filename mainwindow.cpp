@@ -7,6 +7,7 @@
 #include "ui/widgets/GraphicTimingEditor.h"
 #include "ui/widgets/RibbonFormatSection.h"
 #include "ui/widgets/TitleTreeView.h"
+#include "ui/UiUtils.h"
 #include "engine/element_image.h"
 #include "engine/element_qr.h"
 #include "engine/element_text.h"
@@ -799,7 +800,9 @@ void MainWindow::onOpen()
     QString path = QFileDialog::getOpenFileName(this, "Open Title", QString(),
                                                 "StreamCanvas Title (*.ogt);;All Files (*)");
     if (path.isEmpty()) return;
-    if (!m_doc->load(path)) {
+    bool ok;
+    { WaitCursor wc; ok = m_doc->load(path); }
+    if (!ok) {
         const QString detail = m_doc->lastError();
         QMessageBox::warning(this, "Open Failed",
             detail.isEmpty() ? QString("Could not open file:\n%1").arg(path)
@@ -822,7 +825,9 @@ void MainWindow::onOpen()
 void MainWindow::onSave()
 {
     if (m_doc->filePath().isEmpty()) { onSaveAs(); return; }
-    if (!m_doc->save()) {
+    bool ok;
+    { WaitCursor wc; ok = m_doc->save(); }
+    if (!ok) {
         const QString detail = m_doc->lastError();
         QMessageBox::warning(this, "Save Failed",
             detail.isEmpty() ? QString("Could not save the file.")
@@ -837,7 +842,9 @@ void MainWindow::onSaveAs()
     if (path.isEmpty()) return;
     if (!path.endsWith(".ogt", Qt::CaseInsensitive))
         path += ".ogt";
-    if (!m_doc->saveAs(path)) {
+    bool ok;
+    { WaitCursor wc; ok = m_doc->saveAs(path); }
+    if (!ok) {
         const QString detail = m_doc->lastError();
         QMessageBox::warning(this, "Save Failed",
             detail.isEmpty() ? QString("Could not save file:\n%1").arg(path)
@@ -1151,6 +1158,7 @@ void MainWindow::doPaste(bool inPlace)
     QString imagePath;
     QImage img;
     if (md->hasUrls()) {
+        WaitCursor wc;
         for (const QUrl& url : md->urls()) {
             if (!url.isLocalFile()) continue;
             QString p = url.toLocalFile();
@@ -1185,14 +1193,19 @@ void MainWindow::doPaste(bool inPlace)
             defaultDir + "/clipboard_image.png",
             "PNG Images (*.png);;JPEG Images (*.jpg *.jpeg);;All Files (*)");
         if (imagePath.isEmpty()) return;
-        if (!img.save(imagePath)) {
+        bool saved;
+        { WaitCursor wc; saved = img.save(imagePath); }
+        if (!saved) {
             QMessageBox::warning(this, "Save Failed",
                 "Could not save the clipboard image.");
             return;
         }
     }
 
-    if (img.isNull()) img.load(imagePath);
+    {
+        WaitCursor wc;
+        if (img.isNull()) img.load(imagePath);
+    }
 
     double w = img.isNull() ? 200.0 : img.width();
     double h = img.isNull() ? 200.0 : img.height();

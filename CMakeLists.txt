@@ -26,9 +26,6 @@ set(PROJECT_SOURCES
         model/UndoCommands.h
         model/UndoCommands.cpp
         ui/adaptivestack.h ui/adaptivestack.cpp
-        ui/titleproperties.h ui/titleproperties.cpp
-        ui/transformeditor.h ui/transformeditor.cpp
-        ui/animationeditor.h ui/animationeditor.cpp
         ui/widgets/ColorUtils.h     ui/widgets/ColorUtils.cpp
         ui/widgets/HueSlider.h      ui/widgets/HueSlider.cpp
         ui/widgets/GradientSlider.h ui/widgets/GradientSlider.cpp

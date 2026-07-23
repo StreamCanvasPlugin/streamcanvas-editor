@@ -2,6 +2,7 @@
 
 #include "engine/types.hpp"
 #include <QObject>
+#include <QPointer>
 #include <QSize>
 #include <QTimer>
 #include <string>
@@ -216,6 +217,11 @@ private:
     QDialog*        m_contentDialog{nullptr};
     QPlainTextEdit* m_contentEdit{nullptr};
     int             m_contentSavedCursor{0};
+
+    // Focus restoration for non-modal Qt::Tool popup dialogs
+    QPointer<QWidget> m_focusBeforeFillGradDlg;
+    QPointer<QWidget> m_focusBeforeStrokeGradDlg;
+    QPointer<QWidget> m_focusBeforeContentDlg;
 
     // Image tab
     QLineEdit* m_imagePathEdit{nullptr};

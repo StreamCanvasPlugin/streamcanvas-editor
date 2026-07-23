@@ -27,7 +27,53 @@ Dark-only theme. Rotation & multi-select deferred.
 - [x] P1-5: catch(...){} swallows errors — VERIFIED (load/save+rename via P0-4/P0-3; ribbon typed-catch)
 - [x] P1-6: hardcoded neutral colors → palette roles (dark-only) — VERIFIED (GUI: F1 dialog renders)
 - [x] P1-7: ColorWheel HiDPI DPR — VERIFIED (build + no-regression reasoning; dpr==1 is a no-op)
-- [ ] Delete dead ui/graphicproperties.{h,cpp}
+- [x] Delete dead ui/graphicproperties.{h,cpp}, ui/titleproperties.{h,cpp}, ui/transformeditor.{h,cpp}, ui/animationeditor.{h,cpp} — all confirmed unreferenced (graphicproperties wasn't even compiled; the other three were compiled but never instantiated live). VERIFIED (build exit 0, grep confirms 0 remaining references)
+### P2 — Medium (minus P2-4) (plan approved 2026-07-23)
+Plan file: ~/.claude-personal/plans/yes-plan-it-except-prancy-thacker.md. P2-4
+(AnimationTimingEditor handle-overlap) explicitly excluded — widget flagged as a future
+redesign candidate instead of a patch target (see note at end of plan file).
+- [x] P2-1: `WaitCursor` RAII guard (ui/UiUtils.h) on 5 file/image I/O call sites
+      (onOpen/onSave/onSaveAs/doPaste x3/dropEvent) — VERIFIED (impl+reviewer round 1
+      flagged 4 spots where the guard's scope wrongly covered a blocking QMessageBox::warning;
+      corrected to narrow-scope-then-check-bool-outside pattern; rebuild exit 0, orchestrator
+      diff-confirmed all 4 fixes + the already-correct spots untouched)
+- [x] P2-2a: focus restoration for the two Qt::Tool popups (gradient dialogs, content editor)
+      — VERIFIED (impl round 1 used a single shared m_focusBeforeGradDlg; implementer itself
+      flagged Fill+Stroke dialogs can be open simultaneously with no exclusivity, causing a
+      wrong-restore clobber; split into m_focusBeforeFillGradDlg/m_focusBeforeStrokeGradDlg
+      keyed by the existing isFill bool already threaded through wire()/makeGradDialog;
+      reviewer APPROVE: fill/stroke pairing correct, content-dialog connect fires once via
+      lazy-init guard, QPointer safely no-ops on destroyed target, build exit 0)
+- [x] P2-2b: setTabOrder chains across the 5 ribbon build*Tab functions — VERIFIED
+      (impl: QWidget::setTabOrder(...) chains added to buildElementTab/buildStyleTab/
+      buildTextTab/buildImageTab per spec; buildQrTab intentionally has none. Explicit
+      QWidget:: qualification required since RibbonFormatSection is a QObject, not
+      QWidget, subclass — confirmed via header. Two chains (Style/Image tabs) sit inside
+      an unconditional nested layout-group block rather than the function's outer closing
+      brace because their last widget (copyStyleBtn/browseBtn) is scoped locally there —
+      orchestrator confirmed both blocks are unconditional and all chain widgets are fully
+      constructed+added-to-layout before the setTabOrder calls. Build exit 0.) NOTE: live
+      qt-auto-test Tab-traversal check could NOT run this session — this session's Bash
+      sandbox runs in a separate container PID namespace from the real desktop/X11 session
+      (confirmed via `ps -ef` showing a container-local PID 1 init), so qt-auto-test cannot
+      inject into a launched window even with the sandbox flag relaxed (one launch attempt
+      segfaulted exit 139 in-sandbox; a second with the sandbox relaxed ran but was
+      unreachable by `qt-auto-test widgets`). Different failure mode than the
+      Wayland-drag-gesture limitation noted elsewhere in this file. Verified at
+      code-review level only (widget names/scope/qualification all confirmed correct) —
+      same confidence bar this file already uses for other non-GUI-injectable changes
+      (e.g. D1-5b). Residual SARibbon Tab-traversal-start risk flagged in the plan file
+      remains formally unconfirmed live; a user spot-check is recommended before relying
+      on this in daily use.
+- [x] P2-3: fitToWindow() margin (kFitMargin=0.92 instead of exact edge-to-edge) — VERIFIED
+      (orchestrator direct one-liner per CLAUDE.md exception: letterboxRect() already
+      recomputes an exact fit from live widget size on every call, m_zoom is a pure
+      post-multiplier on top of it, so the only change needed was the constant;
+      build exit 0)
+- [x] P2-5: no code change — RibbonFormatSection::onDocumentChanged looks up selection by
+      ID on every documentChanged, refreshes unconditionally; index shifts from deleting a
+      different element don't affect it. CLOSED (investigation only).
+
 ### D-1 — Rotation/shear-correct canvas manipulation (plan approved; add rotate handle; full rot+shear resize)
 - [x] D1-1: transform helper (elementToWidgetTransform / elementLinear / makeElementTransform) — VERIFIED (impl+reviewer APPROVE, numeric 0.0 error vs Cairo)
 - [x] D1-2: rotation-aware SelectionHandles API + rotate handle (9th) — VERIFIED (impl+deterministic handles_test PASS; reviewer skipped per P1-2 pure-geometry precedent)
@@ -133,18 +179,67 @@ Plan file: same. Full forward-compat (user-chosen). Engine clone; push to MIT or
       forward compatibility" section to /home/diego/Projects/obs-graphics-engine/CLAUDE.md (version
       constants, minor/major bump policy, unknown-field-preservation guarantee, ClassifySchema read
       policy table, migration hooks, LoadDiagnostic). Docs only — no build impact.
-- [~] D4-6: submodule bump + build + verify. User approved "Commit + bump + push to MIT origin"
-      (2026-07-23). Engine committed `7ad3032` (4 content files: title.cpp/.h, visual_element.h,
-      CLAUDE.md — filemode-only churn on ~48 other files deliberately EXCLUDED). Submodule bumped
-      LOCALLY to 7ad3032 via `git fetch <clone> master` (editor engine/ HEAD=7ad3032, LoadDiagnostic
-      present). Editor rebuild `cmake --build build` → exit 0. Engine D4 verify (scratchpad
-      d4_verify, links libengine.a) → 9/9 checks PASS + diagnostic bands: current=None,
-      newer-minor=Info, newer-major=Warning (correct messages). ⛔ PUSH TO MIT ORIGIN BLOCKED: no
-      git creds in this env (`fatal: could not read Username for https://github.com`; no gh, only
-      empty `cache` helper) — user must push. Editor-repo commit of the submodule gitlink + D-3/D-4
-      editor work NOT yet done (awaiting editor commit-strategy decision).
+- [x] D4-6: submodule bump + build + verify + push — DONE. Engine committed `7ad3032` (4 content
+      files; filemode churn excluded) and PUSHED by user — `origin/master` tip = 7ad3032, nothing
+      unpushed (verified `git log origin/master..master` empty after fetch). Submodule bumped
+      7ec908f→7ad3032. Editor rebuild `cmake --build build` → exit 0. Engine D4 verify (scratchpad
+      d4_verify links libengine.a) → 9/9 checks PASS + diagnostic bands current=None/minor=Info/
+      major=Warning (correct messages). Editor D-3/D-4 work committed as a SINGLE commit (user's
+      choice) `2eef380` incl. submodule bump + ZOrderOps.h.
 
 ## Log
+### 2026-07-23 — P2 batch (minus P2-4) + dead-code cleanup
+- Plan file: ~/.claude-personal/plans/yes-plan-it-except-prancy-thacker.md. User confirmed
+  (AskUserQuestion) broadening dead-file cleanup to 4 files, not just graphicproperties.
+- Dead-code cleanup: deleted ui/graphicproperties.{h,cpp} (already uncompiled),
+  ui/titleproperties.{h,cpp}, ui/transformeditor.{h,cpp}, ui/animationeditor.{h,cpp}
+  (compiled but never instantiated live) + removed their CMakeLists.txt lines. Pre-deletion
+  grep confirmed zero external references. `cmake -B build && cmake --build build -j$(nproc)`
+  → exit 0. Post-deletion grep confirmed 0 remaining references.
+- P2-1 WaitCursor guard: round 1 (impl) placed `WaitCursor wc;` before 4 `if(!...)` checks
+  whose failure branch shows a blocking `QMessageBox::warning` (onOpen/onSave/onSaveAs/
+  doPaste Guard B) — orchestrator diff-read caught the guard's scope wrongly covering the
+  modal dialog; reviewer independently confirmed the same 4 spots + found nothing else wrong.
+  Round 2 (impl) narrowed each to `{ WaitCursor wc; ok = ...; }` then check `ok` outside the
+  guard before the QMessageBox. Rebuild exit 0, orchestrator diff-confirmed the fix.
+- P2-2a dialog focus restoration: round 1 (impl) used one shared `m_focusBeforeGradDlg` for
+  both Fill/Stroke gradient dialogs; implementer itself flagged they can be open
+  simultaneously (no exclusivity enforced) causing a wrong-restore clobber. Round 2 split
+  into `m_focusBeforeFillGradDlg`/`m_focusBeforeStrokeGradDlg` keyed by the existing isFill
+  bool. Reviewer APPROVED: fill/stroke pairing correct (verified call sites), content-dialog
+  `finished` connect fires exactly once via the lazy-init guard, QPointer safely no-ops on a
+  destroyed target, build exit 0.
+- P2-2b tab order: impl added `QWidget::setTabOrder(...)` chains to buildElementTab/
+  buildStyleTab/buildTextTab/buildImageTab (buildQrTab has none, single button) exactly per
+  spec; explicit `QWidget::` qualification needed since RibbonFormatSection is a QObject not
+  QWidget subclass. Orchestrator verified (after a reviewer agent hit the account's monthly
+  API spend limit mid-review): all widget names in scope, both nested-block chain placements
+  (Style/Image tabs, where the last widget is function-local) sit in unconditional blocks
+  after full construction, build exit 0. Live qt-auto-test Tab-traversal check could NOT run
+  this session — confirmed via `ps -ef` that this session's Bash sandbox is a separate
+  container PID namespace from the real X11 desktop session, so qt-auto-test can't inject
+  into a launched window regardless of the sandbox flag (one attempt segfaulted exit 139
+  in-sandbox, a second outside-sandbox launched but was unreachable by `qt-auto-test
+  widgets`). Verified at code-review level only; flagged as needing a user spot-check.
+- P2-3 fitToWindow margin: orchestrator direct one-liner (CLAUDE.md exception) —
+  `kFitMargin=0.92` constant + `fitToWindow()` now sets `m_zoom = kFitMargin` instead of
+  `1.0`. `letterboxRect()` already recomputes an exact fit from live widget size on every
+  call, so no new coordinate math needed. Build exit 0.
+- P2-5: investigation-only closure, no code change — RibbonFormatSection::onDocumentChanged
+  already looks up the selection by ID (not index) on every documentChanged and refreshes
+  unconditionally, so deleting a different/lower element can't leave it stale. Confirmed via
+  Explore-agent read of the current live code; the file the original audit cited
+  (graphicproperties.cpp:53) is dead code removed in this same pass.
+- Full rebuild at HEAD after all 6 subtasks: `cmake --build build -j$(nproc)` → exit 0
+  (`ninja: no work to do`, nothing stale).
+- Not done this pass (by user request): P2-4 (AnimationTimingEditor handle-zone overlap) —
+  flagged instead as a redesign candidate; see the note in the plan file for the structural
+  reasoning (ScrubRuler is dead/unwired code that was clearly meant to be the shared
+  playhead, no zoom/pan concept, rebuild-on-every-tab-switch, shallow MainWindow coupling
+  makes a future rewrite low-risk).
+- Not committed — awaiting user go-ahead (all P0/P1/D-1..D-4 work was previously committed
+  per-item; this P2 batch follows the same one-commit-per-item convention once approved).
+
 ### 2026-07-21
 - Branch `ux-audit-fixes` created (exit 0); engine submodule populated (48 files); editor
   built clean via background cmake (exit 0).
@@ -509,17 +604,17 @@ Plan file: same. Full forward-compat (user-chosen). Engine clone; push to MIT or
 | (none yet) | | | |
 
 ## Current State
-**D-3 + D-4 COMPLETE (implemented + verified), NOT yet committed in the editor repo.** Branch
-`ux-audit-fixes`.
+**D-3 + D-4 COMPLETE, committed, and pushed.** Branch `ux-audit-fixes`.
 - D-3 (tree layers parity): rename (D3-1), reorder (D3-2), duplicate+clipboard (D3-3), lock column
-  (D3-4) all implemented; editor builds exit 0. GUI: rename/lock/select USER-CONFIRMED live +
-  lock-toggle screenshot-verified; reorder/duplicate reviewer-approved, user spot-check pending.
-- D-4 (.ogt versioning): D4-1..D4-5 done. Engine committed `7ad3032` (local only). Editor submodule
-  bumped LOCALLY to 7ad3032; editor builds exit 0. Deterministic verify: 9/9 checks PASS + diagnostic
-  bands (None/Info/Warning) correct.
-- **TWO USER ACTIONS OUTSTANDING**: (1) `git push origin master` in ~/Projects/obs-graphics-engine
-  (creds needed — this env can't). (2) Decide editor commit strategy, then commit the submodule bump
-  + all D-3/D-4 editor work. Everything below (P0/P1/D-1/D-2) is prior context.
+  (D3-4). GUI: rename/lock/select USER-CONFIRMED live + lock-toggle screenshot-verified;
+  reorder/duplicate reviewer-approved + buttons/menu present (user spot-check optional).
+- D-4 (.ogt versioning): D4-1..D4-6 done. Engine `7ad3032` PUSHED to origin (MIT). Editor submodule
+  bumped to it. Deterministic verify: 9/9 checks PASS + diagnostic bands (None/Info/Warning) correct.
+- Editor D-3/D-4 committed as ONE commit `2eef380` (user's choice) on `ux-audit-fixes` (incl.
+  submodule bump + ZOrderOps.h). Editor builds exit 0.
+- Only-remaining-optional: user spot-check of reorder + duplicate/clipboard in the running editor
+  (harness couldn't screenshot-drive them due to Wayland focus fragility). `ux-audit-fixes` is not
+  yet merged to master — that's a user call. Everything below (P0/P1/D-1/D-2) is prior context.
 
 ---
 ALL planned P0 and P1 items are implemented, verified, and committed on branch `ux-audit-fixes`

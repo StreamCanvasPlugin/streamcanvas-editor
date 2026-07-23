@@ -15,6 +15,7 @@
 
 #include <QAbstractItemView>
 #include "ColorPicker.h"
+#include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
@@ -364,6 +365,23 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
         gl->addWidget(deleteBtn, 0, 0, 2, 1, Qt::AlignCenter);
         connect(deleteAct, &QAction::triggered, this, &RibbonFormatSection::deleteElementRequested);
     }
+
+    QWidget::setTabOrder(m_idEdit, m_spinX);
+    QWidget::setTabOrder(m_spinX, m_spinY);
+    QWidget::setTabOrder(m_spinY, m_spinW);
+    QWidget::setTabOrder(m_spinW, m_spinH);
+    QWidget::setTabOrder(m_spinH, m_spinRot);
+    QWidget::setTabOrder(m_spinRot, m_spinShearX);
+    QWidget::setTabOrder(m_spinShearX, m_spinShearY);
+    QWidget::setTabOrder(m_spinShearY, m_spinZ);
+    QWidget::setTabOrder(m_spinZ, m_spinOpacity);
+    QWidget::setTabOrder(m_spinOpacity, m_clipChildrenCheck);
+    QWidget::setTabOrder(m_clipChildrenCheck, m_parentCombo);
+    QWidget::setTabOrder(m_parentCombo, m_fitCheck);
+    QWidget::setTabOrder(m_fitCheck, m_spinPadTop);
+    QWidget::setTabOrder(m_spinPadTop, m_spinPadRight);
+    QWidget::setTabOrder(m_spinPadRight, m_spinPadBottom);
+    QWidget::setTabOrder(m_spinPadBottom, m_spinPadLeft);
 }
 
 void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
@@ -376,9 +394,13 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         m_fillPicker   = new PaintPickerWidget(m_doc);
         m_strokePicker = new PaintPickerWidget(m_doc);
 
-        auto makeGradDialog = [this](const QString& title, PaintEditor*& editor) -> QDialog* {
+        auto makeGradDialog = [this](const QString& title, PaintEditor*& editor, bool isFill) -> QDialog* {
             auto* dlg = new QDialog(nullptr, Qt::Tool);
             dlg->setAttribute(Qt::WA_DeleteOnClose, false);
+            connect(dlg, &QDialog::finished, this, [this, isFill](int) {
+                QPointer<QWidget>& focus = isFill ? m_focusBeforeFillGradDlg : m_focusBeforeStrokeGradDlg;
+                if (focus) focus->setFocus();
+            });
             dlg->setWindowTitle(title);
             dlg->setMinimumWidth(250);
             auto* l = new QVBoxLayout(dlg);
@@ -387,8 +409,8 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
             dlg->adjustSize();
             return dlg;
         };
-        auto* fillGradDlg   = makeGradDialog("Fill",   m_fillEditor);
-        auto* strokeGradDlg = makeGradDialog("Stroke", m_strokeEditor);
+        auto* fillGradDlg   = makeGradDialog("Fill",   m_fillEditor,   true);
+        auto* strokeGradDlg = makeGradDialog("Stroke", m_strokeEditor, false);
 
         auto [fillBtn,   fillMenu]   = makePopupButton("Fill",   m_fillPicker);
         auto [strokeBtn, strokeMenu] = makePopupButton("Stroke", m_strokePicker);
@@ -435,6 +457,7 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
                 } catch (const std::exception& e) {
                     qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
                 }
+                (isFill ? m_focusBeforeFillGradDlg : m_focusBeforeStrokeGradDlg) = QApplication::focusWidget();
                 gradDlg->show();
                 gradDlg->raise();
                 gradDlg->activateWindow();
@@ -561,6 +584,19 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         connect(m_copyStyleAct, &QAction::toggled, this, [this](bool on) {
             emit copyStyleModeToggled(on, m_elementId);
         });
+
+        QWidget::setTabOrder(m_fillBtn, m_strokeBtn);
+        QWidget::setTabOrder(m_strokeBtn, m_strokeWidth);
+        QWidget::setTabOrder(m_strokeWidth, m_spinTL);
+        QWidget::setTabOrder(m_spinTL, m_spinTR);
+        QWidget::setTabOrder(m_spinTR, m_spinBR);
+        QWidget::setTabOrder(m_spinBR, m_spinBL);
+        QWidget::setTabOrder(m_spinBL, m_shadowEnabled);
+        QWidget::setTabOrder(m_shadowEnabled, m_spinShadowOffX);
+        QWidget::setTabOrder(m_spinShadowOffX, m_spinShadowOffY);
+        QWidget::setTabOrder(m_spinShadowOffY, m_spinShadowBlur);
+        QWidget::setTabOrder(m_spinShadowBlur, m_shadowColorBtn);
+        QWidget::setTabOrder(m_shadowColorBtn, copyStyleBtn);
     }
 }
 
@@ -751,6 +787,26 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
         connect(m_charSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                 this, &RibbonFormatSection::onCharSpacingChanged);
     }
+
+    QWidget::setTabOrder(m_fontFamily, m_fontSize);
+    QWidget::setTabOrder(m_fontSize, m_fontWeight);
+    QWidget::setTabOrder(m_fontWeight, m_italicBtn);
+    QWidget::setTabOrder(m_italicBtn, m_underlineBtn);
+    QWidget::setTabOrder(m_underlineBtn, m_strikeBtn);
+    QWidget::setTabOrder(m_strikeBtn, m_alignLeft);
+    QWidget::setTabOrder(m_alignLeft, m_alignCenter);
+    QWidget::setTabOrder(m_alignCenter, m_alignJustify);
+    QWidget::setTabOrder(m_alignJustify, m_alignRight);
+    QWidget::setTabOrder(m_alignRight, m_alignTop);
+    QWidget::setTabOrder(m_alignTop, m_alignMiddle);
+    QWidget::setTabOrder(m_alignMiddle, m_alignBottom);
+    QWidget::setTabOrder(m_alignBottom, m_autoScale);
+    QWidget::setTabOrder(m_autoScale, m_ellipsize);
+    QWidget::setTabOrder(m_ellipsize, m_wrap);
+    QWidget::setTabOrder(m_wrap, m_textTransform);
+    QWidget::setTabOrder(m_textTransform, m_textBtn);
+    QWidget::setTabOrder(m_textBtn, m_lineSpacing);
+    QWidget::setTabOrder(m_lineSpacing, m_charSpacing);
 }
 
 void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
@@ -793,6 +849,9 @@ void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
             onImagePathChanged();
         });
         connect(m_scaleMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onScaleModeChanged);
+
+        QWidget::setTabOrder(m_imagePathEdit, browseBtn);
+        QWidget::setTabOrder(browseBtn, m_scaleMode);
     }
 }
 
@@ -824,6 +883,9 @@ void RibbonFormatSection::openContentEditor(const QString& title)
         m_contentEdit = new QPlainTextEdit(m_contentDialog);
         l->addWidget(m_contentEdit);
         connect(m_contentEdit, &QPlainTextEdit::textChanged, this, &RibbonFormatSection::onContentChanged);
+        connect(m_contentDialog, &QDialog::finished, this, [this](int) {
+            if (m_focusBeforeContentDlg) m_focusBeforeContentDlg->setFocus();
+        });
     }
     m_contentDialog->setWindowTitle(title);
     if (!m_elementId.empty()) {
@@ -843,6 +905,7 @@ void RibbonFormatSection::openContentEditor(const QString& title)
             qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
         }
     }
+    m_focusBeforeContentDlg = QApplication::focusWidget();
     m_contentDialog->show();
     m_contentDialog->raise();
     m_contentDialog->activateWindow();
