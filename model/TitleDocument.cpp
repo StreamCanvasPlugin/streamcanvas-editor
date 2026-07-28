@@ -87,8 +87,8 @@ VisualElement& TitleDocument::getElement(const std::string& elementId)
 
 QString TitleDocument::titleName() const
 {
-    if (!m_title.id.empty())
-        return QString::fromStdString(m_title.id);
+    if (!m_title.name.empty())
+        return QString::fromStdString(m_title.name);
     if (!m_filePath.isEmpty())
         return QFileInfo(m_filePath).baseName();
     return QString("Untitled");
@@ -96,7 +96,7 @@ QString TitleDocument::titleName() const
 
 void TitleDocument::setTitleName(const QString& name)
 {
-    m_title.id = name.toStdString();
+    m_title.name = name.toStdString();
     setModified(true);
     emit documentChanged();
 }
@@ -169,7 +169,7 @@ QList<QColor> TitleDocument::defaultBrandColors()
 void TitleDocument::reset()
 {
     m_title = Title{};
-    m_title.id = "new_title";
+    m_title.name = "new_title";
     m_title.width = 1920;
     m_title.height = 1080;
     m_brandColors = defaultBrandColors();

@@ -782,3 +782,123 @@ live-drag-repaint bug ("dragging doesn't repaint while moving").
   shutdown-order issue, tied to the qt-auto-test agent lib, or related to the new timeline/preview
   (e.g. dangling QTimer/preview-title teardown). Do a focused repro under gdb / a debug build and
   capture a backtrace for each matrix cell.
+
+---
+
+## Engine bump (1.1 identity split) + Animation Timeline toolbar UX — 2026-07-27
+
+### Goal
+(1) Adopt the engine changes `7ad3032..1c82d27` in the editor — everything EXCEPT data-source /
+DataPool / Scene integration, which the editor deliberately does not have. (2) Rework the animation
+timeline's top toolbar: proper gaps/grouping, zoom controls pinned far right and the rest far left,
+plus a "reset animation" control that returns the title to the Visible/editable state after scrubbing.
+
+### Plan
+- [x] E-BUMP: submodule `7ad3032` -> `1c82d27`; retarget the editor onto the new `Title::name`
+- [x] T-1: toolbar layout + icon buttons + Play/Pause/Stop/Reset transport + zoom range
+- [x] T-2: reviewer round; fix D1/D2/D3/D5 + empty-document Play regression + D4
+
+### Log
+#### 2026-07-27
+- **Engine delta analysed.** `Title` split identity: `id` is now an auto-generated
+  `uuid::GenerateV4()`, new `name` field holds the human-readable name (pre-1.1 `.ogt` stored the
+  name in `"id"`). `.ogt` schema 1.0 -> 1.1 with a `{1,0}->{1,1}` migration step. `dataSource`
+  (`IDataSource*`) -> `dataSourceId` + `DataPool*`. New unconditional engine sources
+  `scene.cpp`/`uuid.cpp`/`data-pool.cpp`; `lua_json`/`lua_xml`/pugixml stay behind
+  `ENABLE_LUA_SCRIPTING`, which the editor FORCES OFF at `CMakeLists.txt:15`.
+  EVIDENCE: `grep -n '#include' scene.cpp data-pool.cpp uuid.cpp | grep -i 'script|lua|curl|pugi'`
+  -> no matches, so the new sources are Lua-free and safe for the editor's Lua-off build.
+- **No schema popup regression.** A 1.0 file is same-major/older-minor -> `SchemaCompat::Ok`, which
+  the engine loads silently (`title.cpp:1022-1025`). `mainwindow.cpp:791-799` only pops a dialog for
+  `NewerMinor`/`NewerMajor`, so legacy templates still open without a dialog. Confirmed at runtime
+  by `diag.severity=0` below.
+- **Submodule bumped + editor retargeted.** `git -C engine checkout 1c82d27`; `git submodule status`
+  -> `1c82d275569dd9b34e7956a9104aa7fcca961441 engine`. `model/TitleDocument.cpp` `titleName()`,
+  `setTitleName()` and `reset()` now use `m_title.name` (previously `m_title.id`, which after the
+  bump would have clobbered the uuid on every rename); header comment updated.
+  EVIDENCE: `grep -rn 'm_title\.id|title()\.id' model/ ui/ mainwindow.cpp` -> 0 matches.
+  `cmake -B build -DCMAKE_BUILD_TYPE=Debug` exit 0 (no pugixml/lua/curl/openssl fetch — the Lua gate
+  held); `cmake --build build -j$(nproc)` exit 0, "[66/66] Linking CXX executable stream-canvas-editor".
+- **Migration proven end-to-end.** Raw `title.json` inside `templates/Card Biblia.ogt` has no
+  `schema_version`/`name` and stores `id = Card Biblia`. A throwaway loader linked against the freshly
+  built `libengined.a` printed:
+  `id=7d8c9292-18e0-4baa-a72d-7a5a6b77fe87 / name=Card Biblia / diag.severity=0`.
+  Legacy name moved to `name`, fresh uuid generated for `id`, no diagnostic.
+- **Toolbar reworked** (`ui/widgets/AnimationTimingPanel.{h,cpp}`): single `QHBoxLayout`,
+  `setSpacing(6)`, margins `(8,4,8,4)`, `QFrame` VLine separators, `makeRibbonLabel` labels, and
+  exactly ONE `addStretch(1)` (was three) so the left groups stay flush left and Zoom+Fit pin right.
+  Glyph `QPushButton`s ("▶"/"■"/"Fit") replaced with `makeIconToolButton(themedIcon(Icons16::...))`.
+  The morphing Play/Stop toggle split into Play/Pause + Stop + a NEW Reset-to-Visible. Added
+  `m_previewActive` with all `scrubTimeChanged`/`previewStopped` emissions funnelled through
+  `emitScrub()`/`emitPreviewStopped()`. Wall-clock playback via `QElapsedTimer` (was nominal
+  16ms/tick). Zoom spin range `(10,1000)` -> `(2,1667)` to match the timeline's real
+  `kMinPps=2.0`/`kMaxPps=2000.0` over `kBasePps=120.0` — closes the "zoom spin display cap" follow-up.
+- **Reviewer round found 5 defects; all fixed.** D1: end-of-playback `pausePlayback()` held the
+  preview forever, and since `CanvasWidget` skips `renderStaticTitle()` while previewing AND never
+  refreshes its snapshot, any later edit was silently invisible — the app looked frozen. Fixed by
+  leaving preview at the top of `onDocumentChanged()`. D2: slot-combo change left a stale preview
+  (and for the Data slots a *corrupted* one, since `SetDataPreviewTime` latches `m_dataAnimState`
+  which only clears in `TickData`, never run during scrub) — fixed by leaving preview in
+  `onSlotComboChanged`. D3 (open-another-scene kept rendering the old document) covered by D1.
+  D4: `startPlayback()` rewound `m_scrubTime` without moving the playhead. D5: icon-only buttons had
+  no `objectName`/`accessibleName`, leaving them unaddressable for `qt-auto-test`. Plus an
+  orchestrator-found regression: on an empty document `contentDuration()==0` and Play drove the
+  canvas into preview then paused, locking a canvas the user was about to drop their first element
+  onto — fixed with a guard in `startPlayback()` and a `stopPlayback()` branch in `onPlayTick()`.
+  Reviewer correctly refuted the initial framing that `contentDuration()==0` meant "no clips in this
+  slot": `rebuild()` emits a row per VisualElement and `AnimationDef::duration` defaults to 0.5f, so
+  it is 0 only for a title with zero visual elements.
+  EVIDENCE: `cmake --build build -j$(nproc)` exit 0.
+- **GUI EVIDENCE** (qt-auto-test against a live X11 session, pid 279871; the sandbox has no display,
+  so these ran with the Bash sandbox relaxed). Note `main.cpp` takes no file argument, so the scene
+  was opened through the native dialog driven by `xdotool`:
+  - Layout measured from `qt-auto-test widgets`: `slotCombo` x=309, `playBtn` x=414, `stopBtn` x=444,
+    `resetBtn` x=474, `speedSpin` x=554 (exact 6px gaps: 414+24+6=444, 444+24+6=474) — all flush
+    left; `zoomSpin` x=1800, `fitBtn` x=1886 in a 1920-wide window — pinned right. Screenshot
+    `toolbar_final.png` shows `[Show][Out ▾] | [▶][■][⟲] | Speed [100 %] ... Zoom [540 %] [⛶]`.
+  - Initial transport state correct: `stopBtn` enabled=False, `resetBtn` enabled=False.
+  - Clicks do register: Fit moved the zoom readout 100 % -> 540 % (also exercises the widened range).
+  - **Empty-document Play is a clean no-op** (the new guard): window title "Untitled",
+    `contentDuration()==0`, clicking Play left stop=False reset=False and the canvas editable.
+  - **`id`->`name` split proven in the UI**: after opening the legacy 1.0 `templates/news_lower_third.ogt`,
+    the window title reads "news_lower_third — StreamCanvas Title Editor". That string comes from
+    `titleName()`, which now reads `m_title.name` — so the migration flows through to the editor UI.
+  - **Transport state machine**: idle stop=False/reset=False -> during playback stop=True/reset=True
+    -> after playback ends stop=True/reset=True (final frame HELD; screenshot `c_held.png` shows the
+    fully composed lower third) -> after Reset stop=False/reset=False.
+  - **The requested feature, proven**: tracking selection via `ClipPropertiesPanel.enabled` —
+    click element on editable canvas -> True; play to end -> preview held; click element WHILE
+    previewing -> False (canvas input blocked, the stuck state being fixed); click Reset ->
+    stop/reset False; click element AFTER Reset -> True. Canvas editing is restored by Reset.
+  - **D1 fix proven**: with the preview held, editing the clip Delay 4,00 s -> 1,00 s fired
+    `documentChanged` and released the preview (stop/reset True -> False).
+  - **D2 fix proven**: preview held in slot In, switching the combo to Out released it
+    (stop/reset True -> False). Stop button likewise: held -> stop/reset False.
+  - `git status --short` after the session: only `engine` (staged) + the 4 intended source files;
+    no template/scene file was written.
+
+### Unverified / Pending
+- Ctrl+Z could not be injected as a window-level shortcut (a known limitation recorded earlier in
+  this file), so the undo path into `onDocumentChanged` was proven via the ClipPropertiesPanel
+  Delay spinbox instead — same `documentChanged` signal, different entry point.
+- Speed spinbox at values other than 100 % not re-exercised this pass (unchanged code path apart
+  from the `QElapsedTimer` swap).
+- Playhead-drag scrubbing was NOT injectable (synthetic drags on the timeline ruler did not
+  register, consistent with the earlier "canvas drags aren't reliably injectable" note). The
+  scrub -> Reset path was therefore proven via playback-to-end, which reaches the identical
+  `m_previewActive` state through `emitScrub`.
+
+### Current State
+The editor is on engine `1c82d27`. The only editor-side adaptation the engine bump required was
+retargeting `TitleDocument`'s three `Title::id` sites onto the new `Title::name` — the data-source /
+DataPool / Scene rework is a compile no-op here because no editor TU includes `data-source.h`, and
+`.ogt` 1.0 files migrate silently. Both are verified by build + a live run that shows a legacy
+template's name in the window title.
+
+The animation timeline toolbar now groups Show / transport / Speed flush left and Zoom / Fit flush
+right with uniform 6px gaps and separators, using themed icons instead of glyph text. The transport
+is Play/Pause + Stop + Reset-to-Visible; Reset is the requested escape hatch from a scrubbed preview,
+and a document edit or slot switch now also releases the preview automatically. All of this is
+verified live. The pre-existing SIGSEGV-on-close investigation (see the section above) is still open
+and untouched by this pass; the test instance here was killed rather than closed through the UI, so
+this session adds no new data on it.

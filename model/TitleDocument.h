@@ -34,7 +34,7 @@ public:
     // (severity None when the file loaded cleanly, or on failure).
     const Title::LoadDiagnostic& lastLoadDiagnostic() const { return m_lastLoadDiagnostic; }
 
-    // Display name (maps to title.id for persistence)
+    // Display name (maps to title.name for persistence)
     QString titleName() const;
 
     QUndoStack* undoStack() { return &m_undoStack; }
