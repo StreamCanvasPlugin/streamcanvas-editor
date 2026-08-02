@@ -26,9 +26,6 @@ set(PROJECT_SOURCES
         model/UndoCommands.h
         model/UndoCommands.cpp
         ui/adaptivestack.h ui/adaptivestack.cpp
-        ui/titleproperties.h ui/titleproperties.cpp
-        ui/transformeditor.h ui/transformeditor.cpp
-        ui/animationeditor.h ui/animationeditor.cpp
         ui/widgets/ColorUtils.h     ui/widgets/ColorUtils.cpp
         ui/widgets/HueSlider.h      ui/widgets/HueSlider.cpp
         ui/widgets/GradientSlider.h ui/widgets/GradientSlider.cpp
@@ -45,12 +42,15 @@ set(PROJECT_SOURCES
         icons.h icons.cpp
         ui/painteditor.h ui/painteditor.cpp
         ui/widgets/CanvasWidget.h ui/widgets/CanvasWidget.cpp
+        ui/widgets/ResizeMath.h
+        ui/widgets/AlignMath.h
+        ui/widgets/ZOrderOps.h
         ui/widgets/TitleTreeModel.h ui/widgets/TitleTreeModel.cpp
         ui/widgets/TitleTreeView.h ui/widgets/TitleTreeView.cpp
         ui/widgets/SelectionHandles.h ui/widgets/SelectionHandles.cpp
-        ui/widgets/AnimationTimingEditor.h ui/widgets/AnimationTimingEditor.cpp
-        ui/widgets/GraphicTimingEditor.h ui/widgets/GraphicTimingEditor.cpp
-        ui/widgets/ScrubRuler.h ui/widgets/ScrubRuler.cpp
+        ui/widgets/AnimationTimelineEditor.h ui/widgets/AnimationTimelineEditor.cpp
+        ui/widgets/ClipPropertiesPanel.h ui/widgets/ClipPropertiesPanel.cpp
+        ui/widgets/AnimationTimingPanel.h ui/widgets/AnimationTimingPanel.cpp
         ui/widgets/CornerRadiusButton.h ui/widgets/CornerRadiusButton.cpp
         ui/widgets/PaddingButton.h      ui/widgets/PaddingButton.cpp
         ui/widgets/PaintPickerWidget.h  ui/widgets/PaintPickerWidget.cpp

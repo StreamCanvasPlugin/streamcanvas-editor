@@ -20,6 +20,7 @@ public:
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     int columnCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    bool setData(const QModelIndex& index, const QVariant& value, int role = Qt::EditRole) override;
     Qt::ItemFlags flags(const QModelIndex& index) const override;
 
     // Drag-and-drop
@@ -33,8 +34,14 @@ public:
     SelectionId selectionIdFor(const QModelIndex& index) const;
     QModelIndex indexForSelection(const SelectionId& sel) const;
 
+    void setResetsSuppressed(bool suppressed);
+
 private:
+    void onDocumentChanged();
+
     TitleDocument* m_doc;
+    bool m_suppressResets{false};
+    bool m_resetPending{false};
 
     // Returns indices into title.elements of direct children of parentEi
     // (parentEi == -1 means root). Sorted descending by zOrder (highest = row 0).

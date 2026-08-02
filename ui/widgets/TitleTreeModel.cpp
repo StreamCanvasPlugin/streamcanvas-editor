@@ -5,6 +5,9 @@
 #include <QIODevice>
 #include <algorithm>
 
+#include <QPainter>
+#include <QPixmap>
+
 #include "engine/element_image.h"
 #include "engine/element_qr.h"
 #include "engine/element_text.h"
@@ -13,13 +16,49 @@
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 
+namespace {
+// A dimmed variant of a themed icon, used for the "unlocked" affordance so it
+// reads as a subtle hint rather than competing visually with the lock icon.
+QIcon fadedIcon(Icons16 id, qreal opacity)
+{
+    const QIcon base = themedIcon(id);
+    const QPixmap src = base.pixmap(16, 16);
+    QPixmap faded(src.size());
+    faded.fill(Qt::transparent);
+    QPainter p(&faded);
+    p.setOpacity(opacity);
+    p.drawPixmap(0, 0, src);
+    p.end();
+    return QIcon(faded);
+}
+} // namespace
+
 TitleTreeModel::TitleTreeModel(TitleDocument* doc, QObject* parent)
     : QAbstractItemModel(parent), m_doc(doc)
 {
-    connect(m_doc, &TitleDocument::documentChanged, this, [this]() {
+    connect(m_doc, &TitleDocument::documentChanged, this, &TitleTreeModel::onDocumentChanged);
+}
+
+void TitleTreeModel::onDocumentChanged()
+{
+    if (m_suppressResets) {
+        m_resetPending = true;
+        return;
+    }
+    beginResetModel();
+    endResetModel();
+}
+
+void TitleTreeModel::setResetsSuppressed(bool suppressed)
+{
+    if (m_suppressResets == suppressed)
+        return;
+    m_suppressResets = suppressed;
+    if (!suppressed && m_resetPending) {
+        m_resetPending = false;
         beginResetModel();
         endResetModel();
-    });
+    }
 }
 
 // ── Tree helpers ──────────────────────────────────────────────────────────────
@@ -143,7 +182,7 @@ int TitleTreeModel::rowCount(const QModelIndex& parent) const
 
 int TitleTreeModel::columnCount(const QModelIndex& /*parent*/) const
 {
-    return 1;
+    return 2;
 }
 
 QVariant TitleTreeModel::data(const QModelIndex& index, int role) const
@@ -153,7 +192,21 @@ QVariant TitleTreeModel::data(const QModelIndex& index, int role) const
     quintptr id = index.internalId();
     quintptr level = levelOf(id);
 
-    if (role == Qt::DisplayRole) {
+    // Column 1 is the lock column: decoration only, no text, on element rows.
+    if (index.column() == 1) {
+        if (role == Qt::DecorationRole && level == LEVEL_ELEMENT) {
+            int ei = eiOf(id);
+            const Title& t = m_doc->title();
+            if (ei < 1 || ei >= static_cast<int>(t.elements.size())) return {};
+            const std::string elId = t.elements[ei]->GetId();
+            if (m_doc->isElementLocked(elId))
+                return themedIcon(Icons16::Action_Lock);
+            return fadedIcon(Icons16::Action_Unlock, 0.35);
+        }
+        return {};
+    }
+
+    if (role == Qt::DisplayRole || role == Qt::EditRole) {
         if (level == LEVEL_SCENE)
             return m_doc->titleName();
 
@@ -187,15 +240,63 @@ QVariant TitleTreeModel::data(const QModelIndex& index, int role) const
     return {};
 }
 
+bool TitleTreeModel::setData(const QModelIndex& index, const QVariant& value, int role)
+{
+    if (!index.isValid() || role != Qt::EditRole)
+        return false;
+
+    quintptr id = index.internalId();
+    if (levelOf(id) != LEVEL_ELEMENT)
+        return false;
+
+    int ei = eiOf(id);
+    const Title& t = m_doc->title();
+    if (ei < 1 || ei >= static_cast<int>(t.elements.size()))
+        return false;
+
+    const std::string oldId = t.elements[ei]->GetId();
+    const std::string newId = value.toString().trimmed().toStdString();
+
+    if (newId.empty())
+        return false;
+    if (newId == oldId)
+        return true;
+
+    for (const auto& up : t.elements) {
+        if (up && up->GetId() == newId)
+            return false;
+    }
+
+    m_doc->undoStack()->push(new SetElementIdCmd(m_doc, oldId, newId));
+    return true;
+}
+
 Qt::ItemFlags TitleTreeModel::flags(const QModelIndex& index) const
 {
     if (!index.isValid())
         return Qt::ItemIsDropEnabled;
 
     quintptr id = index.internalId();
+
+    // Column 1 (lock column): clickable via the view, but not selectable,
+    // editable, or a drag/drop target — it's a standalone icon toggle.
+    if (index.column() == 1) {
+        if (levelOf(id) == LEVEL_ELEMENT)
+            return Qt::ItemIsEnabled;
+        return Qt::NoItemFlags;
+    }
+
     Qt::ItemFlags f = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDropEnabled;
-    if (levelOf(id) == LEVEL_ELEMENT)
+    if (levelOf(id) == LEVEL_ELEMENT) {
         f |= Qt::ItemIsDragEnabled;
+
+        int ei = eiOf(id);
+        const Title& t = m_doc->title();
+        if (ei >= 1 && ei < static_cast<int>(t.elements.size()) &&
+            t.elements[ei]->GetChildren().empty()) {
+            f |= Qt::ItemIsEditable;
+        }
+    }
 
     return f;
 }

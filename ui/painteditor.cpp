@@ -9,6 +9,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPalette>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QEvent>
@@ -233,7 +234,8 @@ PaintEditor::PaintEditor(TitleDocument* doc, QWidget* parent) : QWidget(parent)
 
     if (doc) {
         auto* brandLabel = new QLabel("Brand Colors");
-        brandLabel->setStyleSheet("font-size: 10px; color: gray;");
+        brandLabel->setStyleSheet(QString("font-size: 10px; color: %1;")
+            .arg(brandLabel->palette().color(QPalette::PlaceholderText).name()));
         layout->addWidget(brandLabel, 2, 0, 1, 2);
 
         m_brandGrid = new BrandColorSwatchGrid(doc, BrandColorSwatchGrid::Mode::Full);

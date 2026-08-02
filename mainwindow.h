@@ -1,6 +1,8 @@
 #pragma once
 
 #include "model/EditorTitle.h"
+#include "ui/widgets/AlignMath.h"
+#include "ui/widgets/ZOrderOps.h"
 #include <SARibbonMainWindow.h>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -8,7 +10,8 @@
 class TitleDocument;
 class EditorTitle;
 class CanvasWidget;
-class GraphicTimingEditor;
+class TitleTreeView;
+class AnimationTimingPanel;
 class RibbonFormatSection;
 class QAction;
 class QCloseEvent;
@@ -34,6 +37,12 @@ private slots:
     void onSaveAs();
     void onCopy();
     void onCut();
+    void onDuplicate();
+    void selectAllElements();
+    void updateSelectionStatus();
+    void alignSelected(alignmath::AlignMode mode);
+    void distributeSelected(bool horizontal);
+    void reorderActive(zorderops::ReorderOp op);
 
 private:
     void setupMenuBar();
@@ -42,10 +51,14 @@ private:
     void updateToolBarState(SelectionId sel);
     bool maybeSave();
     void doPaste(bool inPlace);
+    void deleteSelectedElement();
+    void insertElementCopy(nlohmann::json cb, double offset);
+    std::string insertElementCopyImpl(nlohmann::json cb, double offset);
 
     TitleDocument* m_doc;
     EditorTitle*   m_editorTitle;
     CanvasWidget*  m_canvas;
+    TitleTreeView* m_treeView{nullptr};
 
     // Title ribbon controls
     QLineEdit* m_titleNameEdit{nullptr};
@@ -56,7 +69,7 @@ private:
 
     RibbonFormatSection* m_formatSection{nullptr};
 
-    GraphicTimingEditor* m_timingEditor{nullptr};
+    AnimationTimingPanel* m_timingPanel{nullptr};
 
     QAction* m_newAction{nullptr};
     QAction* m_openAction{nullptr};
@@ -67,6 +80,21 @@ private:
     QAction* m_redoAction{nullptr};
     QAction* m_cutAction{nullptr};
     QAction* m_copyAction{nullptr};
+    QAction* m_duplicateAction{nullptr};
+    QAction* m_deleteAction{nullptr};
+    QAction* m_selectAllAction{nullptr};
+    QAction* m_alignLeftAction{nullptr};
+    QAction* m_alignHCenterAction{nullptr};
+    QAction* m_alignRightAction{nullptr};
+    QAction* m_alignTopAction{nullptr};
+    QAction* m_alignVMiddleAction{nullptr};
+    QAction* m_alignBottomAction{nullptr};
+    QAction* m_distributeHAction{nullptr};
+    QAction* m_distributeVAction{nullptr};
+    QAction* m_bringToFrontAction{nullptr};
+    QAction* m_bringForwardAction{nullptr};
+    QAction* m_sendBackwardAction{nullptr};
+    QAction* m_sendToBackAction{nullptr};
     QAction* m_pasteAction{nullptr};
     QAction* m_pasteInPlaceAction{nullptr};
     QAction* m_shortcutsAction{nullptr};

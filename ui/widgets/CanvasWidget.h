@@ -2,12 +2,15 @@
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <QElapsedTimer>
 #include <QImage>
 #include <QList>
 #include <QPointF>
 #include <QRectF>
+#include <QTransform>
 #include <QWidget>
 
 #ifdef __APPLE__
@@ -32,6 +35,7 @@ class QWheelEvent;
 
 class TitleDocument;
 class EditorTitle;
+class VisualElement;
 struct Title;
 
 class CanvasWidget : public QWidget {
@@ -71,8 +75,14 @@ public:
     // Paint (copy-style) mode
     void setPaintMode(bool active, const std::string& sourceElementId);
 
+    // Axis-aligned bounding box of the element in TITLE/world space, accounting
+    // for rotation/shear (used by align/distribute math).
+    QRectF elementTitleAABB(const VisualElement& el) const;
+
 signals:
     void paintModeFinished();
+    void interactiveEditStarted();
+    void interactiveEditFinished();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -98,10 +108,27 @@ private:
     QRectF letterboxRect() const;
     QPointF widgetToTitle(QPointF pt) const;
     QRectF titleToWidget(const Rectangle& r) const;
+    // Full element-local (0..w, 0..h) -> widget-pixel transform, including
+    // rotation/shear about the element center. Reproduces the engine's
+    // Cairo render order exactly (see Transform::Apply in engine/types.hpp).
+    QTransform elementToWidgetTransform(const VisualElement& el) const;
+    // Pure linear (rotation+shear) part of the element's transform, in
+    // title/world space, with no translation or letterbox scale. Used to
+    // project a world-space delta into the element's local axes via
+    // .inverted().map(...).
+    QTransform elementLinear(const VisualElement& el) const;
+    // Element-LOCAL (0..w, 0..h) -> TITLE/world space transform (no letterbox
+    // scale/offset). Used to inverse-map a title-space point into local space.
+    QTransform elementLocalToTitle(const VisualElement& el) const;
 
     // Hit testing
     SelectionId hitTest(QPointF titlePt) const;
     int hitHandle(QPointF widgetPt) const;
+    // True when the active/anchor selected element is locked (blocks canvas drag).
+    bool isActiveSelectionLocked() const;
+    // Elements (indices into title.elements) whose widget-space quad
+    // intersects the given widget-space rubber-band rect.
+    std::vector<int> elementsInMarquee(const QRectF& widgetRect) const;
 
     // Rendering
     void renderStaticTitle();
@@ -131,6 +158,8 @@ private:
 
     // Resize drag
     void applyResizeDrag(QPointF widgetPos, Qt::KeyboardModifiers mods);
+    // Rotate drag
+    void applyRotateDrag(QPointF widgetPos, Qt::KeyboardModifiers mods);
 
     // ── Document / selection ──────────────────────────────────────────────────
     TitleDocument* m_doc;
@@ -163,7 +192,7 @@ private:
     QPointF m_panStartOffset;
 
     // ── Element drag / resize ─────────────────────────────────────────────────
-    enum class DragMode { None, Move, Resize };
+    enum class DragMode { None, Move, Resize, Rotate };
     DragMode m_dragMode{DragMode::None};
     int m_dragHandle{-1};
     QPointF m_dragStartWidget;
@@ -172,6 +201,24 @@ private:
     Rectangle m_dragOrigBounds;
     int m_dragEi{-1};  // index into title.elements (1-based)
     bool m_dragging{false};
+
+    // Group-move support: (elementIndex, origBounds) for every member of a
+    // multi-selection move, INCLUDING the active element (m_dragEi). Empty
+    // means an ordinary single-element move.
+    std::vector<std::pair<int, Rectangle>> m_dragGroup;
+
+    QPointF m_dragAnchorTitle;      // world pos of the resize anchor (opposite handle), captured at press
+    QPointF m_dragOrigCenterTitle;  // world pos of the element center at press (for Ctrl-symmetric resize / rotate)
+    QPointF m_dragParentOffset;     // P: parent global offset (gpos - local bounds x/y)
+
+    double m_dragStartAngle{0.0};   // cursor angle about element center at rotate-drag start (radians)
+    float  m_dragOrigRotation{0.0f};// element rotation at rotate-drag start (degrees)
+
+    // ── Rubber-band marquee selection ─────────────────────────────────────────
+    bool m_marqueeActive{false};
+    QPointF m_marqueeStartWidget;
+    QPointF m_marqueeCurWidget;
+    bool m_marqueeAdditive{false};
 
     // ── Paint (copy-style) mode ───────────────────────────────────────────────
     bool m_paintModeActive{false};

@@ -15,10 +15,13 @@
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
 #include <QPixmap>
+#include <QPolygonF>
 #include <QResizeEvent>
 #include <QTimer>
+#include <QTransform>
 #include <QUrl>
 #include <QWheelEvent>
 
@@ -34,6 +37,9 @@
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 
+#include "ui/UiUtils.h"
+
+#include "ResizeMath.h"
 #include "SelectionHandles.h"
 #include "icons.h"
 
@@ -49,9 +55,39 @@ static Rectangle globalBounds(const VisualElement& el)
     return {pos.x, pos.y, b.width, b.height};
 }
 
+// Element's own rect in LOCAL coordinates: (0,0,width,height).
+static QRectF localBoundsRect(const VisualElement& el)
+{
+    const Rectangle b = el.GetBounds();
+    return QRectF(0.0, 0.0, b.width, b.height);
+}
+
+// Maps element-LOCAL coords (0..w, 0..h) to WIDGET pixels.
+// lbX/lbY/lbW/lbH describe the letterbox rect; titleW/titleH the title size.
+// Mirrors the engine's Cairo render order exactly (see Transform::Apply in
+// engine/types.hpp): translate(cx,cy) -> shear -> rotate -> translate(-cx,-cy),
+// applied at the element's global position, itself placed within the
+// letterboxed title viewport.
+static QTransform makeElementTransform(
+    double gposX, double gposY, double w, double h,
+    double rotationDeg, double shearX, double shearY,
+    double lbX, double lbY, double lbW, double lbH, double titleW, double titleH)
+{
+    QTransform m;
+    m.translate(lbX, lbY);
+    m.scale(lbW / titleW, lbH / titleH);  // letterbox scale
+    m.translate(gposX, gposY);            // world position
+    m.translate(w / 2.0, h / 2.0);         // to center
+    m.shear(shearX, shearY);              // == cairo shearMatrix
+    m.rotate(rotationDeg);
+    m.translate(-w / 2.0, -h / 2.0);
+    return m;
+}
+
 static constexpr double kZoomMin = 0.05;
 static constexpr double kZoomMax = 30.0;
 static constexpr double kZoomStep = 1.12;
+static constexpr double kFitMargin = 0.92;
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +104,7 @@ CanvasWidget::CanvasWidget(TitleDocument* doc, EditorTitle* editorState, QWidget
 
     connect(m_doc, &TitleDocument::documentChanged, this, &CanvasWidget::onDocumentChanged);
     connect(m_editorState, &EditorTitle::selectionChanged, this, &CanvasWidget::onSelectionChanged);
+    connect(m_editorState, &EditorTitle::selectionSetChanged, this, [this] { update(); });
 
     renderStaticTitle();
 }
@@ -134,6 +171,46 @@ QRectF CanvasWidget::titleToWidget(const Rectangle& r) const
     return {lb.left() + r.x * sx, lb.top() + r.y * sy, r.width * sx, r.height * sy};
 }
 
+QTransform CanvasWidget::elementToWidgetTransform(const VisualElement& el) const
+{
+    const Point pos = el.GetGlobalPosition();
+    const Rectangle b = el.GetBounds();
+    const QRectF lb = letterboxRect();
+    return makeElementTransform(pos.x, pos.y, b.width, b.height,
+                                 el.GetRotation(), el.GetShearX(), el.GetShearY(),
+                                 lb.left(), lb.top(), lb.width(), lb.height(),
+                                 titleW(), titleH());
+}
+
+QTransform CanvasWidget::elementLinear(const VisualElement& el) const
+{
+    // Pure linear part (rotation+shear) matching the center-pivot transform's
+    // linear component, in title/world space. No translation.
+    QTransform r;
+    r.shear(el.GetShearX(), el.GetShearY());
+    r.rotate(el.GetRotation());
+    return r;
+}
+
+QTransform CanvasWidget::elementLocalToTitle(const VisualElement& el) const
+{
+    const Point pos = el.GetGlobalPosition();
+    const Rectangle b = el.GetBounds();
+    return makeElementTransform(pos.x, pos.y, b.width, b.height,
+                                el.GetRotation(), el.GetShearX(), el.GetShearY(),
+                                0.0, 0.0, titleW(), titleH(), titleW(), titleH());
+}
+
+QRectF CanvasWidget::elementTitleAABB(const VisualElement& el) const
+{
+    const QTransform xf = elementLocalToTitle(el);
+    const QRectF lr = localBoundsRect(el);
+    QPolygonF poly;
+    poly << xf.map(lr.topLeft()) << xf.map(lr.topRight())
+         << xf.map(lr.bottomRight()) << xf.map(lr.bottomLeft());
+    return poly.boundingRect();
+}
+
 // ── Zoom helpers ──────────────────────────────────────────────────────────────
 
 void CanvasWidget::zoomToward(QPointF cursor, double factor)
@@ -155,7 +232,7 @@ void CanvasWidget::zoomToward(QPointF cursor, double factor)
 
 void CanvasWidget::zoomIn() { zoomToward(rect().center(), 1.25); }
 void CanvasWidget::zoomOut() { zoomToward(rect().center(), 1.0 / 1.25); }
-void CanvasWidget::fitToWindow() { m_zoom = 1.0; m_panOffset = {}; update(); }
+void CanvasWidget::fitToWindow() { m_zoom = kFitMargin; m_panOffset = {}; update(); }
 
 // ── Paint (copy-style) mode ───────────────────────────────────────────────────
 
@@ -267,6 +344,15 @@ static double snapEdge(double edge, const QList<double>& cands, double threshold
 
 // ── Hit testing ───────────────────────────────────────────────────────────────
 
+bool CanvasWidget::isActiveSelectionLocked() const
+{
+    const SelectionId sel = m_editorState->selection();
+    if (sel.level != SelectionId::Level::Element) return false;
+    const Title& t = m_doc->title();
+    if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return false;
+    return m_doc->isElementLocked(t.elements[sel.elementIndex]->GetId());
+}
+
 SelectionId CanvasWidget::hitTest(QPointF titlePt) const
 {
     const Title& t = m_doc->title();
@@ -284,13 +370,44 @@ SelectionId CanvasWidget::hitTest(QPointF titlePt) const
     for (int ei : order) {
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
         if (!ve) continue;
-        const Rectangle gb = globalBounds(*ve);
-        if (titlePt.x() >= gb.x && titlePt.x() <= gb.x + gb.width &&
-            titlePt.y() >= gb.y && titlePt.y() <= gb.y + gb.height) {
+        if (m_doc->isElementLocked(ve->GetId())) continue;   // locked: not click-selectable on canvas
+        bool ok = false;
+        const QTransform inv = elementLocalToTitle(*ve).inverted(&ok);
+        if (!ok) continue;               // degenerate transform (e.g. shear det 0): skip
+        const QPointF lp = inv.map(titlePt);
+        const Rectangle b = ve->GetBounds();
+        if (lp.x() >= 0.0 && lp.x() <= b.width && lp.y() >= 0.0 && lp.y() <= b.height)
             return {SelectionId::Level::Element, ei};
-        }
     }
     return {};
+}
+
+std::vector<int> CanvasWidget::elementsInMarquee(const QRectF& widgetRect) const
+{
+    std::vector<int> result;
+    const Title& t = m_doc->title();
+
+    QPainterPath rectPath;
+    rectPath.addRect(widgetRect);
+
+    for (int i = 1; i < (int)t.elements.size(); ++i) {
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        if (m_doc->isElementLocked(ve->GetId())) continue;   // locked: excluded from marquee selection
+        const QTransform xf = elementToWidgetTransform(*ve);
+        const QRectF lr = localBoundsRect(*ve);
+        QPolygonF poly;
+        poly << xf.map(lr.topLeft()) << xf.map(lr.topRight())
+             << xf.map(lr.bottomRight()) << xf.map(lr.bottomLeft())
+             << xf.map(lr.topLeft());  // close
+
+        QPainterPath polyPath;
+        polyPath.addPolygon(poly);
+
+        if (rectPath.intersects(polyPath))
+            result.push_back(i);
+    }
+    return result;
 }
 
 int CanvasWidget::hitHandle(QPointF widgetPt) const
@@ -303,7 +420,7 @@ int CanvasWidget::hitHandle(QPointF widgetPt) const
         return -1;
     const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
     if (!ve) return -1;
-    return SelectionHandles::hitTest(widgetPt, titleToWidget(globalBounds(*ve)));
+    return SelectionHandles::hitTest(widgetPt, elementToWidgetTransform(*ve), localBoundsRect(*ve));
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -424,21 +541,33 @@ void CanvasWidget::drawSnapLines(QPainter& p, const QRectF& lb)
 
 void CanvasWidget::drawElementOutlines(QPainter& p)
 {
-    const SelectionId sel = m_editorState->selection();
     const Title& t = m_doc->title();
+    const bool singleSelect = m_editorState->selectionCount() == 1;
     p.save();
-    p.setRenderHint(QPainter::Antialiasing, false);
+    p.setRenderHint(QPainter::Antialiasing, true);
     p.setBrush(Qt::NoBrush);
 
     for (int i = 1; i < (int)t.elements.size(); ++i) {
-        if (i == sel.elementIndex) continue;
+        const bool selected = m_editorState->isSelected(i);
+        if (selected && singleSelect) continue;  // active single selection gets the handle box instead
         const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
         if (!ve) continue;
-        const QRectF r = titleToWidget(globalBounds(*ve));
-        p.setPen(QPen(QColor(0, 0, 0, 84), 3.0, Qt::DashLine));
-        p.drawRect(r);
-        p.setPen(QPen(QColor(255, 255, 255, 178), 1.0, Qt::DashLine));
-        p.drawRect(r);
+        const QTransform xf = elementToWidgetTransform(*ve);
+        const QRectF lr = localBoundsRect(*ve);
+        QPolygonF poly;
+        poly << xf.map(lr.topLeft()) << xf.map(lr.topRight())
+             << xf.map(lr.bottomRight()) << xf.map(lr.bottomLeft());
+        if (selected) {
+            p.setPen(QPen(QColor(0, 0, 0, 100), 2.5));
+            p.drawPolygon(poly);
+            p.setPen(QPen(palette().highlight().color(), 1.5));
+            p.drawPolygon(poly);
+        } else {
+            p.setPen(QPen(QColor(0, 0, 0, 84), 3.0, Qt::DashLine));
+            p.drawPolygon(poly);
+            p.setPen(QPen(QColor(255, 255, 255, 178), 1.0, Qt::DashLine));
+            p.drawPolygon(poly);
+        }
     }
     p.restore();
 }
@@ -471,18 +600,30 @@ void CanvasWidget::paintEvent(QPaintEvent*)
     if (!m_previewTitle)
         drawElementOutlines(p);
 
-    if (!m_previewTitle) {
+    if (!m_previewTitle && m_editorState->selectionCount() <= 1) {
         const SelectionId sel = m_editorState->selection();
         if (sel.level == SelectionId::Level::Element) {
             const Title& t = m_doc->title();
             if (sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size()) {
                 const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
                 if (ve)
-                    SelectionHandles::draw(p, titleToWidget(globalBounds(*ve)),
+                    SelectionHandles::draw(p, elementToWidgetTransform(*ve), localBoundsRect(*ve),
                                            m_dragging ? m_dragHandle : -1,
                                            palette().highlight().color());
             }
         }
+    }
+
+    if (m_marqueeActive) {
+        const QRectF mr = QRectF(m_marqueeStartWidget, m_marqueeCurWidget).normalized();
+        p.save();
+        QColor fill = palette().highlight().color();
+        fill.setAlpha(40);
+        p.setBrush(fill);
+        QPen pen(palette().highlight().color(), 1.0, Qt::DashLine);
+        p.setPen(pen);
+        p.drawRect(mr);
+        p.restore();
     }
 }
 
@@ -608,7 +749,7 @@ void CanvasWidget::previewAtTime(bool isIn, bool isData, double t)
 
 void CanvasWidget::keyReleaseEvent(QKeyEvent* event)
 {
-    if (m_dragging && m_dragMode == DragMode::Resize) {
+    if (m_dragging && (m_dragMode == DragMode::Resize || m_dragMode == DragMode::Rotate)) {
         Qt::KeyboardModifiers mods = event->modifiers();
         switch (event->key()) {
         case Qt::Key_Shift:   mods &= ~Qt::ShiftModifier;   break;
@@ -616,7 +757,8 @@ void CanvasWidget::keyReleaseEvent(QKeyEvent* event)
         case Qt::Key_Alt:     mods &= ~Qt::AltModifier;     break;
         default: break;
         }
-        applyResizeDrag(m_lastDragWidgetPos, mods);
+        if (m_dragMode == DragMode::Resize) applyResizeDrag(m_lastDragWidgetPos, mods);
+        else applyRotateDrag(m_lastDragWidgetPos, mods);
         event->accept();
         return;
     }
@@ -625,8 +767,9 @@ void CanvasWidget::keyReleaseEvent(QKeyEvent* event)
 
 void CanvasWidget::keyPressEvent(QKeyEvent* event)
 {
-    if (m_dragging && m_dragMode == DragMode::Resize) {
-        applyResizeDrag(m_lastDragWidgetPos, event->modifiers());
+    if (m_dragging && (m_dragMode == DragMode::Resize || m_dragMode == DragMode::Rotate)) {
+        if (m_dragMode == DragMode::Resize) applyResizeDrag(m_lastDragWidgetPos, event->modifiers());
+        else applyRotateDrag(m_lastDragWidgetPos, event->modifiers());
         event->accept();
         return;
     }
@@ -649,17 +792,46 @@ void CanvasWidget::keyPressEvent(QKeyEvent* event)
         return;
     }
 
-    const int ei = sel.elementIndex;
     const Title& t = m_doc->title();
-    if (ei < 1 || ei >= (int)t.elements.size()) return;
 
-    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
-    if (!ve) return;
+    if (m_editorState->selectionCount() <= 1) {
+        const int ei = sel.elementIndex;
+        if (ei < 1 || ei >= (int)t.elements.size()) return;
 
-    Rectangle b = ve->GetBounds();
-    b.x += dx;
-    b.y += dy;
-    m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, ve->GetId(), b, kArrowMergeTag));
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
+        if (!ve) return;
+        if (m_doc->isElementLocked(ve->GetId())) { event->accept(); return; }  // locked: not nudgeable
+
+        Rectangle b = ve->GetBounds();
+        b.x += dx;
+        b.y += dy;
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, ve->GetId(), b, kArrowMergeTag));
+        event->accept();
+        return;
+    }
+
+    // Multi-selection nudge: one undo macro per key press (cross-press
+    // coalescing via kArrowMergeTag does not apply to macros). Locked members
+    // stay put; only unlocked members move.
+    std::vector<int> movable;
+    for (int gi : m_editorState->selectedIndices()) {
+        if (gi < 1 || gi >= (int)t.elements.size()) continue;
+        const auto* gve = dynamic_cast<const VisualElement*>(t.elements[gi].get());
+        if (!gve) continue;
+        if (m_doc->isElementLocked(gve->GetId())) continue;
+        movable.push_back(gi);
+    }
+    if (movable.empty()) { event->accept(); return; }
+
+    m_doc->undoStack()->beginMacro("Move elements");
+    for (int gi : movable) {
+        const auto* gve = static_cast<const VisualElement*>(t.elements[gi].get());
+        Rectangle b = gve->GetBounds();
+        b.x += dx;
+        b.y += dy;
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, gve->GetId(), b, kArrowMergeTag));
+    }
+    m_doc->undoStack()->endMacro();
     event->accept();
 }
 
@@ -709,8 +881,37 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    // 1. Resize handle hit?
-    const int handle = hitHandle(wpos);
+    // 1. Rotate/resize handle hit? Handles only exist for a single selection
+    //    (2+ selected is move-only), so don't grab an invisible handle otherwise.
+    //    A locked active element (e.g. selected via the tree) can't be dragged.
+    const int handle = (m_editorState->selectionCount() <= 1 && !isActiveSelectionLocked())
+                       ? hitHandle(wpos) : -1;
+    if (handle == SelectionHandles::kRotateHandle) {
+        const SelectionId sel = m_editorState->selection();
+        const Title& t = m_doc->title();
+        const auto* ve = (sel.level == SelectionId::Level::Element &&
+                          sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size())
+                         ? dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get())
+                         : nullptr;
+        if (ve) {
+            m_dragMode = DragMode::Rotate;
+            m_dragHandle = handle;
+            m_dragEi = sel.elementIndex;
+            m_dragOrigRotation = ve->GetRotation();
+            const QTransform x0 = elementLocalToTitle(*ve);
+            const Rectangle b = ve->GetBounds();
+            m_dragOrigCenterTitle = x0.map(QPointF(b.width / 2.0, b.height / 2.0));
+            const QPointF sp = widgetToTitle(wpos);
+            m_dragStartAngle = std::atan2(sp.y() - m_dragOrigCenterTitle.y(),
+                                          sp.x() - m_dragOrigCenterTitle.x());
+            m_lastDragWidgetPos = wpos;
+            m_dragging = true;
+            emit interactiveEditStarted();
+        }
+        return;
+    }
+
+    // 2. Resize handle hit?
     if (handle >= 0) {
         const SelectionId sel = m_editorState->selection();
         const Title& t = m_doc->title();
@@ -722,23 +923,54 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
         m_dragOrigBounds = ve ? ve->GetBounds() : Rectangle{};
         m_dragEi = sel.elementIndex;
         m_dragging = true;
+
+        if (ve) {
+            const QTransform x0 = elementLocalToTitle(*ve);
+            const double ow0 = m_dragOrigBounds.width, oh0 = m_dragOrigBounds.height;
+            double ax0, ay0;
+            resizemath::anchorNorm(handle, ax0, ay0);
+            m_dragAnchorTitle     = x0.map(QPointF(ax0 * ow0, ay0 * oh0));
+            m_dragOrigCenterTitle = x0.map(QPointF(ow0 / 2.0, oh0 / 2.0));
+            const Point gpos = ve->GetGlobalPosition();
+            m_dragParentOffset = QPointF(gpos.x - m_dragOrigBounds.x, gpos.y - m_dragOrigBounds.y);
+        }
+
+        emit interactiveEditStarted();
         return;
     }
 
     const SelectionId curSel = m_editorState->selection();
     const QPointF sp = widgetToTitle(wpos);
+    const bool additive = (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier));
 
-    // 2. Always hit-test (top-most element under cursor wins), then decide
+    // 3. Always hit-test (top-most element under cursor wins), then decide
     //    whether to keep dragging the current selection or select the new hit.
     const SelectionId hit = hitTest(sp);
 
     if (hit.level != SelectionId::Level::Element) {
-        m_editorState->setSelection(hit);
+        // Empty canvas: begin a rubber-band marquee. Selection is only
+        // cleared on release if the marquee turns out to be a plain click
+        // (see mouseReleaseEvent).
+        m_marqueeActive = true;
+        m_marqueeStartWidget = wpos;
+        m_marqueeCurWidget = wpos;
+        m_marqueeAdditive = additive;
+        update();
         return;
     }
 
-    if (!(hit == curSel))
+    if (additive) {
+        m_editorState->toggleSelection(hit.elementIndex);
+        return;
+    }
+
+    if (m_editorState->isSelected(hit.elementIndex) && m_editorState->selectionCount() > 1) {
+        // Element is already part of a multi-selection: keep the set, just
+        // make it the active/anchor element (does not change membership).
+        m_editorState->addToSelection(hit.elementIndex);
+    } else if (!(hit == curSel)) {
         m_editorState->setSelection(hit);
+    }
 
     const Title& t = m_doc->title();
     const auto* ve = dynamic_cast<const VisualElement*>(t.elements[hit.elementIndex].get());
@@ -750,63 +982,55 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
         m_dragOrigBounds = ve->GetBounds();
         m_dragEi = hit.elementIndex;
         m_dragging = true;
+
+        m_dragGroup.clear();
+        if (m_editorState->selectionCount() > 1 && m_editorState->isSelected(hit.elementIndex)) {
+            for (int gi : m_editorState->selectedIndices()) {
+                if (gi < 1 || gi >= (int)t.elements.size()) continue;
+                const auto* gve = dynamic_cast<const VisualElement*>(t.elements[gi].get());
+                if (gve && !m_doc->isElementLocked(gve->GetId()))   // locked members stay put
+                    m_dragGroup.emplace_back(gi, gve->GetBounds());
+            }
+        }
+
+        emit interactiveEditStarted();
     }
 }
 
 void CanvasWidget::applyResizeDrag(QPointF widgetPos, Qt::KeyboardModifiers mods)
 {
+    const Title& t = m_doc->title();
+    if (m_dragEi < 1 || m_dragEi >= (int)t.elements.size()) return;
+    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[m_dragEi].get());
+    if (!ve) return;
+
     const QPointF titlePt = widgetToTitle(widgetPos);
-    const double dx = titlePt.x() - m_dragStartTitle.x();
-    const double dy = titlePt.y() - m_dragStartTitle.y();
-    const double ox = m_dragOrigBounds.x, oy = m_dragOrigBounds.y;
-    const double ow = m_dragOrigBounds.width, oh = m_dragOrigBounds.height;
-    Rectangle newBounds = m_dragOrigBounds;
+    const QPointF deltaWorld = titlePt - m_dragStartTitle;
 
-    switch (m_dragHandle) {
-    case 0: newBounds.x = ox+dx; newBounds.y = oy+dy; newBounds.width = std::max(1.0,ow-dx); newBounds.height = std::max(1.0,oh-dy); break;
-    case 1: newBounds.y = oy+dy; newBounds.height = std::max(1.0,oh-dy); break;
-    case 2: newBounds.y = oy+dy; newBounds.width = std::max(1.0,ow+dx); newBounds.height = std::max(1.0,oh-dy); break;
-    case 3: newBounds.x = ox+dx; newBounds.width = std::max(1.0,ow-dx); break;
-    case 4: newBounds.width = std::max(1.0,ow+dx); break;
-    case 5: newBounds.x = ox+dx; newBounds.width = std::max(1.0,ow-dx); newBounds.height = std::max(1.0,oh+dy); break;
-    case 6: newBounds.height = std::max(1.0,oh+dy); break;
-    case 7: newBounds.width = std::max(1.0,ow+dx); newBounds.height = std::max(1.0,oh+dy); break;
-    default: break;
-    }
+    const QTransform R = elementLinear(*ve);
+    bool ok = false;
+    const QTransform Rinv = R.inverted(&ok);
+    const QPointF dl = ok ? (Rinv.map(deltaWorld) - Rinv.map(QPointF(0, 0))) : deltaWorld;
 
-    if ((mods & Qt::ShiftModifier) && oh > 0 &&
-        (m_dragHandle == 0 || m_dragHandle == 2 || m_dragHandle == 5 || m_dragHandle == 7)) {
-        const double scale = std::min(newBounds.width / ow, newBounds.height / oh);
-        newBounds.width = std::max(1.0, ow * scale);
-        newBounds.height = std::max(1.0, oh * scale);
-        switch (m_dragHandle) {
-        case 0: newBounds.x = ox+ow-newBounds.width; newBounds.y = oy+oh-newBounds.height; break;
-        case 2: newBounds.x = ox; newBounds.y = oy+oh-newBounds.height; break;
-        case 5: newBounds.x = ox+ow-newBounds.width; newBounds.y = oy; break;
-        case 7: newBounds.x = ox; newBounds.y = oy; break;
-        default: break;
-        }
-    }
+    Rectangle newBounds = resizemath::resizeSolve(
+        m_dragHandle, m_dragOrigBounds, R, dl.x(), dl.y(),
+        m_dragAnchorTitle, m_dragOrigCenterTitle, m_dragParentOffset,
+        (mods & Qt::ShiftModifier) != 0, (mods & Qt::ControlModifier) != 0);
 
-    if (mods & Qt::ControlModifier) {
-        const double cx = ox + ow / 2.0, cy = oy + oh / 2.0;
-        newBounds.width = std::max(1.0, 2.0*newBounds.width - ow);
-        newBounds.height = std::max(1.0, 2.0*newBounds.height - oh);
-        newBounds.x = cx - newBounds.width / 2.0;
-        newBounds.y = cy - newBounds.height / 2.0;
-    }
+    const bool identity = ve->GetRotation() == 0.0f && ve->GetShearX() == 0.0f && ve->GetShearY() == 0.0f;
+    if (identity && m_snappingEnabled && !(mods & Qt::ControlModifier)) {
+        const double ox = m_dragOrigBounds.x, oy = m_dragOrigBounds.y;
+        const double ow = m_dragOrigBounds.width, oh = m_dragOrigBounds.height;
 
-    if (m_snappingEnabled) {
         const double threshold = 8.0 * titleW() / letterboxRect().width();
         QList<double> candX = {0.0, titleW()/2.0, double(titleW())};
         QList<double> candY = {0.0, titleH()/2.0, double(titleH())};
         appendGuideCandidates(candX, candY);
-        const Title& t = m_doc->title();
         for (int i = 1; i < (int)t.elements.size(); ++i) {
             if (i == m_dragEi) continue;
-            const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
-            if (!ve) continue;
-            const Rectangle& ob = ve->GetBounds();
+            const auto* ove = dynamic_cast<const VisualElement*>(t.elements[i].get());
+            if (!ove) continue;
+            const Rectangle& ob = ove->GetBounds();
             candX << ob.x << ob.x+ob.width/2.0 << ob.x+ob.width;
             candY << ob.y << ob.y+ob.height/2.0 << ob.y+ob.height;
         }
@@ -833,10 +1057,30 @@ void CanvasWidget::applyResizeDrag(QPointF widgetPos, Qt::KeyboardModifiers mods
     }
 
     const int ei = m_dragEi;
-    m_doc->applyMutation([ei, newBounds](Title& t) {
-        if (ei >= 1 && ei < (int)t.elements.size()) {
-            auto* sp = dynamic_cast<Spatial*>(t.elements[ei].get());
+    m_doc->applyMutation([ei, newBounds](Title& tt) {
+        if (ei >= 1 && ei < (int)tt.elements.size()) {
+            auto* sp = dynamic_cast<Spatial*>(tt.elements[ei].get());
             if (sp) sp->SetBounds(newBounds);
+        }
+    });
+}
+
+void CanvasWidget::applyRotateDrag(QPointF widgetPos, Qt::KeyboardModifiers mods)
+{
+    const Title& t = m_doc->title();
+    if (m_dragEi < 1 || m_dragEi >= (int)t.elements.size()) return;
+    const auto* ve = dynamic_cast<const VisualElement*>(t.elements[m_dragEi].get());
+    if (!ve) return;
+    const QPointF sp = widgetToTitle(widgetPos);
+    const double curAngle = std::atan2(sp.y() - m_dragOrigCenterTitle.y(),
+                                       sp.x() - m_dragOrigCenterTitle.x());
+    const double newRot = resizemath::rotateSolve(m_dragOrigRotation, m_dragStartAngle,
+                                                  curAngle, (mods & Qt::ShiftModifier) != 0);
+    const int ei = m_dragEi;
+    m_doc->applyMutation([ei, newRot](Title& tt) {
+        if (ei >= 1 && ei < (int)tt.elements.size()) {
+            auto* sp2 = dynamic_cast<Spatial*>(tt.elements[ei].get());
+            if (sp2) sp2->SetRotation(static_cast<float>(newRot));
         }
     });
 }
@@ -846,6 +1090,13 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent* event)
     if (m_panning) {
         m_panOffset = m_panStartOffset + (event->position() - m_panStart);
         update();
+        return;
+    }
+
+    if (m_marqueeActive) {
+        m_marqueeCurWidget = event->position();
+        update();
+        event->accept();
         return;
     }
 
@@ -865,6 +1116,11 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent* event)
         return;
     }
 
+    if (m_dragMode == DragMode::Rotate) {
+        applyRotateDrag(wpos, event->modifiers());
+        return;
+    }
+
     // Move drag
     Rectangle newBounds = m_dragOrigBounds;
     newBounds.x = m_dragOrigBounds.x + (titlePt.x() - m_dragStartTitle.x());
@@ -877,13 +1133,34 @@ void CanvasWidget::mouseMoveEvent(QMouseEvent* event)
         m_snapLinesY.clear();
     }
 
-    const int ei = m_dragEi;
-    m_doc->applyMutation([ei, newBounds](Title& t) {
-        if (ei >= 1 && ei < (int)t.elements.size()) {
-            auto* sp = dynamic_cast<Spatial*>(t.elements[ei].get());
-            if (sp) sp->SetBounds(newBounds);
-        }
-    });
+    if (m_dragGroup.empty()) {
+        const int ei = m_dragEi;
+        m_doc->applyMutation([ei, newBounds](Title& t) {
+            if (ei >= 1 && ei < (int)t.elements.size()) {
+                auto* sp = dynamic_cast<Spatial*>(t.elements[ei].get());
+                if (sp) sp->SetBounds(newBounds);
+            }
+        });
+    } else {
+        // Group move: apply the same (snapped) delta — derived from the
+        // active element's actual result — to every member, relative to its
+        // own captured orig bounds. The group snaps as a unit relative to
+        // the active element.
+        const double dxA = newBounds.x - m_dragOrigBounds.x;
+        const double dyA = newBounds.y - m_dragOrigBounds.y;
+        auto group = m_dragGroup;  // capture by value
+        m_doc->applyMutation([group, dxA, dyA](Title& t) {
+            for (const auto& [gi, orig] : group) {
+                if (gi < 1 || gi >= (int)t.elements.size()) continue;
+                auto* sp = dynamic_cast<Spatial*>(t.elements[gi].get());
+                if (!sp) continue;
+                Rectangle nb = orig;
+                nb.x = orig.x + dxA;
+                nb.y = orig.y + dyA;
+                sp->SetBounds(nb);
+            }
+        });
+    }
 }
 
 void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
@@ -895,47 +1172,139 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
         return;
     }
 
+    if (m_marqueeActive) {
+        m_marqueeActive = false;
+        const QPointF wpos = event->position();
+        const QRectF r = QRectF(m_marqueeStartWidget, wpos).normalized();
+        const double kClickPx = 3.0;
+        if (r.width() < kClickPx && r.height() < kClickPx) {
+            // Treated as a plain click on empty canvas.
+            if (!m_marqueeAdditive) m_editorState->setSelection(SelectionId{});
+        } else {
+            std::vector<int> inside = elementsInMarquee(r);
+            if (m_marqueeAdditive) {
+                // Union with the current selection, preserving current members first.
+                std::vector<int> cur = m_editorState->selectedIndices();
+                for (int i : inside)
+                    if (std::find(cur.begin(), cur.end(), i) == cur.end())
+                        cur.push_back(i);
+                inside.swap(cur);
+            }
+            if (inside.empty()) {
+                if (!m_marqueeAdditive) m_editorState->setSelection(SelectionId{});
+            } else {
+                m_editorState->setMultiSelection(inside, inside.back());  // active = a member (contract-safe)
+            }
+        }
+        update();
+        event->accept();
+        return;
+    }
+
     if (event->button() != Qt::LeftButton || !m_dragging || m_previewTitle) {
         QWidget::mouseReleaseEvent(event);
         return;
     }
 
     m_dragging = false;
+    emit interactiveEditFinished();
     m_snapLinesX.clear();
     m_snapLinesY.clear();
 
     const Title& t = m_doc->title();
     if (m_dragEi < 1 || m_dragEi >= (int)t.elements.size()) {
         m_dragMode = DragMode::None;
+        m_dragGroup.clear();
         return;
     }
 
     const auto* ve = dynamic_cast<const VisualElement*>(t.elements[m_dragEi].get());
     if (!ve) {
         m_dragMode = DragMode::None;
+        m_dragGroup.clear();
         return;
     }
 
-    const Rectangle finalBounds = ve->GetBounds();
-    const std::string eid = ve->GetId();
+    if (m_dragMode == DragMode::Rotate) {
+        const float finalRot = ve->GetRotation();
+        const std::string eid = ve->GetId();
+        if (finalRot != m_dragOrigRotation) {
+            // revert to orig so SetElementRotationCmd captures the correct before-value
+            const int ei = m_dragEi;
+            const float orig = m_dragOrigRotation;
+            m_doc->applyMutation([ei, orig](Title& tt) {
+                if (ei >= 1 && ei < (int)tt.elements.size()) {
+                    auto* sp2 = dynamic_cast<Spatial*>(tt.elements[ei].get());
+                    if (sp2) sp2->SetRotation(orig);
+                }
+            });
+            m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, eid, finalRot, -1));
+        }
+        m_dragMode = DragMode::None;
+        m_dragHandle = -1;
+        m_dragEi = -1;
+        m_dragGroup.clear();
+        updateCursorForPos(event->position());
+        return;
+    }
 
-    if (finalBounds.x != m_dragOrigBounds.x || finalBounds.y != m_dragOrigBounds.y ||
-        finalBounds.width != m_dragOrigBounds.width || finalBounds.height != m_dragOrigBounds.height) {
-        // Revert to original so SetElementBoundsCmd captures the correct before-value
-        const int ei = m_dragEi;
-        const Rectangle orig = m_dragOrigBounds;
-        m_doc->applyMutation([ei, orig](Title& t) {
-            if (ei >= 1 && ei < (int)t.elements.size()) {
-                auto* sp = dynamic_cast<Spatial*>(t.elements[ei].get());
-                if (sp) sp->SetBounds(orig);
+    if (m_dragGroup.empty()) {
+        const Rectangle finalBounds = ve->GetBounds();
+        const std::string eid = ve->GetId();
+
+        if (finalBounds.x != m_dragOrigBounds.x || finalBounds.y != m_dragOrigBounds.y ||
+            finalBounds.width != m_dragOrigBounds.width || finalBounds.height != m_dragOrigBounds.height) {
+            // Revert to original so SetElementBoundsCmd captures the correct before-value
+            const int ei = m_dragEi;
+            const Rectangle orig = m_dragOrigBounds;
+            m_doc->applyMutation([ei, orig](Title& t) {
+                if (ei >= 1 && ei < (int)t.elements.size()) {
+                    auto* sp = dynamic_cast<Spatial*>(t.elements[ei].get());
+                    if (sp) sp->SetBounds(orig);
+                }
+            });
+            m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, eid, finalBounds));
+        }
+    } else {
+        // Group move commit: gather (id, origBounds, finalBounds) for every
+        // member whose bounds actually changed, then revert+push each under
+        // a single undo macro so the whole group move is ONE undo step.
+        struct Member { std::string id; Rectangle orig; Rectangle final_; };
+        std::vector<Member> changed;
+        for (const auto& [gi, orig] : m_dragGroup) {
+            if (gi < 1 || gi >= (int)t.elements.size()) continue;
+            const auto* gve = dynamic_cast<const VisualElement*>(t.elements[gi].get());
+            if (!gve) continue;
+            const Rectangle final_ = gve->GetBounds();
+            if (final_.x != orig.x || final_.y != orig.y ||
+                final_.width != orig.width || final_.height != orig.height) {
+                changed.push_back({gve->GetId(), orig, final_});
             }
-        });
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, eid, finalBounds));
+        }
+
+        if (!changed.empty()) {
+            m_doc->undoStack()->beginMacro("Move elements");
+            for (const auto& m : changed) {
+                const std::string id = m.id;
+                const Rectangle orig = m.orig;
+                m_doc->applyMutation([id, orig](Title& tt) {
+                    for (int i = 1; i < (int)tt.elements.size(); ++i) {
+                        if (tt.elements[i]->GetId() != id) continue;
+                        auto* sp = dynamic_cast<Spatial*>(tt.elements[i].get());
+                        if (sp) sp->SetBounds(orig);
+                        break;
+                    }
+                });
+                m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m.id, m.final_));
+            }
+            m_doc->undoStack()->endMacro();
+        }
     }
 
     m_dragMode = DragMode::None;
     m_dragHandle = -1;
     m_dragEi = -1;
+    m_dragGroup.clear();
     updateCursorForPos(event->position());
 }
 
@@ -992,37 +1361,40 @@ void CanvasWidget::dropEvent(QDropEvent* event)
         m_doc->undoStack()->beginMacro("Drop Images");
 
     std::string firstNewId;
-    for (int idx = 0; idx < imagePaths.size(); ++idx) {
-        const QString& imagePath = imagePaths[idx];
-        QImage img(imagePath);
+    {
+        WaitCursor wc;
+        for (int idx = 0; idx < imagePaths.size(); ++idx) {
+            const QString& imagePath = imagePaths[idx];
+            QImage img(imagePath);
 
-        // Find unique element ID
-        int maxN = 0;
-        const Title& t = m_doc->title();
-        for (int i = 1; i < (int)t.elements.size(); ++i) {
-            const std::string& eid = t.elements[i]->GetId();
-            if (eid.rfind("image_", 0) == 0)
-                try { maxN = std::max(maxN, std::stoi(eid.substr(6))); } catch (...) {}
+            // Find unique element ID
+            int maxN = 0;
+            const Title& t = m_doc->title();
+            for (int i = 1; i < (int)t.elements.size(); ++i) {
+                const std::string& eid = t.elements[i]->GetId();
+                if (eid.rfind("image_", 0) == 0)
+                    try { maxN = std::max(maxN, std::stoi(eid.substr(6))); } catch (...) {}
+            }
+            const std::string newId = "image_" + std::to_string(maxN + 1);
+            if (idx == 0) firstNewId = newId;
+
+            double w = img.isNull() ? 200.0 : img.width();
+            double h = img.isNull() ? 200.0 : img.height();
+            if (w > titleW()) { h = h * titleW() / w; w = titleW(); }
+            if (h > titleH()) { w = w * titleH() / h; h = titleH(); }
+
+            const double x = titlePt.x() - w / 2.0 + idx * 20.0;
+            const double y = titlePt.y() - h / 2.0 + idx * 20.0;
+            const int zOrder = static_cast<int>(m_doc->title().elements.size()) - 1;
+
+            using json = nlohmann::json;
+            json j = {{"id", newId}, {"type", "image"},
+                      {"x", x}, {"y", y}, {"w", w}, {"h", h},
+                      {"z_order", zOrder},
+                      {"image_path", imagePath.toStdString()},
+                      {"scale_mode", "contain"}};
+            m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
         }
-        const std::string newId = "image_" + std::to_string(maxN + 1);
-        if (idx == 0) firstNewId = newId;
-
-        double w = img.isNull() ? 200.0 : img.width();
-        double h = img.isNull() ? 200.0 : img.height();
-        if (w > titleW()) { h = h * titleW() / w; w = titleW(); }
-        if (h > titleH()) { w = w * titleH() / h; h = titleH(); }
-
-        const double x = titlePt.x() - w / 2.0 + idx * 20.0;
-        const double y = titlePt.y() - h / 2.0 + idx * 20.0;
-        const int zOrder = static_cast<int>(m_doc->title().elements.size()) - 1;
-
-        using json = nlohmann::json;
-        json j = {{"id", newId}, {"type", "image"},
-                  {"x", x}, {"y", y}, {"w", w}, {"h", h},
-                  {"z_order", zOrder},
-                  {"image_path", imagePath.toStdString()},
-                  {"scale_mode", "contain"}};
-        m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
     }
 
     if (needsMacro)
@@ -1042,30 +1414,52 @@ void CanvasWidget::dropEvent(QDropEvent* event)
     event->acceptProposedAction();
 }
 
+// Pick a bidirectional resize cursor from a handle's outward direction (widget space, y-down).
+static Qt::CursorShape resizeCursorForAngle(double dx, double dy)
+{
+    double a = std::atan2(dy, dx) * 180.0 / M_PI;   // (-180,180]
+    a = std::fmod(a + 180.0, 180.0);                 // fold to [0,180) — cursor is bidirectional
+    if (a < 22.5 || a >= 157.5) return Qt::SizeHorCursor;
+    if (a < 67.5)               return Qt::SizeFDiagCursor;   // down-right / up-left  "\"
+    if (a < 112.5)              return Qt::SizeVerCursor;
+    return Qt::SizeBDiagCursor;                              // down-left / up-right  "/"
+}
+
 void CanvasWidget::updateCursorForPos(QPointF wpos)
 {
     if (m_paintModeActive) return; // cursor already set by setPaintMode(); don't override
 
-    static const Qt::CursorShape kHandleCursors[8] = {
-        Qt::SizeFDiagCursor, Qt::SizeVerCursor, Qt::SizeBDiagCursor, Qt::SizeHorCursor,
-        Qt::SizeHorCursor, Qt::SizeBDiagCursor, Qt::SizeVerCursor, Qt::SizeFDiagCursor};
-
-    const int handle = hitHandle(wpos);
-    if (handle >= 0) { setCursor(kHandleCursors[handle]); return; }
-
     const SelectionId sel = m_editorState->selection();
+    const VisualElement* selVe = nullptr;
     if (sel.level == SelectionId::Level::Element) {
-        const QPointF sp = widgetToTitle(wpos);
         const Title& t = m_doc->title();
-        if (sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size()) {
-            const auto* ve = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
-            if (ve) {
-                const Rectangle gb = globalBounds(*ve);
-                if (sp.x() >= gb.x && sp.x() <= gb.x + gb.width &&
-                    sp.y() >= gb.y && sp.y() <= gb.y + gb.height) {
-                    setCursor(Qt::SizeAllCursor);
-                    return;
-                }
+        if (sel.elementIndex >= 1 && sel.elementIndex < (int)t.elements.size())
+            selVe = dynamic_cast<const VisualElement*>(t.elements[sel.elementIndex].get());
+    }
+
+    const int handle = (m_editorState->selectionCount() <= 1 && !isActiveSelectionLocked())
+                       ? hitHandle(wpos) : -1;
+    if (handle == SelectionHandles::kRotateHandle) {
+        setCursor(Qt::CrossCursor);   // Qt has no native rotate cursor; CrossCursor is the stand-in
+        return;
+    }
+    if (handle >= 0 && selVe) {
+        const QTransform xf = elementToWidgetTransform(*selVe);
+        const QPointF center = xf.map(localBoundsRect(*selVe).center());
+        const QPointF hc = SelectionHandles::handleCenterT(handle, xf, localBoundsRect(*selVe));
+        setCursor(resizeCursorForAngle(hc.x() - center.x(), hc.y() - center.y()));
+        return;
+    }
+
+    if (selVe) {
+        bool ok = false;
+        const QTransform inv = elementLocalToTitle(*selVe).inverted(&ok);
+        if (ok) {
+            const QPointF lp = inv.map(widgetToTitle(wpos));
+            const Rectangle b = selVe->GetBounds();
+            if (lp.x() >= 0.0 && lp.x() <= b.width && lp.y() >= 0.0 && lp.y() <= b.height) {
+                setCursor(Qt::SizeAllCursor);
+                return;
             }
         }
     }

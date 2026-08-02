@@ -75,6 +75,7 @@ enum : int {
     ShearY      = 1009,
     LineSpacing = 1010,
     CharSpacing = 1011,
+    TextContent = 1012,
 };
 }
 
@@ -159,7 +160,7 @@ private:
 class SetElementRotationCmd : public QUndoCommand {
 public:
     SetElementRotationCmd(TitleDocument* doc, std::string ei, float after,
-                          QUndoCommand* parent = nullptr);
+                          int mergeTag = ElemMergeTag::Rotation, QUndoCommand* parent = nullptr);
     void undo() override;
     void redo() override;
     int  id() const override;
@@ -170,6 +171,7 @@ private:
     std::string    m_ei;
     float          m_before;
     float          m_after;
+    int            m_mergeTag;
 };
 
 // ── SetElementShearCmd ────────────────────────────────────────────────────────
@@ -280,6 +282,21 @@ private:
     std::string    m_ei;
     float m_before[4];
     float m_after[4];
+};
+
+// ── SetElementIdCmd — undoable element rename ─────────────────────────────────
+
+class SetElementIdCmd : public QUndoCommand {
+public:
+    SetElementIdCmd(TitleDocument* doc, std::string oldId, std::string newId,
+                    QUndoCommand* parent = nullptr);
+    void undo() override;
+    void redo() override;
+
+private:
+    TitleDocument* m_doc;
+    std::string    m_oldId;
+    std::string    m_newId;
 };
 
 // ── CopyElementStyleCmd ───────────────────────────────────────────────────────

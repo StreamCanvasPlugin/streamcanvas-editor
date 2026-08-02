@@ -4,9 +4,10 @@
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 #include "ui/widgets/CanvasWidget.h"
-#include "ui/widgets/GraphicTimingEditor.h"
+#include "ui/widgets/AnimationTimingPanel.h"
 #include "ui/widgets/RibbonFormatSection.h"
 #include "ui/widgets/TitleTreeView.h"
+#include "ui/UiUtils.h"
 #include "engine/element_image.h"
 #include "engine/element_qr.h"
 #include "engine/element_text.h"
@@ -43,6 +44,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPalette>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTextBrowser>
@@ -115,8 +117,15 @@ MainWindow::MainWindow(QWidget* parent)
     // Title tree — left dock
     auto* titleDock = new QDockWidget("Title", this);
     titleDock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetMovable);
-    titleDock->setWidget(new TitleTreeView(m_doc, m_editorTitle, titleDock));
+    m_treeView = new TitleTreeView(m_doc, m_editorTitle, titleDock);
+    titleDock->setWidget(m_treeView);
     addDockWidget(Qt::LeftDockWidgetArea, titleDock);
+
+    connect(m_treeView, &TitleTreeView::duplicateRequested, this, &MainWindow::onDuplicate);
+    connect(m_treeView, &TitleTreeView::cutRequested, this, &MainWindow::onCut);
+    connect(m_treeView, &TitleTreeView::copyRequested, this, &MainWindow::onCopy);
+    connect(m_treeView, &TitleTreeView::pasteRequested, this, [this]() { doPaste(false); });
+    connect(m_treeView, &TitleTreeView::pasteInPlaceRequested, this, [this]() { doPaste(true); });
 
     setCorner(Qt::BottomLeftCorner,  Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
@@ -124,37 +133,15 @@ MainWindow::MainWindow(QWidget* parent)
     // Animation timing — bottom dock
     auto* timingDock = new QDockWidget("Animation Timing", this);
     timingDock->setFeatures(QDockWidget::DockWidgetFloatable | QDockWidget::DockWidgetMovable);
-    m_timingEditor = new GraphicTimingEditor(m_doc, timingDock);
-    timingDock->setWidget(m_timingEditor);
+    m_timingPanel = new AnimationTimingPanel(m_doc, m_editorTitle, timingDock);
+    timingDock->setWidget(m_timingPanel);
     addDockWidget(Qt::BottomDockWidgetArea, timingDock);
 
-    connect(m_timingEditor, &GraphicTimingEditor::animationChanged,
-            [this](int elementIndex, bool isIn, bool isData, AnimationType type, Easing easing,
-                   float delay, float duration) {
-        const Title& t = m_doc->title();
-        if (elementIndex < 1 || elementIndex >= (int)t.elements.size()) return;
-        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[elementIndex].get());
-        if (!ve) return;
-        const std::string ei = ve->GetId();
-        AnimationDef def;
-        SetElementAnimCmd::Target target;
-        if (isData) {
-            def = isIn ? ve->dataInAnimation : ve->dataOutAnimation;
-            target = isIn ? SetElementAnimCmd::Target::DataAnimIn : SetElementAnimCmd::Target::DataAnimOut;
-        } else {
-            def = isIn ? ve->inAnimation : ve->outAnimation;
-            target = isIn ? SetElementAnimCmd::Target::AnimIn : SetElementAnimCmd::Target::AnimOut;
-        }
-        def.type = type; def.easing = easing; def.delay = delay; def.duration = duration;
-        m_doc->undoStack()->push(new SetElementAnimCmd(m_doc, ei, target, def));
+    connect(m_timingPanel, &AnimationTimingPanel::scrubTimeChanged, this,
+            [this](bool isIn, bool isData, double t) {
+        m_canvas->previewAtTime(isIn, isData, t);
     });
-
-    connect(m_timingEditor, &GraphicTimingEditor::scrubTimeChanged,
-            [this](float t) {
-        m_canvas->previewAtTime(m_timingEditor->isIn(), m_timingEditor->isDataAnim(), double(t));
-    });
-
-    connect(m_timingEditor, &GraphicTimingEditor::previewStopped,
+    connect(m_timingPanel, &AnimationTimingPanel::previewStopped,
             m_canvas, &CanvasWidget::stopAnimationPreview);
 
     setupMenuBar();
@@ -167,6 +154,7 @@ MainWindow::MainWindow(QWidget* parent)
         });
 
     connect(m_editorTitle, &EditorTitle::selectionChanged, this, &MainWindow::onSelectionChanged);
+    connect(m_editorTitle, &EditorTitle::selectionSetChanged, this, &MainWindow::updateSelectionStatus);
 
     connect(m_formatSection, &RibbonFormatSection::elementIdChanged,
             [this](const std::string&) {
@@ -271,15 +259,20 @@ void MainWindow::setupRibbon()
         dlg->setWindowTitle("Keyboard Shortcuts");
         dlg->resize(500, 520);
         auto* browser = new QTextBrowser(dlg);
-        browser->setHtml(
+        const QPalette& pal = dlg->palette();
+        const QString cHead   = pal.color(QPalette::PlaceholderText).name(); // h3
+        const QString cBorder = pal.color(QPalette::Mid).name();             // td border
+        const QString cText   = pal.color(QPalette::Text).name();            // td body
+        const QString cKey    = pal.color(QPalette::BrightText).name();      // td:first key
+        browser->setHtml(QString(
             "<style>"
             "body { font-family: sans-serif; font-size: 13px; margin: 8px; }"
-            "h3 { margin-top: 14px; margin-bottom: 2px; color: #aaa; font-size: 12px;"
+            "h3 { margin-top: 14px; margin-bottom: 2px; color: %1; font-size: 12px;"
             "     text-transform: uppercase; letter-spacing: 1px; }"
             "table { border-collapse: collapse; width: 100%; margin-bottom: 4px; }"
-            "td { padding: 3px 6px; border-bottom: 1px solid #444; color: #ddd; }"
+            "td { padding: 3px 6px; border-bottom: 1px solid %2; color: %3; }"
             "td:first-child { font-family: monospace; font-weight: bold;"
-            "                 white-space: nowrap; color: #ccc; width: 200px; }"
+            "                 white-space: nowrap; color: %4; width: 200px; }"
             "</style>"
             "<h3>File</h3><table>"
             "<tr><td>Ctrl+N</td><td>New title</td></tr>"
@@ -294,6 +287,8 @@ void MainWindow::setupRibbon()
             "<tr><td>Ctrl+X</td><td>Cut selected element</td></tr>"
             "<tr><td>Ctrl+V</td><td>Paste (offset +10 px)</td></tr>"
             "<tr><td>Ctrl+Shift+V</td><td>Paste in place</td></tr>"
+            "<tr><td>Ctrl+D</td><td>Duplicate selected element</td></tr>"
+            "<tr><td>Delete / Backspace</td><td>Delete selected element</td></tr>"
             "</table><h3>View</h3><table>"
             "<tr><td>Ctrl+=</td><td>Zoom in</td></tr>"
             "<tr><td>Ctrl+−</td><td>Zoom out</td></tr>"
@@ -314,7 +309,7 @@ void MainWindow::setupRibbon()
             "</table><h3>Misc</h3><table>"
             "<tr><td>F1</td><td>Show this shortcuts reference</td></tr>"
             "</table>"
-        );
+        ).arg(cHead, cBorder, cText, cKey));
         auto* layout = new QVBoxLayout(dlg);
         layout->addWidget(browser);
         auto* btns = new QDialogButtonBox(QDialogButtonBox::Close, dlg);
@@ -388,6 +383,84 @@ void MainWindow::setupRibbon()
         addAction(m_copyAction);
 
         panel->addLargeWidget(makeSmallStack({m_cutAction, m_copyAction}));
+
+        m_duplicateAction = new QAction(themedIcon(Icons16::Action_Copy), "Duplicate", this);
+        m_duplicateAction->setEnabled(false);
+        m_duplicateAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        connect(m_duplicateAction, &QAction::triggered, this, &MainWindow::onDuplicate);
+        addAction(m_duplicateAction);
+
+        m_deleteAction = new QAction(themedIcon(Icons16::Action_Trash), "Delete", this);
+        m_deleteAction->setEnabled(false);
+        m_deleteAction->setShortcuts({QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace)});
+        connect(m_deleteAction, &QAction::triggered, this, &MainWindow::deleteSelectedElement);
+        addAction(m_deleteAction);
+
+        panel->addLargeWidget(makeSmallStack({m_duplicateAction, m_deleteAction}));
+
+        m_selectAllAction = new QAction(themedIcon(Icons16::Action_SelectAll), "Select All", this);
+        m_selectAllAction->setShortcut(QKeySequence::SelectAll);
+        m_selectAllAction->setEnabled(false);
+        connect(m_selectAllAction, &QAction::triggered, this, &MainWindow::selectAllElements);
+        addAction(m_selectAllAction);
+        panel->addLargeWidget(makeSmallStack({m_selectAllAction}));
+    }
+
+    {   // Arrange panel — align / distribute a multi-selection
+        auto* panel = homeCat->addPanel("Arrange");
+
+        using AM = alignmath::AlignMode;
+        auto mkAlign = [this](const auto& icon, const QString& label, AM mode) {
+            auto* a = new QAction(themedIcon(icon), label, this);
+            a->setEnabled(false);
+            connect(a, &QAction::triggered, this, [this, mode]() { alignSelected(mode); });
+            addAction(a);
+            return a;
+        };
+
+        m_alignLeftAction    = mkAlign(Icons16::Action_AlignLeft,            "Align Left",     AM::Left);
+        m_alignHCenterAction = mkAlign(Icons16::Action_AlignCenterHorizontal,"Align Center",   AM::HCenter);
+        m_alignRightAction   = mkAlign(Icons16::Action_AlignRight,           "Align Right",    AM::Right);
+        m_alignTopAction     = mkAlign(Icons16::Action_AlignTop,             "Align Top",      AM::Top);
+        m_alignVMiddleAction = mkAlign(Icons16::Action_AlignCenterVertical,  "Align Middle",   AM::VMiddle);
+        m_alignBottomAction  = mkAlign(Icons16::Action_AlignBottom,          "Align Bottom",   AM::Bottom);
+
+        m_distributeHAction = new QAction(themedIcon(Icons16::Action_DistributeHorizontal), "Distribute Horizontally", this);
+        m_distributeHAction->setEnabled(false);
+        connect(m_distributeHAction, &QAction::triggered, this, [this]() { distributeSelected(true); });
+        addAction(m_distributeHAction);
+
+        m_distributeVAction = new QAction(themedIcon(Icons16::Action_DistributeVertical), "Distribute Vertically", this);
+        m_distributeVAction->setEnabled(false);
+        connect(m_distributeVAction, &QAction::triggered, this, [this]() { distributeSelected(false); });
+        addAction(m_distributeVAction);
+
+        panel->addLargeWidget(makeSmallStack({m_alignLeftAction, m_alignHCenterAction, m_alignRightAction}));
+        panel->addLargeWidget(makeSmallStack({m_alignTopAction, m_alignVMiddleAction, m_alignBottomAction}));
+        panel->addLargeWidget(makeSmallStack({m_distributeHAction, m_distributeVAction}));
+
+        using ZOp = zorderops::ReorderOp;
+        auto mkReorder = [this](const auto& icon, const QString& label, ZOp op,
+                                const QKeySequence& shortcut = {}) {
+            auto* a = new QAction(themedIcon(icon), label, this);
+            a->setEnabled(false);
+            if (!shortcut.isEmpty()) a->setShortcut(shortcut);
+            connect(a, &QAction::triggered, this, [this, op]() { reorderActive(op); });
+            addAction(a);
+            return a;
+        };
+
+        m_bringToFrontAction = mkReorder(Icons16::Action_BringToFront, "Bring to Front", ZOp::ToFront,
+                                         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketRight));
+        m_bringForwardAction = mkReorder(Icons16::Navigation_StepFront, "Bring Forward", ZOp::Forward,
+                                         QKeySequence(Qt::CTRL | Qt::Key_BracketRight));
+        m_sendBackwardAction = mkReorder(Icons16::Navigation_StepBack, "Send Backward", ZOp::Backward,
+                                         QKeySequence(Qt::CTRL | Qt::Key_BracketLeft));
+        m_sendToBackAction   = mkReorder(Icons16::Action_BringToBack, "Send to Back", ZOp::ToBack,
+                                         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_BracketLeft));
+
+        panel->addLargeWidget(makeSmallStack({m_bringToFrontAction, m_bringForwardAction}));
+        panel->addLargeWidget(makeSmallStack({m_sendBackwardAction, m_sendToBackAction}));
     }
 
     // ── Insert tab ─────────────────────────────────────────────────────────────
@@ -653,20 +726,18 @@ void MainWindow::setupRibbon()
     m_ribbon->hideCategory(m_formatSection->imageCategory());
     m_ribbon->hideCategory(m_formatSection->qrCategory());
 
-    connect(m_formatSection, &RibbonFormatSection::deleteElementRequested, this, [this]() {
-        const SelectionId sel = m_editorTitle->selection();
-        if (sel.level != SelectionId::Level::Element) return;
-        const Title& t = m_doc->title();
-        if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return;
-        const std::string ei = t.elements[sel.elementIndex]->GetId();
-        m_doc->undoStack()->push(new RemoveElementCmd(m_doc, ei));
-    });
+    connect(m_formatSection, &RibbonFormatSection::deleteElementRequested, this, &MainWindow::deleteSelectedElement);
 
     connect(m_formatSection, &RibbonFormatSection::copyStyleModeToggled, this,
             [this](bool on, const std::string& srcEi) { m_canvas->setPaintMode(on, srcEi); });
     connect(m_canvas, &CanvasWidget::paintModeFinished, this, [this]() {
         m_formatSection->setPaintModeActive(false);
     });
+
+    connect(m_canvas, &CanvasWidget::interactiveEditStarted, this,
+            [this]() { m_treeView->setResetsSuppressed(true); });
+    connect(m_canvas, &CanvasWidget::interactiveEditFinished, this,
+            [this]() { m_treeView->setResetsSuppressed(false); });
 }
 
 // ── Menu bar ──────────────────────────────────────────────────────────────────
@@ -707,18 +778,39 @@ void MainWindow::onOpen()
     QString path = QFileDialog::getOpenFileName(this, "Open Title", QString(),
                                                 "StreamCanvas Title (*.ogt);;All Files (*)");
     if (path.isEmpty()) return;
-    if (!m_doc->load(path))
+    bool ok;
+    { WaitCursor wc; ok = m_doc->load(path); }
+    if (!ok) {
+        const QString detail = m_doc->lastError();
         QMessageBox::warning(this, "Open Failed",
-                             QString("Could not open file:\n%1").arg(path));
-    else
+            detail.isEmpty() ? QString("Could not open file:\n%1").arg(path)
+                             : QString("Could not open file:\n%1\n\n%2").arg(path, detail));
+    } else {
         m_editorTitle->setSelection(SelectionId{});
+
+        const Title::LoadDiagnostic& diag = m_doc->lastLoadDiagnostic();
+        if (diag.severity != Title::LoadDiagnostic::Severity::None) {
+            const bool isWarning = diag.severity == Title::LoadDiagnostic::Severity::Warning;
+            auto* msgBox = new QMessageBox(
+                isWarning ? QMessageBox::Warning : QMessageBox::Information,
+                "Schema version", QString::fromStdString(diag.message), QMessageBox::Ok, this);
+            msgBox->setAttribute(Qt::WA_DeleteOnClose);
+            msgBox->show();
+        }
+    }
 }
 
 void MainWindow::onSave()
 {
     if (m_doc->filePath().isEmpty()) { onSaveAs(); return; }
-    if (!m_doc->save())
-        QMessageBox::warning(this, "Save Failed", "Could not save the file.");
+    bool ok;
+    { WaitCursor wc; ok = m_doc->save(); }
+    if (!ok) {
+        const QString detail = m_doc->lastError();
+        QMessageBox::warning(this, "Save Failed",
+            detail.isEmpty() ? QString("Could not save the file.")
+                             : QString("Could not save the file.\n\n%1").arg(detail));
+    }
 }
 
 void MainWindow::onSaveAs()
@@ -728,11 +820,16 @@ void MainWindow::onSaveAs()
     if (path.isEmpty()) return;
     if (!path.endsWith(".ogt", Qt::CaseInsensitive))
         path += ".ogt";
-    if (!m_doc->saveAs(path))
+    bool ok;
+    { WaitCursor wc; ok = m_doc->saveAs(path); }
+    if (!ok) {
+        const QString detail = m_doc->lastError();
         QMessageBox::warning(this, "Save Failed",
-                             QString("Could not save file:\n%1").arg(path));
-    else
+            detail.isEmpty() ? QString("Could not save file:\n%1").arg(path)
+                             : QString("Could not save file:\n%1\n\n%2").arg(path, detail));
+    } else {
         updateWindowTitle();
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
@@ -776,16 +873,53 @@ void MainWindow::updateWindowTitle()
 
 void MainWindow::updateToolBarState(SelectionId id)
 {
-    const bool hasElement = (id.level == SelectionId::Level::Element);
+    const bool hasElement = (m_editorTitle->selectionCount() > 0);
 
     if (m_cutAction)  m_cutAction->setEnabled(hasElement);
     if (m_copyAction) m_copyAction->setEnabled(hasElement);
+    if (m_duplicateAction) m_duplicateAction->setEnabled(hasElement);
+    if (m_deleteAction)    m_deleteAction->setEnabled(hasElement);
+    if (m_selectAllAction)
+        m_selectAllAction->setEnabled((int)m_doc->title().elements.size() > 1);
 
     bool canPaste = m_clipboard.has_value();
     if (!canPaste)
         canPaste = clipboardHasExternalImage();
     if (m_pasteAction)        m_pasteAction->setEnabled(canPaste);
     if (m_pasteInPlaceAction) m_pasteInPlaceAction->setEnabled(canPaste);
+
+    const int selCount = m_editorTitle->selectionCount();
+    const bool canAlign = selCount >= 2;
+    const bool canDistribute = selCount >= 3;
+    if (m_alignLeftAction)    m_alignLeftAction->setEnabled(canAlign);
+    if (m_alignHCenterAction) m_alignHCenterAction->setEnabled(canAlign);
+    if (m_alignRightAction)   m_alignRightAction->setEnabled(canAlign);
+    if (m_alignTopAction)     m_alignTopAction->setEnabled(canAlign);
+    if (m_alignVMiddleAction) m_alignVMiddleAction->setEnabled(canAlign);
+    if (m_alignBottomAction)  m_alignBottomAction->setEnabled(canAlign);
+    if (m_distributeHAction)  m_distributeHAction->setEnabled(canDistribute);
+    if (m_distributeVAction)  m_distributeVAction->setEnabled(canDistribute);
+
+    // Reorder actions: single active element with >=2 siblings (same sibling
+    // definition as TitleTreeModel::childrenOf).
+    bool canReorder = false;
+    if (id.level == SelectionId::Level::Element) {
+        const Title& t = m_doc->title();
+        if (id.elementIndex >= 1 && id.elementIndex < (int)t.elements.size()) {
+            const IElement* activeEl = t.elements[id.elementIndex].get();
+            if (const IElement* parentEl = activeEl->GetParent()) {
+                int siblingCount = 0;
+                for (const IElement* child : parentEl->GetChildren())
+                    if (dynamic_cast<const VisualElement*>(child))
+                        ++siblingCount;
+                canReorder = siblingCount >= 2;
+            }
+        }
+    }
+    if (m_bringToFrontAction) m_bringToFrontAction->setEnabled(canReorder);
+    if (m_bringForwardAction) m_bringForwardAction->setEnabled(canReorder);
+    if (m_sendBackwardAction) m_sendBackwardAction->setEnabled(canReorder);
+    if (m_sendToBackAction)   m_sendToBackAction->setEnabled(canReorder);
 }
 
 void MainWindow::onSelectionChanged(SelectionId id)
@@ -803,7 +937,6 @@ void MainWindow::onSelectionChanged(SelectionId id)
         const bool isQr    = dynamic_cast<const QrElement*>(el)    != nullptr;
 
         m_formatSection->setSelection(el->GetId());
-        m_timingEditor->load();
 
         m_ribbon->showCategory(m_formatSection->elementCategory());
         m_ribbon->showCategory(m_formatSection->styleCategory());
@@ -822,8 +955,27 @@ void MainWindow::onSelectionChanged(SelectionId id)
         m_ribbon->hideCategory(m_formatSection->textCategory());
         m_ribbon->hideCategory(m_formatSection->imageCategory());
         m_ribbon->hideCategory(m_formatSection->qrCategory());
-        m_timingEditor->clear();
     }
+}
+
+void MainWindow::selectAllElements()
+{
+    const Title& t = m_doc->title();
+    std::vector<int> indices;
+    for (int i = 1; i < (int)t.elements.size(); ++i)
+        if (dynamic_cast<const VisualElement*>(t.elements[i].get()))
+            indices.push_back(i);
+    if (indices.empty()) return;
+    m_editorTitle->setMultiSelection(indices, indices.back());
+}
+
+void MainWindow::updateSelectionStatus()
+{
+    const int n = m_editorTitle->selectionCount();
+    if (n > 1)
+        statusBar()->showMessage(QString("%1 elements selected").arg(n));
+    else
+        statusBar()->clearMessage();
 }
 
 // ── Clipboard ─────────────────────────────────────────────────────────────────
@@ -859,6 +1011,102 @@ void MainWindow::onCut()
     }
 }
 
+void MainWindow::deleteSelectedElement()
+{
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.empty()) return;
+    const Title& t = m_doc->title();
+    // Resolve to string ids FIRST — removals shift positional indices.
+    std::vector<std::string> ids;
+    for (int i : indices)
+        if (i >= 1 && i < (int)t.elements.size())
+            ids.push_back(t.elements[i]->GetId());
+    if (ids.empty()) return;
+    if (ids.size() == 1) {
+        m_doc->undoStack()->push(new RemoveElementCmd(m_doc, ids[0]));
+    } else {
+        m_doc->undoStack()->beginMacro("Delete elements");
+        for (const auto& id : ids)
+            m_doc->undoStack()->push(new RemoveElementCmd(m_doc, id));
+        m_doc->undoStack()->endMacro();
+    }
+}
+
+std::string MainWindow::insertElementCopyImpl(nlohmann::json cb, double offset)
+{
+    const Title& t = m_doc->title();
+    std::string origType = cb.value("type", "rectangle");
+    std::string prefix = "element_";
+    if (origType == "text")       prefix = "text_";
+    else if (origType == "image") prefix = "image_";
+    else if (origType == "qr_code") prefix = "qr_";
+
+    int maxN = 0;
+    for (int i = 1; i < (int)t.elements.size(); ++i) {
+        const std::string& eid = t.elements[i]->GetId();
+        if (eid.rfind(prefix, 0) == 0)
+            try { maxN = std::max(maxN, std::stoi(eid.substr(prefix.size()))); } catch (...) {}
+    }
+    std::string newId = prefix + std::to_string(maxN + 1);
+
+    cb["id"] = newId;
+    cb["z_order"] = std::max(0, (int)t.elements.size() - 1);
+    if (offset != 0.0) {
+        if (cb.contains("x")) cb["x"] = cb["x"].get<double>() + offset;
+        if (cb.contains("y")) cb["y"] = cb["y"].get<double>() + offset;
+    }
+
+    m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(cb)));
+    return newId;
+}
+
+void MainWindow::insertElementCopy(nlohmann::json cb, double offset)
+{
+    std::string newId = insertElementCopyImpl(std::move(cb), offset);
+
+    const Title& t2 = m_doc->title();
+    for (int i = 1; i < (int)t2.elements.size(); ++i)
+        if (t2.elements[i]->GetId() == newId) {
+            m_editorTitle->setSelection({SelectionId::Level::Element, i});
+            break;
+        }
+    updateToolBarState(m_editorTitle->selection());
+}
+
+void MainWindow::onDuplicate()
+{
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.empty()) return;
+    const Title& t = m_doc->title();
+    std::vector<nlohmann::json> sources;
+    for (int i : indices) {
+        if (i < 1 || i >= (int)t.elements.size()) continue;
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        nlohmann::json cb = TitleDocument::elementToJson(*ve);
+        cb.erase("mask");
+        cb.erase("parent");
+        sources.push_back(std::move(cb));
+    }
+    if (sources.empty()) return;
+    if (sources.size() == 1) { insertElementCopy(std::move(sources[0]), 10.0); return; }
+
+    m_doc->undoStack()->beginMacro("Duplicate elements");
+    std::vector<std::string> newIds;
+    for (auto& src : sources)
+        newIds.push_back(insertElementCopyImpl(std::move(src), 10.0));
+    m_doc->undoStack()->endMacro();
+
+    const Title& t2 = m_doc->title();
+    std::vector<int> newIndices;
+    for (const auto& id : newIds)
+        for (int i = 1; i < (int)t2.elements.size(); ++i)
+            if (t2.elements[i]->GetId() == id) { newIndices.push_back(i); break; }
+    if (!newIndices.empty())
+        m_editorTitle->setMultiSelection(newIndices, newIndices.back());
+    updateToolBarState(m_editorTitle->selection());
+}
+
 void MainWindow::doPaste(bool inPlace)
 {
     using json = nlohmann::json;
@@ -872,36 +1120,7 @@ void MainWindow::doPaste(bool inPlace)
         const double offset = inPlace ? 0.0 : 10.0;
 
         if (clipType == "element") {
-            const Title& t = m_doc->title();
-            std::string origType = cb.value("type", "rectangle");
-            std::string prefix = "element_";
-            if (origType == "text")     prefix = "text_";
-            else if (origType == "image")    prefix = "image_";
-            else if (origType == "qr_code")  prefix = "qr_";
-
-            int maxN = 0;
-            for (int i = 1; i < (int)t.elements.size(); ++i) {
-                const std::string& eid = t.elements[i]->GetId();
-                if (eid.rfind(prefix, 0) == 0)
-                    try { maxN = std::max(maxN, std::stoi(eid.substr(prefix.size()))); } catch (...) {}
-            }
-            std::string newId = prefix + std::to_string(maxN + 1);
-
-            cb["id"] = newId;
-            cb["z_order"] = std::max(0, (int)t.elements.size() - 1);
-            if (offset != 0.0) {
-                if (cb.contains("x")) cb["x"] = cb["x"].get<double>() + offset;
-                if (cb.contains("y")) cb["y"] = cb["y"].get<double>() + offset;
-            }
-
-            m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(cb)));
-
-            const Title& t2 = m_doc->title();
-            for (int i = 1; i < (int)t2.elements.size(); ++i)
-                if (t2.elements[i]->GetId() == newId) {
-                    m_editorTitle->setSelection({SelectionId::Level::Element, i});
-                    break;
-                }
+            insertElementCopy(std::move(cb), offset);
         }
 
         updateToolBarState(m_editorTitle->selection());
@@ -915,6 +1134,7 @@ void MainWindow::doPaste(bool inPlace)
     QString imagePath;
     QImage img;
     if (md->hasUrls()) {
+        WaitCursor wc;
         for (const QUrl& url : md->urls()) {
             if (!url.isLocalFile()) continue;
             QString p = url.toLocalFile();
@@ -949,14 +1169,19 @@ void MainWindow::doPaste(bool inPlace)
             defaultDir + "/clipboard_image.png",
             "PNG Images (*.png);;JPEG Images (*.jpg *.jpeg);;All Files (*)");
         if (imagePath.isEmpty()) return;
-        if (!img.save(imagePath)) {
+        bool saved;
+        { WaitCursor wc; saved = img.save(imagePath); }
+        if (!saved) {
             QMessageBox::warning(this, "Save Failed",
                 "Could not save the clipboard image.");
             return;
         }
     }
 
-    if (img.isNull()) img.load(imagePath);
+    {
+        WaitCursor wc;
+        if (img.isNull()) img.load(imagePath);
+    }
 
     double w = img.isNull() ? 200.0 : img.width();
     double h = img.isNull() ? 200.0 : img.height();
@@ -990,4 +1215,92 @@ void MainWindow::doPaste(bool inPlace)
         }
 
     updateToolBarState(m_editorTitle->selection());
+}
+
+void MainWindow::alignSelected(alignmath::AlignMode mode)
+{
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.size() < 2) return;
+    const Title& t = m_doc->title();
+    std::vector<QRectF> boxes;
+    std::vector<std::string> ids;
+    std::vector<Rectangle> bounds;
+    for (int i : indices) {
+        if (i < 1 || i >= (int)t.elements.size()) continue;
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        boxes.push_back(m_canvas->elementTitleAABB(*ve));
+        ids.push_back(ve->GetId());
+        bounds.push_back(ve->GetBounds());
+    }
+    if (boxes.size() < 2) return;
+    const std::vector<QPointF> deltas = alignmath::alignDeltas(boxes, mode);
+
+    // Collect the actual changes first so we never open an empty macro.
+    struct Change { std::string id; Rectangle b; };
+    std::vector<Change> changes;
+    for (std::size_t k = 0; k < ids.size(); ++k) {
+        if (deltas[k].isNull()) continue;
+        Rectangle b = bounds[k];
+        b.x += deltas[k].x();
+        b.y += deltas[k].y();
+        changes.push_back({ids[k], b});
+    }
+    if (changes.empty()) return;
+    if (changes.size() == 1) {
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, changes[0].id, changes[0].b));
+    } else {
+        m_doc->undoStack()->beginMacro("Align elements");
+        for (const auto& c : changes)
+            m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, c.id, c.b));
+        m_doc->undoStack()->endMacro();
+    }
+}
+
+void MainWindow::distributeSelected(bool horizontal)
+{
+    const std::vector<int> indices = m_editorTitle->selectedIndices();
+    if (indices.size() < 3) return;
+    const Title& t = m_doc->title();
+    std::vector<QRectF> boxes;
+    std::vector<std::string> ids;
+    std::vector<Rectangle> bounds;
+    for (int i : indices) {
+        if (i < 1 || i >= (int)t.elements.size()) continue;
+        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[i].get());
+        if (!ve) continue;
+        boxes.push_back(m_canvas->elementTitleAABB(*ve));
+        ids.push_back(ve->GetId());
+        bounds.push_back(ve->GetBounds());
+    }
+    if (boxes.size() < 3) return;
+    const std::vector<QPointF> deltas = alignmath::distributeDeltas(boxes, horizontal);
+
+    struct Change { std::string id; Rectangle b; };
+    std::vector<Change> changes;
+    for (std::size_t k = 0; k < ids.size(); ++k) {
+        if (deltas[k].isNull()) continue;
+        Rectangle b = bounds[k];
+        b.x += deltas[k].x();
+        b.y += deltas[k].y();
+        changes.push_back({ids[k], b});
+    }
+    if (changes.empty()) return;
+    if (changes.size() == 1) {
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, changes[0].id, changes[0].b));
+    } else {
+        m_doc->undoStack()->beginMacro("Distribute elements");
+        for (const auto& c : changes)
+            m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, c.id, c.b));
+        m_doc->undoStack()->endMacro();
+    }
+}
+
+void MainWindow::reorderActive(zorderops::ReorderOp op)
+{
+    const SelectionId sel = m_editorTitle->selection();
+    if (sel.level != SelectionId::Level::Element) return;
+    const Title& t = m_doc->title();
+    if (sel.elementIndex < 1 || sel.elementIndex >= (int)t.elements.size()) return;
+    zorderops::applyReorder(m_doc, t.elements[sel.elementIndex].get(), op);
 }

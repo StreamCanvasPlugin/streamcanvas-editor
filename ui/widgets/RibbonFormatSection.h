@@ -2,7 +2,9 @@
 
 #include "engine/types.hpp"
 #include <QObject>
+#include <QPointer>
 #include <QSize>
+#include <QTimer>
 #include <string>
 
 class TitleDocument;
@@ -106,9 +108,23 @@ private:
     void populateRefCombos();
     void loadFonts();
 
+    // Updates m_imagePathEdit's warning visual state for the given path.
+    // Empty path = neutral (no styling). Non-empty but missing/unreadable =
+    // red border + warning tooltip. Valid = cleared styling, tooltip = the path.
+    // Returns true if the path is empty or valid, false if invalid.
+    bool updateImagePathValidity(const QString& path);
+
+    // Folds m_mergeGen into `base` and restarts the idle timer. Used to bound
+    // how long consecutive spinbox/text edits merge into a single undo step:
+    // a pause > 600ms bumps m_mergeGen, starting a fresh undo entry.
+    int mergeTag(int base);
+
     TitleDocument* m_doc{nullptr};
     std::string    m_elementId;
     bool           m_updating{false};
+
+    int     m_mergeGen{0};
+    QTimer* m_mergeIdleTimer{nullptr};
 
     SARibbonCategory* m_elemCategory{nullptr};
     SARibbonCategory* m_styleCategory{nullptr};
@@ -201,6 +217,11 @@ private:
     QDialog*        m_contentDialog{nullptr};
     QPlainTextEdit* m_contentEdit{nullptr};
     int             m_contentSavedCursor{0};
+
+    // Focus restoration for non-modal Qt::Tool popup dialogs
+    QPointer<QWidget> m_focusBeforeFillGradDlg;
+    QPointer<QWidget> m_focusBeforeStrokeGradDlg;
+    QPointer<QWidget> m_focusBeforeContentDlg;
 
     // Image tab
     QLineEdit* m_imagePathEdit{nullptr};

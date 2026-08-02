@@ -9,137 +9,10 @@
 #include "engine/element_rectangle.h"
 #include "engine/element_text.h"
 #include "engine/spatial.h"
+#include "engine/title.h"
 #include "engine/types.hpp"
 
 using json = nlohmann::json;
-
-static Paint parsePaint(const json& v)
-{
-    if (v.is_null()) return Paint{};
-    if (v.is_array() && v.size() >= 3) {
-        double a = v.size() >= 4 ? (double)v[3] : 1.0;
-        return Paint::Solid(v[0], v[1], v[2], a);
-    }
-    if (v.is_string())
-        return Paint::Image(v.get<std::string>());
-    if (v.is_object()) {
-        std::string type = v.value("type", "");
-        if (type == "image") return Paint::Image(v.value("path", ""));
-        Paint p = (type == "radial")
-            ? Paint::Radial(v.value("cx0", 0.0), v.value("cy0", 0.0), v.value("r0", 0.0),
-                            v.value("cx1", 0.0), v.value("cy1", 0.0), v.value("r1", 1.0))
-            : Paint::Linear(v.value("x0", 0.0), v.value("y0", 0.0),
-                            v.value("x1", 1.0), v.value("y1", 0.0));
-        if (v.contains("stops") && v["stops"].is_array()) {
-            for (const auto& s : v["stops"]) {
-                const auto& c = s.at("color");
-                double a = c.size() >= 4 ? (double)c[3] : 1.0;
-                p.AddStop(s.value("offset", 0.0), c[0], c[1], c[2], a);
-            }
-        }
-        return p;
-    }
-    return Paint{};
-}
-
-static FontWeight parseFontWeight(const std::string& s)
-{
-    if (s == "thin")        return FontWeight::Thin;
-    if (s == "ultralight")  return FontWeight::UltraLight;
-    if (s == "semilight")   return FontWeight::SemiLight;
-    if (s == "light")       return FontWeight::Light;
-    if (s == "book")        return FontWeight::Book;
-    if (s == "medium")      return FontWeight::Medium;
-    if (s == "semibold")    return FontWeight::SemiBold;
-    if (s == "bold")        return FontWeight::Bold;
-    if (s == "ultrabold")   return FontWeight::UltraBold;
-    if (s == "heavy")       return FontWeight::Heavy;
-    if (s == "ultraheavy")  return FontWeight::UltraHeavy;
-    return FontWeight::Normal;
-}
-
-static HorizontalAlignment parseAlignmentH(const std::string& s)
-{
-    if (s == "justify") return HorizontalAlignment::Justify;
-    if (s == "center")  return HorizontalAlignment::Center;
-    if (s == "right")   return HorizontalAlignment::Right;
-    return HorizontalAlignment::Left;
-}
-
-static VerticalAlignment parseAlignmentV(const std::string& s)
-{
-    if (s == "bottom") return VerticalAlignment::Bottom;
-    if (s == "middle") return VerticalAlignment::Middle;
-    return VerticalAlignment::Top;
-}
-
-static Ellipsize parseEllipsize(const std::string& s)
-{
-    if (s == "start")  return Ellipsize::Start;
-    if (s == "middle") return Ellipsize::Middle;
-    if (s == "end")    return Ellipsize::End;
-    return Ellipsize::None;
-}
-
-static WrapMode parseWrapMode(const std::string& s)
-{
-    if (s == "char")      return WrapMode::Char;
-    if (s == "word_char") return WrapMode::WordChar;
-    return WrapMode::Word;
-}
-
-static TextTransform parseTextTransform(const std::string& s)
-{
-    if (s == "capitalize") return TextTransform::Capitalize;
-    if (s == "uppercase")  return TextTransform::Uppercase;
-    if (s == "lowercase")  return TextTransform::Lowercase;
-    return TextTransform::None;
-}
-
-static AnimationType parseAnimType(const std::string& s)
-{
-    if (s == "fade")        return AnimationType::Fade;
-    if (s == "slide_up")    return AnimationType::SlideUp;
-    if (s == "slide_down")  return AnimationType::SlideDown;
-    if (s == "slide_left")  return AnimationType::SlideLeft;
-    if (s == "slide_right") return AnimationType::SlideRight;
-    if (s == "scale_in")    return AnimationType::ScaleIn;
-    if (s == "wipe_up")     return AnimationType::WipeUp;
-    if (s == "wipe_down")   return AnimationType::WipeDown;
-    if (s == "wipe_left")   return AnimationType::WipeLeft;
-    if (s == "wipe_right")  return AnimationType::WipeRight;
-    return AnimationType::None;
-}
-
-static Easing parseEasing(const std::string& s)
-{
-    if (s == "ease_in")               return Easing::EaseIn;
-    if (s == "ease_out")              return Easing::EaseOut;
-    if (s == "ease_in_out")           return Easing::EaseInOut;
-    if (s == "ease_in_cubic")         return Easing::EaseInCubic;
-    if (s == "ease_out_cubic")        return Easing::EaseOutCubic;
-    if (s == "ease_in_out_cubic")     return Easing::EaseInOutCubic;
-    if (s == "ease_in_expo")          return Easing::EaseInExpo;
-    if (s == "ease_out_expo")         return Easing::EaseOutExpo;
-    if (s == "ease_in_out_expo")      return Easing::EaseInOutExpo;
-    if (s == "ease_in_back")          return Easing::EaseInBack;
-    if (s == "ease_out_back")         return Easing::EaseOutBack;
-    if (s == "ease_in_out_back")      return Easing::EaseInOutBack;
-    if (s == "ease_in_elastic")       return Easing::EaseInElastic;
-    if (s == "ease_out_elastic")      return Easing::EaseOutElastic;
-    if (s == "ease_in_out_elastic")   return Easing::EaseInOutElastic;
-    return Easing::Linear;
-}
-
-static AnimationDef parseAnimDef(const json& j)
-{
-    AnimationDef a;
-    a.type     = parseAnimType(j.value("type", "none"));
-    a.easing   = parseEasing(j.value("easing", "linear"));
-    a.duration = static_cast<float>(j.value("duration", 0.5));
-    a.delay    = static_cast<float>(j.value("delay", 0.0));
-    return a;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // insertElementFromJson — re-parse a single element JSON blob into the title.
@@ -149,122 +22,28 @@ static AnimationDef parseAnimDef(const json& j)
 
 static void insertElementFromJson(Title& t, const json& ej)
 {
-    const std::string type = ej.value("type", "rectangle");
-    const std::string id   = ej.value("id", "");
+    auto el = ogt::ParseElement(ej);   // all fields incl data_anim / tile / justify
 
-    std::unique_ptr<VisualElement> el;
-    if (type == "text")      el = std::make_unique<TextElement>();
-    else if (type == "image")     el = std::make_unique<ImageElement>();
-    else if (type == "qr_code")   el = std::make_unique<QrElement>();
-    else                          el = std::make_unique<RectangleElement>();
-
-    el->SetId(id);
-
-    // Bounds (local coords from JSON)
-    double x = ej.value("x", 0.0),  y = ej.value("y", 0.0);
+    // JSON bounds are LOCAL; convert to world before AddChild so Spatial::SetParent's
+    // world-preservation subtraction lands the element back at the correct local pos.
+    double x = ej.value("x", 0.0),   y = ej.value("y", 0.0);
     double w = ej.value("w", 100.0), h = ej.value("h", 100.0);
 
-    el->zOrder      = ej.value("z_order", 0);
-    el->opacity     = static_cast<float>(ej.value("opacity", 1.0));
-    el->strokeWidth = static_cast<float>(ej.value("stroke_width", 0.0));
-
-    if (ej.contains("fill"))   el->fill   = parsePaint(ej["fill"]);
-    if (ej.contains("stroke")) el->stroke = parsePaint(ej["stroke"]);
-
-    if (ej.contains("corner_radius")) {
-        const auto& cr = ej["corner_radius"];
-        if (cr.is_number()) {
-            float v = cr.get<float>();
-            el->cornerRadius[0] = el->cornerRadius[1] = el->cornerRadius[2] = el->cornerRadius[3] = v;
-        } else if (cr.is_array() && cr.size() == 4) {
-            for (int k = 0; k < 4; ++k) el->cornerRadius[k] = cr[k].get<float>();
-        }
-    }
-
-    if (ej.value("fit_to_children", false)) {
-        el->fitToChildren = true;
-        if (ej.contains("children_padding") && ej["children_padding"].is_array() &&
-            ej["children_padding"].size() == 4) {
-            for (int k = 0; k < 4; ++k)
-                el->childrenPadding[k] = ej["children_padding"][k].get<float>();
-        }
-    }
-    el->clipChildren = ej.value("clip_children", false);
-
-    if (ej.contains("shadow") && ej["shadow"].is_object()) {
-        const auto& sh = ej["shadow"];
-        el->shadow.enabled = sh.value("enabled", false);
-        el->shadow.offsetX = sh.value("offset_x", 4.0);
-        el->shadow.offsetY = sh.value("offset_y", 4.0);
-        el->shadow.blur    = sh.value("blur", 8.0);
-        if (sh.contains("color") && sh["color"].is_array() && sh["color"].size() == 4) {
-            for (int k = 0; k < 4; ++k) el->shadow.color[k] = sh["color"][k].get<float>();
-        }
-    }
-
-    if (ej.contains("anim_in"))  el->inAnimation  = parseAnimDef(ej["anim_in"]);
-    if (ej.contains("anim_out")) el->outAnimation = parseAnimDef(ej["anim_out"]);
-
-    // Type-specific fields
-    if (auto* te = dynamic_cast<TextElement*>(el.get())) {
-        te->text                = ej.value("text", "");
-        te->font.family         = ej.value("font_family", "");
-        te->font.size           = static_cast<float>(ej.value("font_size", 36.0));
-        te->font.isItalic       = ej.value("font_italic", false);
-        te->font.isUnderline    = ej.value("font_underline", false);
-        te->font.isStrikethrough= ej.value("font_strikethrough", false);
-        te->font.weight         = parseFontWeight(ej.value("font_weight", "normal"));
-        te->textStyle.autoScale     = ej.value("auto_scale", false);
-        te->textStyle.alignX        = parseAlignmentH(ej.value("text_align_x", "left"));
-        te->textStyle.alignY        = parseAlignmentV(ej.value("text_align_y", "top"));
-        te->textStyle.ellipsize     = parseEllipsize(ej.value("ellipsize", "none"));
-        te->textStyle.wrapMode      = parseWrapMode(ej.value("wrap", "word"));
-        te->textStyle.transform     = parseTextTransform(ej.value("text_transform", "none"));
-        te->textStyle.lineSpacing   = static_cast<float>(ej.value("line_spacing", 0.0));
-        te->textStyle.letterSpacing = static_cast<float>(ej.value("letter_spacing", 0.0));
-    } else if (auto* ie = dynamic_cast<ImageElement*>(el.get())) {
-        ie->imagePath      = ej.value("image_path", "");
-        const std::string sm = ej.value("scale_mode", "stretch");
-        if      (sm == "contain")    ie->imageScaleMode = ScaleMode::Contain;
-        else if (sm == "cover")      ie->imageScaleMode = ScaleMode::Cover;
-        else if (sm == "fit_width")  ie->imageScaleMode = ScaleMode::FitWidth;
-        else if (sm == "fit_height") ie->imageScaleMode = ScaleMode::FitHeight;
-        else if (sm == "none")       ie->imageScaleMode = ScaleMode::None;
-        else                         ie->imageScaleMode = ScaleMode::Stretch;
-    } else if (auto* qe = dynamic_cast<QrElement*>(el.get())) {
-        qe->text = ej.value("text", "");
-    }
-
-    // Find parent element (by id); default to root
     const std::string parentId = ej.value("parent", "");
     IElement* parentEl = t.GetRoot();
     if (!parentId.empty()) {
-        for (auto& pe : t.elements) {
-            if (pe->GetId() == parentId) {
-                parentEl = pe.get();
-                break;
-            }
-        }
+        for (auto& pe : t.elements)
+            if (pe->GetId() == parentId) { parentEl = pe.get(); break; }
     }
-
-    // Convert local coords to world coords so SetParent in AddChild is correct
     if (parentEl && parentEl != t.GetRoot()) {
         Point pw = parentEl->GetGlobalPosition();
-        x += pw.x;
-        y += pw.y;
+        x += pw.x; y += pw.y;
     }
     el->SetBounds({x, y, w, h});
 
-    // Rotation and shear must be set before AddChild
-    el->SetRotation(static_cast<float>(ej.value("rotation", 0.0)));
-    el->SetShearX(static_cast<float>(ej.value("shear_x", 0.0)));
-    el->SetShearY(static_cast<float>(ej.value("shear_y", 0.0)));
-
     VisualElement* rawEl = el.get();
     t.elements.push_back(std::move(el));
-
-    if (parentEl)
-        parentEl->AddChild(rawEl);
+    if (parentEl) parentEl->AddChild(rawEl);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -357,8 +136,8 @@ bool SetElementBoundsCmd::mergeWith(const QUndoCommand* other)
 // ─────────────────────────────────────────────────────────────────────────────
 
 SetElementRotationCmd::SetElementRotationCmd(TitleDocument* doc, std::string ei, float after,
-                                             QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_after(after)
+                                             int mergeTag, QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_after(after), m_mergeTag(mergeTag)
 {
     setText("Set rotation");
     try { m_before = m_doc->getElement(m_ei).GetRotation(); } catch (...) { m_before = after; }
@@ -378,7 +157,7 @@ void SetElementRotationCmd::redo()
     });
 }
 
-int  SetElementRotationCmd::id() const { return ElemMergeTag::Rotation; }
+int  SetElementRotationCmd::id() const { return m_mergeTag; }
 
 bool SetElementRotationCmd::mergeWith(const QUndoCommand* other)
 {
@@ -611,6 +390,33 @@ void SetCornerRadiusCmd::redo()
             VisualElement& el = m_doc->getElement(m_ei);
             for (int i = 0; i < 4; ++i) el.cornerRadius[i] = m_after[i];
         } catch (...) {}
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SetElementIdCmd
+// ─────────────────────────────────────────────────────────────────────────────
+
+SetElementIdCmd::SetElementIdCmd(TitleDocument* doc, std::string oldId, std::string newId,
+                                 QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_oldId(std::move(oldId)), m_newId(std::move(newId))
+{
+    setText("Rename element");
+}
+
+void SetElementIdCmd::redo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_oldId).SetId(m_newId); }
+        catch (const std::runtime_error&) {}
+    });
+}
+
+void SetElementIdCmd::undo()
+{
+    m_doc->applyMutation([&](Title&) {
+        try { m_doc->getElement(m_newId).SetId(m_oldId); }
+        catch (const std::runtime_error&) {}
     });
 }
 

@@ -15,19 +15,24 @@
 
 #include <QAbstractItemView>
 #include "ColorPicker.h"
+#include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDebug>
 #include <QDialog>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFontDatabase>
+#include <QImageReader>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPainter>
+#include <QPalette>
 #include <QPixmap>
 #include <QPlainTextEdit>
 #include <QSignalBlocker>
@@ -36,7 +41,9 @@
 #include <QStandardItemModel>
 #include <QCompleter>
 #include <QStyledItemDelegate>
+#include <QTimer>
 #include <QToolButton>
+#include <QToolTip>
 #include <QVBoxLayout>
 #include <QWidgetAction>
 
@@ -161,7 +168,11 @@ void RibbonFormatSection::updateFillSwatch()
     try {
         const VisualElement& el = m_doc->getElement(m_elementId);
         m_fillBtn->setIcon(makePaintSwatch(el.fill, m_fillBtn->iconSize()));
-    } catch (...) {}
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::updateStrokeSwatch()
@@ -170,7 +181,11 @@ void RibbonFormatSection::updateStrokeSwatch()
     try {
         const VisualElement& el = m_doc->getElement(m_elementId);
         m_strokeBtn->setIcon(makePaintSwatch(el.stroke, m_strokeBtn->iconSize()));
-    } catch (...) {}
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 // ── construction ───────────────────────────────────────────────────────────────
@@ -185,6 +200,16 @@ RibbonFormatSection::RibbonFormatSection(TitleDocument* doc, SARibbonBar* ribbon
     buildQrTab(ribbon);
 
     connect(m_doc, &TitleDocument::documentChanged, this, &RibbonFormatSection::onDocumentChanged);
+
+    m_mergeIdleTimer = new QTimer(this);
+    m_mergeIdleTimer->setSingleShot(true);
+    connect(m_mergeIdleTimer, &QTimer::timeout, this, [this]() { ++m_mergeGen; });
+}
+
+int RibbonFormatSection::mergeTag(int base)
+{
+    if (m_mergeIdleTimer) m_mergeIdleTimer->start(600);
+    return base + m_mergeGen * 100000;   // base tags are < 100000, so no cross-field collision
 }
 
 static QGridLayout* addGroup(SARibbonCategory* category, const QString& name)
@@ -340,6 +365,23 @@ void RibbonFormatSection::buildElementTab(SARibbonBar* ribbon)
         gl->addWidget(deleteBtn, 0, 0, 2, 1, Qt::AlignCenter);
         connect(deleteAct, &QAction::triggered, this, &RibbonFormatSection::deleteElementRequested);
     }
+
+    QWidget::setTabOrder(m_idEdit, m_spinX);
+    QWidget::setTabOrder(m_spinX, m_spinY);
+    QWidget::setTabOrder(m_spinY, m_spinW);
+    QWidget::setTabOrder(m_spinW, m_spinH);
+    QWidget::setTabOrder(m_spinH, m_spinRot);
+    QWidget::setTabOrder(m_spinRot, m_spinShearX);
+    QWidget::setTabOrder(m_spinShearX, m_spinShearY);
+    QWidget::setTabOrder(m_spinShearY, m_spinZ);
+    QWidget::setTabOrder(m_spinZ, m_spinOpacity);
+    QWidget::setTabOrder(m_spinOpacity, m_clipChildrenCheck);
+    QWidget::setTabOrder(m_clipChildrenCheck, m_parentCombo);
+    QWidget::setTabOrder(m_parentCombo, m_fitCheck);
+    QWidget::setTabOrder(m_fitCheck, m_spinPadTop);
+    QWidget::setTabOrder(m_spinPadTop, m_spinPadRight);
+    QWidget::setTabOrder(m_spinPadRight, m_spinPadBottom);
+    QWidget::setTabOrder(m_spinPadBottom, m_spinPadLeft);
 }
 
 void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
@@ -352,9 +394,13 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         m_fillPicker   = new PaintPickerWidget(m_doc);
         m_strokePicker = new PaintPickerWidget(m_doc);
 
-        auto makeGradDialog = [this](const QString& title, PaintEditor*& editor) -> QDialog* {
+        auto makeGradDialog = [this](const QString& title, PaintEditor*& editor, bool isFill) -> QDialog* {
             auto* dlg = new QDialog(nullptr, Qt::Tool);
             dlg->setAttribute(Qt::WA_DeleteOnClose, false);
+            connect(dlg, &QDialog::finished, this, [this, isFill](int) {
+                QPointer<QWidget>& focus = isFill ? m_focusBeforeFillGradDlg : m_focusBeforeStrokeGradDlg;
+                if (focus) focus->setFocus();
+            });
             dlg->setWindowTitle(title);
             dlg->setMinimumWidth(250);
             auto* l = new QVBoxLayout(dlg);
@@ -363,8 +409,8 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
             dlg->adjustSize();
             return dlg;
         };
-        auto* fillGradDlg   = makeGradDialog("Fill",   m_fillEditor);
-        auto* strokeGradDlg = makeGradDialog("Stroke", m_strokeEditor);
+        auto* fillGradDlg   = makeGradDialog("Fill",   m_fillEditor,   true);
+        auto* strokeGradDlg = makeGradDialog("Stroke", m_strokeEditor, false);
 
         auto [fillBtn,   fillMenu]   = makePopupButton("Fill",   m_fillPicker);
         auto [strokeBtn, strokeMenu] = makePopupButton("Stroke", m_strokePicker);
@@ -388,7 +434,11 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
                 try {
                     const VisualElement& el = m_doc->getElement(m_elementId);
                     picker->setPaint(isFill ? el.fill : el.stroke);
-                } catch (...) {}
+                } catch (const std::runtime_error&) {
+                    // expected: element id went stale (selection cleared/deleted)
+                } catch (const std::exception& e) {
+                    qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+                }
             });
             if (isFill)
                 connect(picker, &PaintPickerWidget::paintChanged, this, &RibbonFormatSection::onFillPaintChanged);
@@ -402,7 +452,12 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
                     const VisualElement& el = m_doc->getElement(m_elementId);
                     QSignalBlocker b(editor);
                     editor->setPaint(isFill ? el.fill : el.stroke);
-                } catch (...) {}
+                } catch (const std::runtime_error&) {
+                    // expected: element id went stale (selection cleared/deleted)
+                } catch (const std::exception& e) {
+                    qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+                }
+                (isFill ? m_focusBeforeFillGradDlg : m_focusBeforeStrokeGradDlg) = QApplication::focusWidget();
                 gradDlg->show();
                 gradDlg->raise();
                 gradDlg->activateWindow();
@@ -491,7 +546,11 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
                 const auto& c = el.shadow.color;
                 QSignalBlocker b(m_shadowColorPicker);
                 m_shadowColorPicker->setColor(QColor::fromRgbF(c[0], c[1], c[2], c[3]));
-            } catch (...) {}
+            } catch (const std::runtime_error&) {
+                // expected: element id went stale (selection cleared/deleted)
+            } catch (const std::exception& e) {
+                qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+            }
         });
         connect(m_shadowColorPicker, &ColorPicker::colorChanged, this, [this](const QColor& picked) {
             if (m_elementId.empty()) return;
@@ -502,7 +561,11 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
                 sh.color[2] = static_cast<float>(picked.blueF());
                 sh.color[3] = static_cast<float>(picked.alphaF());
                 m_doc->undoStack()->push(new SetElementShadowCmd(m_doc, m_elementId, sh));
-            } catch (...) {}
+            } catch (const std::runtime_error&) {
+                // expected: element id went stale (selection cleared/deleted)
+            } catch (const std::exception& e) {
+                qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+            }
         });
     }
 
@@ -521,6 +584,19 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         connect(m_copyStyleAct, &QAction::toggled, this, [this](bool on) {
             emit copyStyleModeToggled(on, m_elementId);
         });
+
+        QWidget::setTabOrder(m_fillBtn, m_strokeBtn);
+        QWidget::setTabOrder(m_strokeBtn, m_strokeWidth);
+        QWidget::setTabOrder(m_strokeWidth, m_spinTL);
+        QWidget::setTabOrder(m_spinTL, m_spinTR);
+        QWidget::setTabOrder(m_spinTR, m_spinBR);
+        QWidget::setTabOrder(m_spinBR, m_spinBL);
+        QWidget::setTabOrder(m_spinBL, m_shadowEnabled);
+        QWidget::setTabOrder(m_shadowEnabled, m_spinShadowOffX);
+        QWidget::setTabOrder(m_spinShadowOffX, m_spinShadowOffY);
+        QWidget::setTabOrder(m_spinShadowOffY, m_spinShadowBlur);
+        QWidget::setTabOrder(m_spinShadowBlur, m_shadowColorBtn);
+        QWidget::setTabOrder(m_shadowColorBtn, copyStyleBtn);
     }
 }
 
@@ -711,6 +787,26 @@ void RibbonFormatSection::buildTextTab(SARibbonBar* ribbon)
         connect(m_charSpacing, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
                 this, &RibbonFormatSection::onCharSpacingChanged);
     }
+
+    QWidget::setTabOrder(m_fontFamily, m_fontSize);
+    QWidget::setTabOrder(m_fontSize, m_fontWeight);
+    QWidget::setTabOrder(m_fontWeight, m_italicBtn);
+    QWidget::setTabOrder(m_italicBtn, m_underlineBtn);
+    QWidget::setTabOrder(m_underlineBtn, m_strikeBtn);
+    QWidget::setTabOrder(m_strikeBtn, m_alignLeft);
+    QWidget::setTabOrder(m_alignLeft, m_alignCenter);
+    QWidget::setTabOrder(m_alignCenter, m_alignJustify);
+    QWidget::setTabOrder(m_alignJustify, m_alignRight);
+    QWidget::setTabOrder(m_alignRight, m_alignTop);
+    QWidget::setTabOrder(m_alignTop, m_alignMiddle);
+    QWidget::setTabOrder(m_alignMiddle, m_alignBottom);
+    QWidget::setTabOrder(m_alignBottom, m_autoScale);
+    QWidget::setTabOrder(m_autoScale, m_ellipsize);
+    QWidget::setTabOrder(m_ellipsize, m_wrap);
+    QWidget::setTabOrder(m_wrap, m_textTransform);
+    QWidget::setTabOrder(m_textTransform, m_textBtn);
+    QWidget::setTabOrder(m_textBtn, m_lineSpacing);
+    QWidget::setTabOrder(m_lineSpacing, m_charSpacing);
 }
 
 void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
@@ -753,6 +849,9 @@ void RibbonFormatSection::buildImageTab(SARibbonBar* ribbon)
             onImagePathChanged();
         });
         connect(m_scaleMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &RibbonFormatSection::onScaleModeChanged);
+
+        QWidget::setTabOrder(m_imagePathEdit, browseBtn);
+        QWidget::setTabOrder(browseBtn, m_scaleMode);
     }
 }
 
@@ -784,6 +883,9 @@ void RibbonFormatSection::openContentEditor(const QString& title)
         m_contentEdit = new QPlainTextEdit(m_contentDialog);
         l->addWidget(m_contentEdit);
         connect(m_contentEdit, &QPlainTextEdit::textChanged, this, &RibbonFormatSection::onContentChanged);
+        connect(m_contentDialog, &QDialog::finished, this, [this](int) {
+            if (m_focusBeforeContentDlg) m_focusBeforeContentDlg->setFocus();
+        });
     }
     m_contentDialog->setWindowTitle(title);
     if (!m_elementId.empty()) {
@@ -797,8 +899,13 @@ void RibbonFormatSection::openContentEditor(const QString& title)
             QSignalBlocker blocker(m_contentEdit);
             m_contentEdit->setPlainText(text);
             m_contentSavedCursor = 0;
-        } catch (...) {}
+        } catch (const std::runtime_error&) {
+            // expected: element id went stale (selection cleared/deleted)
+        } catch (const std::exception& e) {
+            qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+        }
     }
+    m_focusBeforeContentDlg = QApplication::focusWidget();
     m_contentDialog->show();
     m_contentDialog->raise();
     m_contentDialog->activateWindow();
@@ -859,7 +966,11 @@ void RibbonFormatSection::populateRefCombos()
         }
         m_parentCombo->setCurrentIndex(parentIdx);
         m_parentCombo->blockSignals(false);
-    } catch (...) {}
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 // ── onDocumentChanged ─────────────────────────────────────────────────────────
@@ -871,7 +982,10 @@ void RibbonFormatSection::onDocumentChanged()
     const VisualElement* el = nullptr;
     try {
         el = &m_doc->getElement(m_elementId);
-    } catch (...) {
+    } catch (const std::runtime_error&) {
+        return;   // stale element id — nothing to refresh
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
         return;
     }
 
@@ -911,7 +1025,10 @@ void RibbonFormatSection::onDocumentChanged()
     // ID field
     bool hasChildren = !el->GetChildren().empty();
     m_idEdit->setReadOnly(hasChildren);
-    m_idEdit->setStyleSheet(hasChildren ? "QLineEdit { color: #888; font-style: italic; }" : "");
+    m_idEdit->setStyleSheet(hasChildren
+        ? QString("QLineEdit { color: %1; font-style: italic; }")
+            .arg(m_idEdit->palette().color(QPalette::PlaceholderText).name())
+        : QString());
     m_idEdit->setText(QString::fromStdString(el->GetId()));
 
     // Fit-to-children + padding
@@ -979,6 +1096,7 @@ void RibbonFormatSection::onDocumentChanged()
 
     if (const auto* ie = dynamic_cast<const ImageElement*>(el)) {
         m_imagePathEdit->setText(QString::fromStdString(ie->imagePath));
+        updateImagePathValidity(m_imagePathEdit->text());
         m_scaleMode->setCurrentIndex(scaleModeToComboIndex(ie->imageScaleMode));
     }
 
@@ -1006,8 +1124,12 @@ void RibbonFormatSection::onXChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.x = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::X));
-    } catch (...) {}
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::X)));
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::onYChanged(double v)
@@ -1016,8 +1138,12 @@ void RibbonFormatSection::onYChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.y = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::Y));
-    } catch (...) {}
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::Y)));
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::onWChanged(double v)
@@ -1026,8 +1152,12 @@ void RibbonFormatSection::onWChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.width = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::W));
-    } catch (...) {}
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::W)));
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::onHChanged(double v)
@@ -1036,14 +1166,18 @@ void RibbonFormatSection::onHChanged(double v)
     try {
         Rectangle b = m_doc->getElement(m_elementId).GetBounds();
         b.height = v;
-        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, ElemMergeTag::H));
-    } catch (...) {}
+        m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m_elementId, b, mergeTag(ElemMergeTag::H)));
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::onRotChanged(double v)
 {
     if (m_updating || m_elementId.empty()) return;
-    m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, m_elementId, static_cast<float>(v)));
+    m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, m_elementId, static_cast<float>(v), mergeTag(ElemMergeTag::Rotation)));
 }
 
 void RibbonFormatSection::onZOrderChanged(int v)
@@ -1051,7 +1185,7 @@ void RibbonFormatSection::onZOrderChanged(int v)
     if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<int>(
         m_doc, m_elementId, v,
-        [](VisualElement& e) -> int& { return e.zOrder; }, "zOrder", ElemMergeTag::ZOrder));
+        [](VisualElement& e) -> int& { return e.zOrder; }, "zOrder", mergeTag(ElemMergeTag::ZOrder)));
 }
 
 void RibbonFormatSection::onOpacityChanged(double v)
@@ -1059,7 +1193,7 @@ void RibbonFormatSection::onOpacityChanged(double v)
     if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v / 100.0),
-        [](VisualElement& e) -> float& { return e.opacity; }, "opacity", ElemMergeTag::Opacity));
+        [](VisualElement& e) -> float& { return e.opacity; }, "opacity", mergeTag(ElemMergeTag::Opacity)));
 }
 
 void RibbonFormatSection::onFillPaintChanged(const Paint& p)
@@ -1079,7 +1213,7 @@ void RibbonFormatSection::onStrokeWidthChanged(double v)
     if (m_updating || m_elementId.empty()) return;
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
-        [](VisualElement& e) -> float& { return e.strokeWidth; }, "strokeWidth", ElemMergeTag::StrokeW));
+        [](VisualElement& e) -> float& { return e.strokeWidth; }, "strokeWidth", mergeTag(ElemMergeTag::StrokeW)));
 }
 
 void RibbonFormatSection::onCornerRadiusChanged()
@@ -1098,10 +1232,26 @@ void RibbonFormatSection::onIdEditingFinished()
     if (m_updating || m_elementId.empty()) return;
     std::string newId = m_idEdit->text().toStdString();
     if (m_elementId == newId) return;
-    const std::string oldId = m_elementId;
-    m_doc->applyMutation([oldId, newId](Title& t) {
-        try { t.GetById(oldId).SetId(newId); } catch (...) {}
-    });
+
+    if (newId.empty()) {
+        m_idEdit->setText(QString::fromStdString(m_elementId));
+        QToolTip::showText(m_idEdit->mapToGlobal(QPoint(0, m_idEdit->height())),
+                           tr("ID cannot be empty."), m_idEdit);
+        return;
+    }
+
+    for (const auto& up : m_doc->title().elements) {
+        if (up && up->GetId() == newId) {
+            m_idEdit->setText(QString::fromStdString(m_elementId));
+            QToolTip::showText(m_idEdit->mapToGlobal(QPoint(0, m_idEdit->height())),
+                               tr("An element named \"%1\" already exists.")
+                                   .arg(QString::fromStdString(newId)),
+                               m_idEdit);
+            return;
+        }
+    }
+
+    m_doc->undoStack()->push(new SetElementIdCmd(m_doc, m_elementId, newId));
     m_elementId = newId;
     emit elementIdChanged(m_elementId);
 }
@@ -1147,8 +1297,12 @@ void RibbonFormatSection::onShearXChanged(double v)
     try {
         VisualElement& el = m_doc->getElement(m_elementId);
         m_doc->undoStack()->push(new SetElementShearCmd(
-            m_doc, m_elementId, static_cast<float>(v), el.GetShearY(), ElemMergeTag::ShearX));
-    } catch (...) {}
+            m_doc, m_elementId, static_cast<float>(v), el.GetShearY(), mergeTag(ElemMergeTag::ShearX)));
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::onShearYChanged(double v)
@@ -1157,8 +1311,12 @@ void RibbonFormatSection::onShearYChanged(double v)
     try {
         VisualElement& el = m_doc->getElement(m_elementId);
         m_doc->undoStack()->push(new SetElementShearCmd(
-            m_doc, m_elementId, el.GetShearX(), static_cast<float>(v), ElemMergeTag::ShearY));
-    } catch (...) {}
+            m_doc, m_elementId, el.GetShearX(), static_cast<float>(v), mergeTag(ElemMergeTag::ShearY)));
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::onShadowChanged()
@@ -1172,7 +1330,11 @@ void RibbonFormatSection::onShadowChanged()
         sh.blur    = m_spinShadowBlur->value();
         m_shadowControls->setEnabled(sh.enabled);
         m_doc->undoStack()->push(new SetElementShadowCmd(m_doc, m_elementId, sh));
-    } catch (...) {}
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
 }
 
 void RibbonFormatSection::onFontFamilyChanged(int index)
@@ -1216,7 +1378,7 @@ void RibbonFormatSection::onFontSizeChanged(double v)
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
         [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).font.size; },
-        "font_size", ElemMergeTag::StrokeW + 10));
+        "font_size", mergeTag(ElemMergeTag::StrokeW + 10)));
 }
 
 void RibbonFormatSection::onFontWeightChanged(int index)
@@ -1319,7 +1481,7 @@ void RibbonFormatSection::onLineSpacingChanged(double v)
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
         [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.lineSpacing; },
-        "line_spacing", ElemMergeTag::LineSpacing));
+        "line_spacing", mergeTag(ElemMergeTag::LineSpacing)));
 }
 
 void RibbonFormatSection::onCharSpacingChanged(double v)
@@ -1328,7 +1490,7 @@ void RibbonFormatSection::onCharSpacingChanged(double v)
     m_doc->undoStack()->push(new SetElementFieldCmd<float>(
         m_doc, m_elementId, static_cast<float>(v),
         [](VisualElement& e) -> float& { return static_cast<TextElement&>(e).textStyle.letterSpacing; },
-        "letter_spacing", ElemMergeTag::CharSpacing));
+        "letter_spacing", mergeTag(ElemMergeTag::CharSpacing)));
 }
 
 void RibbonFormatSection::onContentChanged()
@@ -1342,14 +1504,38 @@ void RibbonFormatSection::onContentChanged()
             m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
                 m_doc, m_elementId, text,
                 [](VisualElement& e) -> std::string& { return static_cast<TextElement&>(e).text; },
-                "text"));
+                "text", mergeTag(ElemMergeTag::TextContent)));
         } else if (dynamic_cast<QrElement*>(&el)) {
             m_doc->undoStack()->push(new SetElementFieldCmd<std::string>(
                 m_doc, m_elementId, text,
                 [](VisualElement& e) -> std::string& { return static_cast<QrElement&>(e).text; },
-                "text"));
+                "text", mergeTag(ElemMergeTag::TextContent)));
         }
-    } catch (...) {}
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
+}
+
+bool RibbonFormatSection::updateImagePathValidity(const QString& path)
+{
+    if (path.isEmpty()) {
+        m_imagePathEdit->setStyleSheet(QString());
+        m_imagePathEdit->setToolTip(QString());
+        return true;
+    }
+    QFileInfo fi(path);
+    const bool ok = fi.exists() && fi.isFile() && QImageReader(path).canRead();
+    if (ok) {
+        m_imagePathEdit->setStyleSheet(QString());
+        m_imagePathEdit->setToolTip(path);
+    } else {
+        // Semantic warning color (functional, kept even in the dark-only theme).
+        m_imagePathEdit->setStyleSheet(QStringLiteral("QLineEdit { border: 1px solid #c0392b; }"));
+        m_imagePathEdit->setToolTip(tr("Image file not found or unreadable:\n%1").arg(path));
+    }
+    return ok;
 }
 
 void RibbonFormatSection::onImagePathChanged()
@@ -1360,6 +1546,12 @@ void RibbonFormatSection::onImagePathChanged()
         m_doc, m_elementId, path,
         [](VisualElement& e) -> std::string& { return static_cast<ImageElement&>(e).imagePath; },
         "image_path"));
+
+    if (!updateImagePathValidity(m_imagePathEdit->text())) {
+        QToolTip::showText(
+            m_imagePathEdit->mapToGlobal(QPoint(0, m_imagePathEdit->height())),
+            m_imagePathEdit->toolTip(), m_imagePathEdit);
+    }
 }
 
 void RibbonFormatSection::onScaleModeChanged(int index)
