@@ -17,7 +17,7 @@ CornerRadiusButton::CornerRadiusButton(QWidget* parent)
     m_uniform->setRange(0.0, 9999.0);
     m_uniform->setDecimals(1);
     m_uniform->setSuffix(" px");
-    m_uniform->setFixedWidth(72);
+    m_uniform->setMinimumWidth(72);
     m_uniform->setToolTip("Corner Radius (uniform)");
 
     m_moreBtn = new QToolButton;

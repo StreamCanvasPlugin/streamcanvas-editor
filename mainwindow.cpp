@@ -580,12 +580,12 @@ void MainWindow::setupRibbon()
             m_titleWidthSpin = new QSpinBox;
             m_titleWidthSpin->setRange(1, 7680);
             m_titleWidthSpin->setSuffix(" px");
-            m_titleWidthSpin->setFixedWidth(80);
+            m_titleWidthSpin->setMinimumWidth(80);
 
             m_titleHeightSpin = new QSpinBox;
             m_titleHeightSpin->setRange(1, 7680);
             m_titleHeightSpin->setSuffix(" px");
-            m_titleHeightSpin->setFixedWidth(80);
+            m_titleHeightSpin->setMinimumWidth(80);
 
             gl->addWidget(titleLabel("Preset"), 0, 0);
             gl->addWidget(m_titlePresetCombo, 0, 1, 1, 3);
@@ -710,6 +710,9 @@ void MainWindow::setupRibbon()
         panel->addLargeWidget(padded(col));
     }
 
+    // Contextual Element + Style + Text + Image + QR Code tabs
+    m_formatSection = new RibbonFormatSection(m_doc, m_ribbon, this);
+
     // ── Help tab ──────────────────────────────────────────────────────────────
     {
         auto* helpCat = m_ribbon->addCategoryPage("Help");
@@ -718,8 +721,6 @@ void MainWindow::setupRibbon()
         panel->addLargeWidget(makeLargeBtn(m_aboutAction));
     }
 
-    // Contextual Element + Style + Text + Image + QR Code tabs
-    m_formatSection = new RibbonFormatSection(m_doc, m_ribbon, this);
     m_ribbon->hideCategory(m_formatSection->elementCategory());
     m_ribbon->hideCategory(m_formatSection->styleCategory());
     m_ribbon->hideCategory(m_formatSection->textCategory());

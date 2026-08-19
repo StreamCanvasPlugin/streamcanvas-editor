@@ -55,7 +55,7 @@ QDoubleSpinBox* makeSpinBox(double lo, double hi, int decimals,
     s->setRange(lo, hi);
     s->setDecimals(decimals);
     s->setSuffix(suffix);
-    if (fixedWidth > 0) s->setFixedWidth(fixedWidth);
+    if (fixedWidth > 0) s->setMinimumWidth(fixedWidth);
     return s;
 }
 

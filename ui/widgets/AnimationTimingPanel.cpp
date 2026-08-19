@@ -60,7 +60,7 @@ AnimationTimingPanel::AnimationTimingPanel(TitleDocument* doc, EditorTitle* sel,
     m_speedSpin->setRange(10, 400);
     m_speedSpin->setSuffix(tr(" %"));
     m_speedSpin->setValue(100);
-    m_speedSpin->setFixedWidth(70);
+    m_speedSpin->setMinimumWidth(70);
     m_speedSpin->setToolTip(tr("Playback speed"));
 
     m_zoomSpin = new QSpinBox(this);
@@ -68,7 +68,7 @@ AnimationTimingPanel::AnimationTimingPanel(TitleDocument* doc, EditorTitle* sel,
     m_zoomSpin->setRange(2, 1667);
     m_zoomSpin->setSuffix(tr(" %"));
     m_zoomSpin->setValue(100);
-    m_zoomSpin->setFixedWidth(80);
+    m_zoomSpin->setMinimumWidth(80);
     m_zoomSpin->setToolTip(tr("Zoom"));
 
     m_fitBtn = makeIconToolButton(themedIcon(Icons16::Action_ZoomFit), tr("Zoom to fit all clips"));
