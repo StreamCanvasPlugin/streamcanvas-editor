@@ -110,6 +110,11 @@ MainWindow::MainWindow(QWidget* parent)
     }
 #endif
 
+    // SARibbonBar auto-sizes category content height from font metrics alone
+    // (3 rows of large icon buttons), which is too short for the dense
+    // label+spinbox grids in RibbonFormatSection and squashes their rows.
+    m_ribbon->setCategoryHeight(130);
+
     setupRibbon();
 
     setCentralWidget(m_canvas);
