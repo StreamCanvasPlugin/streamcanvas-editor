@@ -1221,4 +1221,8 @@ parsing (`engine/element_text.cpp:40`), `grep -rn "set_markup\|pango_parse_marku
 hits, and the JSON keys are scalars (`engine/title.cpp:511-523`). Recorded as **PLAN.md D-5** for a
 later cross-repo pass; not in this release.
 
-This pass is being shipped as a release tag.
+Shipped as **1.3.0**. Evidence: `cmake --build build -j8` exit 0 (`ninja: no work to do`);
+three commits on master (`0e601c4` code, `edfa317` docs, `9a8b9c9` packaging);
+`git push origin master` -> `7d32e3e..9a8b9c9`; `git push origin 1.3.0` -> `* [new tag] 1.3.0`.
+The CI release job (AppImage + Windows ZIP) is triggered by the tag and was NOT observed from this
+session — `gh` is not installed here, so the artifacts are unverified.
