@@ -224,8 +224,10 @@ bool SetElementShearCmd::mergeWith(const QUndoCommand* other)
 // ─────────────────────────────────────────────────────────────────────────────
 
 SetElementPaintCmd::SetElementPaintCmd(TitleDocument* doc, std::string ei,
-                                       Target target, const Paint& after, QUndoCommand* parent)
-    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_target(target), m_after(after)
+                                       Target target, const Paint& after, int mergeTag,
+                                       QUndoCommand* parent)
+    : QUndoCommand(parent), m_doc(doc), m_ei(std::move(ei)), m_target(target), m_after(after),
+      m_mergeTag(mergeTag)
 {
     setText(target == Target::Fill ? "Set fill" : "Set stroke");
     try { m_before = paintRef(m_doc->getElement(m_ei)); } catch (...) {}
@@ -234,6 +236,18 @@ SetElementPaintCmd::SetElementPaintCmd(TitleDocument* doc, std::string ei,
 Paint& SetElementPaintCmd::paintRef(VisualElement& el) const
 {
     return (m_target == Target::Fill) ? el.fill : el.stroke;
+}
+
+int SetElementPaintCmd::id() const { return m_mergeTag; }
+
+bool SetElementPaintCmd::mergeWith(const QUndoCommand* other)
+{
+    if (other->id() != id() || id() == -1) return false;
+    const auto* o = static_cast<const SetElementPaintCmd*>(other);
+    if (o->m_ei != m_ei) return false;
+    if (o->m_target != m_target) return false;   // Fill and Stroke must never merge
+    m_after = o->m_after;
+    return true;
 }
 
 void SetElementPaintCmd::undo()

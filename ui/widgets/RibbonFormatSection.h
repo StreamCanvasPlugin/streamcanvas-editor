@@ -108,6 +108,15 @@ private:
     void populateRefCombos();
     void loadFonts();
 
+    // Points a modeless Fill/Stroke PaintEditor dialog at the currently selected
+    // element: re-setPaint()s the editor (under QSignalBlocker so the round-trip
+    // doesn't push an undo command), forwards the element's bounds via
+    // setTargetElementSize() so gradient geometry letterboxes correctly, and
+    // updates the dialog's window title. If there is no valid selection, hides
+    // the dialog instead. Called on selection change, on documentChanged
+    // (undo/redo), and when opening the dialog via "More Options…".
+    void retargetPaintDialog(PaintEditor* editor, QDialog* dlg, bool stroke);
+
     // Updates m_imagePathEdit's warning visual state for the given path.
     // Empty path = neutral (no styling). Non-empty but missing/unreadable =
     // red border + warning tooltip. Valid = cleared styling, tooltip = the path.
@@ -152,6 +161,8 @@ private:
     PaintPickerWidget*  m_strokePicker{nullptr};
     PaintEditor*        m_fillEditor{nullptr};
     PaintEditor*        m_strokeEditor{nullptr};
+    QDialog*            m_fillDialog{nullptr};
+    QDialog*            m_strokeDialog{nullptr};
     QDoubleSpinBox*     m_strokeWidth{nullptr};
 
     // Border group (corner radii)

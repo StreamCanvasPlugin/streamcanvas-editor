@@ -1,18 +1,18 @@
 #pragma once
-#include "GradientEditor.h"
-#include <QPointF>
-#include <QVector>
-#include <QWidget>
+#include "GradientGeometryEditor.h"
 
-class LinearGradientEditor : public QWidget {
+// Linear gradient endpoint editor. p1/p2 are normalized (0-1) relative to the TARGET
+// ELEMENT (see GradientGeometryEditor::setTargetSize()/previewRect()), matching the
+// normalized coordinates cairo_pattern_create_linear() multiplies by the element's
+// own width/height at render time (engine/types.hpp).
+//
+// Stop VALUES (add/remove/move/colour) are owned by GradientStopBar. This widget only
+// renders stop markers along the p1-p2 line and reports clicks via stopSelected().
+class LinearGradientEditor : public GradientGeometryEditor {
     Q_OBJECT
 public:
     explicit LinearGradientEditor(QWidget* parent = nullptr);
 
-    QVector<GradientStop> stops() const;
-    void setStops(const QVector<GradientStop>& stops);
-
-    // p1/p2 are in normalized (0–1) coordinates relative to the widget
     QPointF p1() const
     {
         return m_p1;
@@ -21,29 +21,27 @@ public:
     {
         return m_p2;
     }
-    void setP1(QPointF p);
-    void setP2(QPointF p);
+    void setP1(QPointF p); // silent
+    void setP2(QPointF p); // silent
 
-    int selectedStop() const
-    {
-        return m_selected;
-    }
-    GradientStop& stop(int index)
-    {
-        return m_stops[index];
-    }
+    // Derived numeric accessors for the panel's spin boxes. Both are computed in
+    // ELEMENT space (i.e. after scaling the normalized delta by targetWidth()/
+    // targetHeight()) so they mean what they say regardless of the element's aspect
+    // ratio.
+    qreal angleDegrees() const;   // atan2 of the element-space p2-p1 vector, degrees
+    qreal lengthFraction() const; // |element-space p2-p1| / element diagonal
 
-    void selectStop(int index);
-    bool canDeleteSelectedStop() const;
-    void deleteSelectedStop();
+    void setAngleDegrees(qreal deg);   // silent; keeps current length, pivots around p1
+    void setLengthFraction(qreal len); // silent; keeps current angle, moves p2
 
-    void updateStops();
-
-    QSize sizeHint() const override;
+    // Presets — all silent.
+    void setHorizontal();
+    void setVertical();
+    void setDiagonalDown(); // top-left -> bottom-right
+    void setDiagonalUp();   // bottom-left -> top-right
+    void reverse();         // swaps p1 and p2
 
 signals:
-    void stopsChanged(const QVector<GradientStop>&);
-    void stopSelected(int index);
     void p1Changed(QPointF);
     void p2Changed(QPointF);
 
@@ -53,39 +51,30 @@ protected:
     void mouseMoveEvent(QMouseEvent*) override;
     void mouseReleaseEvent(QMouseEvent*) override;
     void mouseDoubleClickEvent(QMouseEvent*) override;
-    void contextMenuEvent(QContextMenuEvent*) override;
-    void resizeEvent(QResizeEvent*) override;
+    void leaveEvent(QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
 
 private:
     static constexpr int kEndpointR = 10;
-    static constexpr int kDiamondD = 7;
-    static constexpr int kLineHitTol = 8;
-    static constexpr int kCheckerCell = 5;
 
-    QVector<GradientStop> m_stops;
-    // Stored in normalized (0–1) space; rendered by multiplying by width()/height()
     QPointF m_p1{0.2, 0.5};
     QPointF m_p2{0.8, 0.5};
-    int m_selected{0};
-    int m_dragging{-1};
-    bool m_draggingP1{false};
-    bool m_draggingP2{false};
-    QPointF m_dragOffset;
 
-    QPointF toPixel(QPointF norm) const
-    {
-        return {norm.x() * width(), norm.y() * height()};
-    }
-    QPointF toNorm(QPointF px) const
-    {
-        return {width() > 0 ? px.x() / width() : 0.0, height() > 0 ? px.y() / height() : 0.0};
-    }
+    enum class Handle { None, P1, P2, Stop };
+    struct HitResult {
+        Handle type = Handle::None;
+        int stopIndex = -1;
+    };
 
-    QPointF stopPos(int i) const; // returns pixel coords
-    int hitTestHandle(QPointF p) const;
-    qreal tFromPoint(QPointF p) const;
-    void sortStops();
-    void editStopColor(int idx);
-    void addStopAt(qreal t);
-    void drawCheckerboard(QPainter& p) const;
+    Handle m_pressHandle{Handle::None};
+    Handle m_hoverHandle{Handle::None};
+    Handle m_activeHandle{Handle::P2}; // last-interacted endpoint; arrow-key nudge target
+
+    HitResult hitTest(QPointF px) const;
+    QPointF stopPixelPos(int i) const;
+    // Snaps the dragged endpoint so the ELEMENT-space angle from anchor to the raw
+    // drag point lands on a 15-degree increment, preserving the element-space length
+    // of the raw drag vector.
+    QPointF snapAngleForDrag(QPointF anchorNorm, QPointF rawNorm) const;
+    void updateHover(QPointF pos);
 };

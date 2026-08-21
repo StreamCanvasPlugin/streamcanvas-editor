@@ -170,35 +170,27 @@ void TitleTreeView::contextMenuEvent(QContextMenuEvent* event)
     const bool elementSelected = (sel.level == SelectionId::Level::Element);
 
     // ── Add Element ──────────────────────────────────────────────────────────
-    auto addElem = [this](const std::string& prefix, const std::string& type,
-                          nlohmann::json extra = {}) {
-        const Title& t = m_doc->title();
-        int maxN = 0;
-        for (int i = 1; i < (int)t.elements.size(); ++i) {
-            const std::string& eid = t.elements[i]->GetId();
-            if (eid.rfind(prefix, 0) == 0)
-                try { maxN = std::max(maxN, std::stoi(eid.substr(prefix.size()))); } catch (...) {}
-        }
-        std::string newId = prefix + std::to_string(maxN + 1);
-        using json = nlohmann::json;
-        json j = {{"id", newId}, {"type", type}, {"x", 100}, {"y", 100},
-                  {"w", 200}, {"h", 80}, {"z_order", std::max(0, (int)t.elements.size() - 1)}};
-        for (auto& [k, v] : extra.items()) j[k] = v;
-        m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
+    // Id generation, z_order, and canvas-viewport placement all live in
+    // MainWindow::makeNewElementJson (this view has no access to
+    // CanvasWidget), so we just emit the per-type extras as a JSON string.
+    auto emitAddElem = [this](const std::string& prefix, const std::string& type,
+                              nlohmann::json extra = {}) {
+        emit addElementRequested(QString::fromStdString(prefix), QString::fromStdString(type),
+                                 QString::fromStdString(extra.dump()));
     };
 
-    menu.addAction("Add Rectangle", this, [this, addElem]() {
-        addElem("element_", "rectangle", {{"fill", {0.5, 0.5, 0.9, 1.0}}, {"h", 80}});
+    menu.addAction("Add Rectangle", this, [this, emitAddElem]() {
+        emitAddElem("element_", "rectangle", {{"fill", {0.5, 0.5, 0.9, 1.0}}, {"h", 80}});
     });
-    menu.addAction("Add Text", this, [this, addElem]() {
-        addElem("text_", "text",
+    menu.addAction("Add Text", this, [this, emitAddElem]() {
+        emitAddElem("text_", "text",
             {{"w", 300}, {"h", 60}, {"text", "New Text"}, {"fill", {1.0, 1.0, 1.0, 1.0}}});
     });
-    menu.addAction("Add Image", this, [this, addElem]() {
-        addElem("image_", "image", {{"w", 200}, {"h", 200}, {"scale_mode", "contain"}});
+    menu.addAction("Add Image", this, [this, emitAddElem]() {
+        emitAddElem("image_", "image", {{"w", 200}, {"h", 200}, {"scale_mode", "contain"}});
     });
-    menu.addAction("Add QR Code", this, [this, addElem]() {
-        addElem("qr_", "qr_code", {{"w", 200}, {"h", 200}, {"fill", {0.0, 0.0, 0.0, 1.0}}});
+    menu.addAction("Add QR Code", this, [this, emitAddElem]() {
+        emitAddElem("qr_", "qr_code", {{"w", 200}, {"h", 200}, {"fill", {0.0, 0.0, 0.0, 1.0}}});
     });
 
     menu.addSeparator();

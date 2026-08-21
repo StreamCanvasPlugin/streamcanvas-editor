@@ -54,6 +54,13 @@ private:
     void deleteSelectedElement();
     void insertElementCopy(nlohmann::json cb, double offset);
     std::string insertElementCopyImpl(nlohmann::json cb, double offset);
+    // Builds the JSON for a newly-inserted element: generates its id (same
+    // scan-for-highest-numeric-suffix logic used everywhere else), sets
+    // z_order, and centers it on the current canvas viewport (clamped to the
+    // title bounds) so it lands where the user is actually looking. `extra`'s
+    // keys are merged last and win over the defaults (including x/y/w/h).
+    nlohmann::json makeNewElementJson(const std::string& prefix, const std::string& type,
+                                      nlohmann::json extra);
 
     TitleDocument* m_doc;
     EditorTitle*   m_editorTitle;

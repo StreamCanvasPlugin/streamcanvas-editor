@@ -36,6 +36,7 @@ class QWheelEvent;
 class TitleDocument;
 class EditorTitle;
 class VisualElement;
+class IElement;
 struct Title;
 
 class CanvasWidget : public QWidget {
@@ -78,6 +79,11 @@ public:
     // Axis-aligned bounding box of the element in TITLE/world space, accounting
     // for rotation/shear (used by align/distribute math).
     QRectF elementTitleAABB(const VisualElement& el) const;
+
+    // Center of the currently visible viewport, in TITLE/world space. Used to
+    // place newly-inserted elements where the user is actually looking,
+    // regardless of zoom/pan.
+    QPointF viewportCenterInTitle() const;
 
 signals:
     void paintModeFinished();
@@ -123,6 +129,10 @@ private:
 
     // Hit testing
     SelectionId hitTest(QPointF titlePt) const;
+    // Depth-first walk of `parent`'s subtree in reverse paint order (matches
+    // Title::RenderElements / VisualElement::RenderChildren). Returns the
+    // topmost VisualElement whose local bounds contain titlePt, or nullptr.
+    const VisualElement* hitTestSubtree(const IElement* parent, QPointF titlePt) const;
     int hitHandle(QPointF widgetPt) const;
     // True when the active/anchor selected element is locked (blocks canvas drag).
     bool isActiveSelectionLocked() const;

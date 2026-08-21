@@ -28,12 +28,13 @@ void ColorWheel::setColor(const QColor& c)
 {
     if (c == m_color)
         return;
-    int oldHue = m_color.hsvHue();
+    int oldHue = m_hue;
     m_color = c;
-    if (c.hsvHue() != oldHue)
+    if (c.hsvHue() >= 0)
+        m_hue = c.hsvHue();
+    if (m_hue != oldHue)
         m_triangleDirty = true;
     update();
-    emit colorChanged(c);
 }
 
 QSize ColorWheel::sizeHint() const
@@ -72,9 +73,7 @@ std::array<QPointF, 3> ColorWheel::triangleVertices() const
 {
     QPointF c = center();
     qreal r = innerRadius();
-    int hue = m_color.hsvHue();
-    if (hue < 0)
-        hue = 0;
+    int hue = m_hue;
 
     auto pt = [&](qreal deg) -> QPointF {
         qreal rad = -qDegreesToRadians(deg);
@@ -127,12 +126,18 @@ void ColorWheel::handleRingDrag(QPointF p)
         angleDeg += 360.0;
     int hue = qRound(angleDeg) % 360;
 
+    if (hue != m_hue) {
+        m_hue = hue;
+        m_triangleDirty = true;
+    }
+
     QColor c = m_color;
     c.setHsv(hue, c.hsvSaturation(), c.value(), c.alpha());
-    if (c == m_color)
+    if (c == m_color) {
+        update();
         return;
+    }
     m_color = c;
-    m_triangleDirty = true;
     update();
     emit colorChanged(m_color);
 }
@@ -163,10 +168,7 @@ void ColorWheel::handleTriangleDrag(QPointF p)
     qreal V_val = w + u; // wHue + wWhite
     qreal S_val = (V_val > 1e-8) ? w / V_val : 0.0;
 
-    int hue = m_color.hsvHue();
-    if (hue < 0)
-        hue = 0;
-    QColor nc = QColor::fromHsvF(hue / 360.0, S_val, V_val, m_color.alphaF());
+    QColor nc = QColor::fromHsvF(m_hue / 360.0, S_val, V_val, m_color.alphaF());
     if (nc == m_color)
         return;
     m_color = nc;
@@ -205,11 +207,29 @@ void ColorWheel::rebuildRing()
     m_ringDirty = false;
 }
 
+// HSV-triangle identity used to avoid per-pixel QColor::fromHsvF calls:
+// for barycentric weights (w = hue corner, u = white corner, vc = black
+// corner, w+u+vc=1) the resulting HSV colour with V=w+u, S=w/(w+u) equals
+// the plain linear blend  w*hueRGB + u*white + vc*black  in RGB space
+// (white=(255,255,255), black=(0,0,0), so the vc term drops out). This is
+// the standard construction used by HSV-triangle colour pickers and is
+// exact, not an approximation — it lets the inner loop do a couple of
+// integer multiply-adds per pixel instead of constructing a QColor.
 void ColorWheel::rebuildTriangle()
 {
     QSize sz = size();
     const qreal dpr = devicePixelRatioF();
     const QSize physSz(qRound(sz.width() * dpr), qRound(sz.height() * dpr));
+
+    // Cache hit: hue, physical size and DPR are all unchanged, so the
+    // previously rendered image is still correct — skip the rebuild.
+    if (!m_triangleImage.isNull() && m_cachedTriangleHue == m_hue
+        && m_triangleImage.size() == physSz
+        && qFuzzyCompare(m_triangleImage.devicePixelRatio(), dpr)) {
+        m_triangleDirty = false;
+        return;
+    }
+
     m_triangleImage = QImage(physSz, QImage::Format_ARGB32);
     m_triangleImage.setDevicePixelRatio(dpr);
     m_triangleImage.fill(Qt::transparent);
@@ -219,16 +239,18 @@ void ColorWheel::rebuildTriangle()
     QPointF v1 = verts[1] * dpr; // white
     QPointF v2 = verts[2] * dpr; // black
 
-    int hue = m_color.hsvHue();
-    if (hue < 0)
-        hue = 0;
-    qreal hueF = hue / 360.0;
+    // Pure-hue corner colour, computed once (not per pixel).
+    const QColor hueColor = QColor::fromHsv(m_hue, 255, 255);
+    const int hr = hueColor.red();
+    const int hg = hueColor.green();
+    const int hb = hueColor.blue();
 
     // Precompute edge vectors and inverse denominator for barycentric coords
     QPointF e0 = v1 - v0, e1 = v2 - v0;
     qreal denom = e0.x() * e1.y() - e0.y() * e1.x();
     if (qAbs(denom) < 1e-8) {
         m_triangleDirty = false;
+        m_cachedTriangleHue = m_hue;
         return;
     }
     qreal invD = 1.0 / denom;
@@ -247,15 +269,19 @@ void ColorWheel::rebuildTriangle()
             qreal w = 1.0 - u - vc;                                // weight v0 (hue)
             if (u < -1e-4 || vc < -1e-4 || w < -1e-4)
                 continue;
+            u = qBound(0.0, u, 1.0);
+            w = qBound(0.0, w, 1.0);
 
-            qreal V_val = w + u;
-            qreal S_val = (V_val > 1e-8) ? w / V_val : 0.0;
-            line[x] =
-                QColor::fromHsvF(hueF, qBound(0.0, S_val, 1.0), qBound(0.0, V_val, 1.0)).rgba();
+            // Integer blend: RGB = w*hueRGB + u*white (vc*black contributes 0).
+            const int r = qBound(0, qRound(w * hr + u * 255.0), 255);
+            const int g = qBound(0, qRound(w * hg + u * 255.0), 255);
+            const int b = qBound(0, qRound(w * hb + u * 255.0), 255);
+            line[x] = qRgba(r, g, b, 255);
         }
     }
 
     m_triangleDirty = false;
+    m_cachedTriangleHue = m_hue;
 }
 
 void ColorWheel::paintEvent(QPaintEvent*)
@@ -275,10 +301,7 @@ void ColorWheel::paintEvent(QPaintEvent*)
 
     // Hue indicator on the ring
     {
-        int hue = m_color.hsvHue();
-        if (hue < 0)
-            hue = 0;
-        qreal rad = -qDegreesToRadians(hue);
+        qreal rad = -qDegreesToRadians((qreal)m_hue);
         qreal rMid = (innerRadius() + outerRadius()) / 2.0;
         QPointF ind = c + QPointF(rMid * std::cos(rad), rMid * std::sin(rad));
         p.setBrush(Qt::NoBrush);

@@ -76,6 +76,8 @@ enum : int {
     LineSpacing = 1010,
     CharSpacing = 1011,
     TextContent = 1012,
+    FillPaint   = 1013,
+    StrokePaint = 1014,
 };
 }
 
@@ -202,9 +204,11 @@ public:
     enum class Target { Fill, Stroke };
 
     SetElementPaintCmd(TitleDocument* doc, std::string ei, Target target,
-                       const Paint& after, QUndoCommand* parent = nullptr);
+                       const Paint& after, int mergeTag = -1, QUndoCommand* parent = nullptr);
     void undo() override;
     void redo() override;
+    int  id() const override;
+    bool mergeWith(const QUndoCommand* other) override;
 
 private:
     TitleDocument* m_doc;
@@ -212,6 +216,7 @@ private:
     Target         m_target;
     Paint          m_before;
     Paint          m_after;
+    int            m_mergeTag;
 
     Paint& paintRef(VisualElement& el) const;
 };

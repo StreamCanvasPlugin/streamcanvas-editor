@@ -21,6 +21,9 @@ signals:
     void copyRequested();
     void pasteRequested();
     void pasteInPlaceRequested();
+    // Requests a new element be added. `extraJson` is the per-type extra
+    // fields (everything except id/type/x/y/z_order) serialised as JSON.
+    void addElementRequested(const QString& prefix, const QString& type, const QString& extraJson);
 
 protected:
     bool event(QEvent* e) override;

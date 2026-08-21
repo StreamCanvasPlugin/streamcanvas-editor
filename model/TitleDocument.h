@@ -45,6 +45,20 @@ public:
     // All mutations go through here; fn may freely modify m_title
     void applyMutation(std::function<void(Title&)> fn);
 
+    // While suppressed, applyMutation() skips applyFitToChildren(). Used by
+    // interactive canvas drags so a fitToChildren parent's compensating
+    // re-anchor doesn't run at drag frequency (which would make the dragged
+    // child's captured local-space drag origin go stale every move event).
+    // Flipping this back to false does NOT itself run the fit or emit
+    // anything — it only takes effect on the next applyMutation() call.
+    void setFitToChildrenSuppressed(bool suppressed);
+    bool isFitToChildrenSuppressed() const { return m_fitSuppressed; }
+
+    // Runs the fit pass once and notifies, without going through a mutation.
+    // Needed after a batch of suppressed mutations (a group-move commit) that
+    // must not have the fit interleaved between its individual steps.
+    void applyFitToChildrenNow();
+
     // Expose title name mutation (used by SetTitleNameCmd)
     void setTitleName(const QString& name);
 
@@ -74,6 +88,7 @@ private:
     QString m_lastError;
     Title::LoadDiagnostic m_lastLoadDiagnostic;
     QList<QColor> m_brandColors;
+    bool m_fitSuppressed{false};
 
     void applyFitToChildren();
     void setModified(bool modified);

@@ -32,7 +32,6 @@ private:
     QList<QColor> m_cachedColors;
     int m_selectedIndex{-1};
 
-    static constexpr int kCellSize = 16;
     static constexpr int kCellGap  = 2;
     static constexpr int kCols = 8;
     static constexpr int kCompactRows = 2;

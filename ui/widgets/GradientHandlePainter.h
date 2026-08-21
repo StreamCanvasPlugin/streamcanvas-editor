@@ -72,7 +72,13 @@ inline bool hitCircle(QPointF p, QPointF center, int r, int slack = 3)
     return dx * dx + dy * dy <= lim * lim;
 }
 
-inline bool hitDiamond(QPointF p, QPointF center, int d, int slack = 3)
+// L1 (Manhattan) hit test for the rotated-square "diamond" handle glyph. The L1 ball's
+// worst-case reach is along the diagonals, where it shrinks to (d+slack)/sqrt(2) in any
+// single direction — so a slack of 3 (as before) only guaranteed ~14px of hit region on
+// the diagonals even though it reads as ~20px on-axis. slack=8 keeps the on-axis reach
+// generous while guaranteeing at least a 20px (10px radius) hit region in every
+// direction, matching the minimum used by the hitCircle()-based handles elsewhere.
+inline bool hitDiamond(QPointF p, QPointF center, int d, int slack = 8)
 {
     return qAbs(p.x() - center.x()) + qAbs(p.y() - center.y()) <= d + slack;
 }

@@ -21,18 +21,19 @@ set(PROJECT_SOURCES
         mainwindow.h
         model/EditorTitle.h
         model/EditorTitle.cpp
+        model/PaintUtils.h
         model/TitleDocument.h
         model/TitleDocument.cpp
         model/UndoCommands.h
         model/UndoCommands.cpp
         ui/adaptivestack.h ui/adaptivestack.cpp
         ui/widgets/ColorUtils.h     ui/widgets/ColorUtils.cpp
-        ui/widgets/HueSlider.h      ui/widgets/HueSlider.cpp
         ui/widgets/GradientSlider.h ui/widgets/GradientSlider.cpp
-        ui/widgets/ColorPreview.h   ui/widgets/ColorPreview.cpp
         ui/widgets/ColorLineEdit.h  ui/widgets/ColorLineEdit.cpp
-        ui/widgets/GradientEditor.h ui/widgets/GradientEditor.cpp
+        ui/widgets/GradientStop.h
+        ui/widgets/GradientStopBar.h ui/widgets/GradientStopBar.cpp
         ui/widgets/GradientHandlePainter.h
+        ui/widgets/GradientGeometryEditor.h ui/widgets/GradientGeometryEditor.cpp
         ui/widgets/LinearGradientEditor.h ui/widgets/LinearGradientEditor.cpp
         ui/widgets/RadialGradientEditor.h ui/widgets/RadialGradientEditor.cpp
         ui/widgets/ColorWheel.h     ui/widgets/ColorWheel.cpp

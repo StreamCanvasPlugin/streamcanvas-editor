@@ -31,6 +31,7 @@
 #include <QSplitter>
 #include <QTimer>
 #include <QComboBox>
+#include <QDebug>
 #include <QDir>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -131,6 +132,27 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_treeView, &TitleTreeView::copyRequested, this, &MainWindow::onCopy);
     connect(m_treeView, &TitleTreeView::pasteRequested, this, [this]() { doPaste(false); });
     connect(m_treeView, &TitleTreeView::pasteInPlaceRequested, this, [this]() { doPaste(true); });
+    connect(m_treeView, &TitleTreeView::addElementRequested, this,
+            [this](const QString& prefix, const QString& type, const QString& extraJson) {
+        nlohmann::json extra;
+        if (!extraJson.isEmpty()) {
+            try {
+                extra = nlohmann::json::parse(extraJson.toStdString());
+            } catch (const nlohmann::json::exception& e) {
+                qWarning() << "addElementRequested: failed to parse extra JSON:" << e.what();
+                extra = nlohmann::json::object();
+            }
+        }
+        nlohmann::json j = makeNewElementJson(prefix.toStdString(), type.toStdString(), extra);
+        const std::string newId = j["id"].get<std::string>();
+        m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
+        const Title& t = m_doc->title();
+        for (int i = 1; i < (int)t.elements.size(); ++i)
+            if (t.elements[i]->GetId() == newId) {
+                m_editorTitle->setSelection({SelectionId::Level::Element, i});
+                break;
+            }
+    });
 
     setCorner(Qt::BottomLeftCorner,  Qt::LeftDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::RightDockWidgetArea);
@@ -174,6 +196,47 @@ MainWindow::MainWindow(QWidget* parent)
     });
 
     statusBar()->showMessage("Untitled");
+}
+
+// ── New element placement ───────────────────────────────────────────────────
+
+nlohmann::json MainWindow::makeNewElementJson(const std::string& prefix, const std::string& type,
+                                              nlohmann::json extra)
+{
+    using json = nlohmann::json;
+    const Title& t = m_doc->title();
+
+    // Scan existing element ids for the highest numeric suffix after `prefix`
+    // (same logic as the old per-callsite `nextId` lambdas).
+    int maxN = 0;
+    for (int i = 1; i < (int)t.elements.size(); ++i) {
+        const std::string& id = t.elements[i]->GetId();
+        if (id.rfind(prefix, 0) == 0)
+            try { maxN = std::max(maxN, std::stoi(id.substr(prefix.size()))); } catch (...) {}
+    }
+    const std::string newId = prefix + std::to_string(maxN + 1);
+    const int zOrder = std::max(0, (int)t.elements.size() - 1);
+
+    double w = extra.contains("w") ? extra["w"].get<double>() : 200.0;
+    double h = extra.contains("h") ? extra["h"].get<double>() : 80.0;
+
+    const QPointF center = m_canvas->viewportCenterInTitle();
+    double x = center.x() - w / 2.0;
+    double y = center.y() - h / 2.0;
+
+    // Clamp so a viewport panned off the title still yields an on-title
+    // element. If the element is larger than the title on an axis, the clamp
+    // range [0, titleDim - dim] is empty (lo > hi) — snap to 0 instead of
+    // calling std::clamp, which is undefined behaviour in that case.
+    const double maxX = t.width - w;
+    const double maxY = t.height - h;
+    x = maxX >= 0.0 ? std::clamp(x, 0.0, maxX) : 0.0;
+    y = maxY >= 0.0 ? std::clamp(y, 0.0, maxY) : 0.0;
+
+    json j = {{"id", newId}, {"type", type}, {"x", x}, {"y", y},
+              {"w", w}, {"h", h}, {"z_order", zOrder}};
+    for (auto& [k, v] : extra.items()) j[k] = v;
+    return j;
 }
 
 // ── Ribbon setup ──────────────────────────────────────────────────────────────
@@ -474,18 +537,6 @@ void MainWindow::setupRibbon()
     {   // Elements panel — always available, no graphic prerequisite
         auto* panel = insertCat->addPanel("Elements");
 
-        // Helper: scan title.elements[1..] for max N with given prefix
-        auto nextId = [this](const std::string& prefix) -> std::string {
-            const Title& t = m_doc->title();
-            int maxN = 0;
-            for (int i = 1; i < (int)t.elements.size(); ++i) {
-                const std::string& id = t.elements[i]->GetId();
-                if (id.rfind(prefix, 0) == 0)
-                    try { maxN = std::max(maxN, std::stoi(id.substr(prefix.size()))); } catch (...) {}
-            }
-            return prefix + std::to_string(maxN + 1);
-        };
-
         // After adding, select the newly created element
         auto selectNewElem = [this](const std::string& newId) {
             const Title& t = m_doc->title();
@@ -497,49 +548,40 @@ void MainWindow::setupRibbon()
         };
 
         m_addRectAction = new QAction(themedIcon(Icons16::Shape_Square), "Rectangle", this);
-        connect(m_addRectAction, &QAction::triggered, this, [this, nextId, selectNewElem]() {
-            const std::string newId = nextId("element_");
-            const int zOrder = std::max(0, (int)m_doc->title().elements.size() - 1);
-            using json = nlohmann::json;
-            json j = {{"id", newId}, {"type", "rectangle"}, {"x", 100}, {"y", 100},
-                      {"w", 200}, {"h", 80}, {"fill", {0.5, 0.5, 0.9, 1.0}}, {"z_order", zOrder}};
+        connect(m_addRectAction, &QAction::triggered, this, [this, selectNewElem]() {
+            nlohmann::json j = makeNewElementJson("element_", "rectangle",
+                {{"w", 200}, {"h", 80}, {"fill", {0.5, 0.5, 0.9, 1.0}}});
+            const std::string newId = j["id"].get<std::string>();
             m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
             selectNewElem(newId);
         });
         panel->addLargeWidget(makeLargeBtn(m_addRectAction));
 
         m_addTextAction = new QAction(themedIcon(Icons16::File_Font), "Text", this);
-        connect(m_addTextAction, &QAction::triggered, this, [this, nextId, selectNewElem]() {
-            const std::string newId = nextId("text_");
-            const int zOrder = std::max(0, (int)m_doc->title().elements.size() - 1);
-            using json = nlohmann::json;
-            json j = {{"id", newId}, {"type", "text"}, {"x", 100}, {"y", 100},
-                      {"w", 300}, {"h", 60}, {"text", "New Text"}, {"z_order", zOrder},
-                      {"fill", {1.0, 1.0, 1.0, 1.0}}};
+        connect(m_addTextAction, &QAction::triggered, this, [this, selectNewElem]() {
+            nlohmann::json j = makeNewElementJson("text_", "text",
+                {{"w", 300}, {"h", 60}, {"text", "New Text"}, {"fill", {1.0, 1.0, 1.0, 1.0}}});
+            const std::string newId = j["id"].get<std::string>();
             m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
             selectNewElem(newId);
         });
         panel->addLargeWidget(makeLargeBtn(m_addTextAction));
 
         m_addImageAction = new QAction(themedIcon(Icons16::File_Picture), "Image", this);
-        connect(m_addImageAction, &QAction::triggered, this, [this, nextId, selectNewElem]() {
-            const std::string newId = nextId("image_");
-            const int zOrder = std::max(0, (int)m_doc->title().elements.size() - 1);
-            using json = nlohmann::json;
-            json j = {{"id", newId}, {"type", "image"}, {"x", 100}, {"y", 100},
-                      {"w", 200}, {"h", 200}, {"z_order", zOrder}, {"scale_mode", "contain"}};
+        connect(m_addImageAction, &QAction::triggered, this, [this, selectNewElem]() {
+            nlohmann::json j = makeNewElementJson("image_", "image",
+                {{"w", 200}, {"h", 200}, {"scale_mode", "contain"}});
+            const std::string newId = j["id"].get<std::string>();
             m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
             selectNewElem(newId);
         });
         panel->addLargeWidget(makeLargeBtn(m_addImageAction));
 
         m_addQrCodeAction = new QAction(qrCodeIcon(), "QR Code", this);
-        connect(m_addQrCodeAction, &QAction::triggered, this, [this, nextId, selectNewElem]() {
-            const std::string newId = nextId("qr_");
-            const int zOrder = std::max(0, (int)m_doc->title().elements.size() - 1);
-            using json = nlohmann::json;
-            json j = {{"id", newId}, {"type", "qr_code"}, {"x", 100}, {"y", 100},
-                      {"w", 200}, {"h", 200}, {"z_order", zOrder}, {"fill", {0.0, 0.0, 0.0, 1.0}}};
+        connect(m_addQrCodeAction, &QAction::triggered, this, [this, selectNewElem]() {
+            nlohmann::json j = makeNewElementJson("qr_", "qr_code",
+                {{"w", 200}, {"h", 200}, {"fill", {0.0, 0.0, 0.0, 1.0}}});
+            const std::string newId = j["id"].get<std::string>();
             m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
             selectNewElem(newId);
         });
@@ -1195,21 +1237,17 @@ void MainWindow::doPaste(bool inPlace)
     if (w > t.width)  { h = h * t.width  / w; w = t.width; }
     if (h > t.height) { w = w * t.height / h; h = t.height; }
 
-    int maxN = 0;
-    for (int i = 1; i < (int)t.elements.size(); ++i) {
-        const std::string& eid = t.elements[i]->GetId();
-        if (eid.rfind("image_", 0) == 0)
-            try { maxN = std::max(maxN, std::stoi(eid.substr(6))); } catch (...) {}
-    }
-    std::string newId = "image_" + std::to_string(maxN + 1);
+    // A system-clipboard image has no source element to cascade from, so a
+    // normal paste is placed like Insert: centred on the visible viewport.
+    // Paste-in-Place keeps its (0,0) origin, passed as an `extra` override
+    // (extra keys are merged last, so they win over the computed centre).
+    json extra = {{"w", w}, {"h", h},
+                  {"image_path", imagePath.toStdString()},
+                  {"scale_mode", "contain"}};
+    if (inPlace) { extra["x"] = 0.0; extra["y"] = 0.0; }
 
-    json j = {{"id", newId}, {"type", "image"},
-              {"x", inPlace ? 0.0 : 100.0},
-              {"y", inPlace ? 0.0 : 100.0},
-              {"w", w}, {"h", h},
-              {"z_order", std::max(0, (int)t.elements.size() - 1)},
-              {"image_path", imagePath.toStdString()},
-              {"scale_mode", "contain"}};
+    json j = makeNewElementJson("image_", "image", std::move(extra));
+    const std::string newId = j["id"].get<std::string>();
 
     m_doc->undoStack()->push(new AddElementCmd(m_doc, std::move(j)));
 

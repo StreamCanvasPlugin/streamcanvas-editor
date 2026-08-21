@@ -1,13 +1,9 @@
 #include "RadialGradientEditor.h"
 #include "ColorUtils.h"
 #include "GradientHandlePainter.h"
-#include <QColorDialog>
-#include <QContextMenuEvent>
-#include <QMenu>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QResizeEvent>
-#include <algorithm>
 #include <cmath>
 
 static QGradientStops toQGradientStops(const QVector<GradientStop>& stops)
@@ -19,182 +15,81 @@ static QGradientStops toQGradientStops(const QVector<GradientStop>& stops)
     return r;
 }
 
-RadialGradientEditor::RadialGradientEditor(QWidget* parent) : QWidget(parent)
+static QPointF clampNorm(QPointF p)
 {
-    setStops({{0.0, Qt::black}, {1.0, Qt::white}});
+    return {qBound(0.0, p.x(), 1.0), qBound(0.0, p.y(), 1.0)};
+}
+
+RadialGradientEditor::RadialGradientEditor(QWidget* parent) : GradientGeometryEditor(parent)
+{
     setMinimumSize(120, 100);
-}
-
-QVector<GradientStop> RadialGradientEditor::stops() const
-{
-    return m_stops;
-}
-
-void RadialGradientEditor::setStops(const QVector<GradientStop>& stops)
-{
-    m_stops = stops.size() >= 2 ? stops : QVector<GradientStop>{{0.0, Qt::black}, {1.0, Qt::white}};
-    sortStops();
-    m_selected = qBound(0, m_selected, m_stops.size() - 1);
-    emit stopSelected(m_selected);
-    update();
-}
-
-// Returns normalized radius: hypot of the normalized delta, effectively fraction of width
-qreal RadialGradientEditor::radius() const
-{
-    QPointF d = m_radiusEnd - m_center;
-    return std::hypot(d.x(), d.y());
 }
 
 void RadialGradientEditor::setCenter(QPointF c)
 {
-    QPointF dir = m_radiusEnd - m_center;
     m_center = c;
-    m_radiusEnd = c + dir;
     update();
 }
 
 void RadialGradientEditor::setRadius(qreal r)
 {
-    r = qMax(r, 1e-4);
-    QPointF d = m_radiusEnd - m_center;
-    qreal len = std::hypot(d.x(), d.y());
-    m_radiusEnd = (len < 1e-10) ? m_center + QPointF(r, 0) : m_center + d * (r / len);
+    m_radius = qMax(kMinRadius, r);
     update();
 }
 
-void RadialGradientEditor::updateStops()
+void RadialGradientEditor::setFocalPoint(double fx, double fy, double fr)
 {
-    sortStops();
-    emit stopsChanged(m_stops);
-    update();
+    m_focusX = fx;
+    m_focusY = fy;
+    m_focusR = fr;
 }
 
-void RadialGradientEditor::selectStop(int index)
+QPointF RadialGradientEditor::stopPixelPos(int i) const
 {
-    index = qBound(0, index, m_stops.size() - 1);
-    if (index == m_selected) return;
-    m_selected = index;
-    emit stopSelected(m_selected);
-    update();
+    QPointF norm = {m_center.x() + m_stops[i].position * m_radius, m_center.y()};
+    return toPixel(norm);
 }
 
-bool RadialGradientEditor::canDeleteSelectedStop() const
+RadialGradientEditor::HitResult RadialGradientEditor::hitTest(QPointF px) const
 {
-    return m_stops.size() > 2 && m_selected != 0 && m_selected != m_stops.size() - 1;
+    QPointF centerPx = toPixel(m_center);
+    QPointF radiusPx = toPixel(radiusHandleNorm());
+    if (GHP::hitCircle(px, radiusPx, kEndpointR))
+        return {Handle::Radius, -1};
+    if (GHP::hitCircle(px, centerPx, kEndpointR))
+        return {Handle::Center, -1};
+    int stopIdx = hitTestStopMarker(px, [this](int i) { return stopPixelPos(i); });
+    if (stopIdx >= 0)
+        return {Handle::Stop, stopIdx};
+    return {Handle::None, -1};
 }
 
-void RadialGradientEditor::deleteSelectedStop()
+void RadialGradientEditor::updateHover(QPointF pos)
 {
-    if (!canDeleteSelectedStop()) return;
-    m_stops.removeAt(m_selected);
-    m_selected = qBound(0, m_selected, m_stops.size() - 1);
-    emit stopSelected(m_selected);
-    emit stopsChanged(m_stops);
-    update();
-}
-
-QSize RadialGradientEditor::sizeHint() const
-{
-    return {300, 200};
-}
-
-void RadialGradientEditor::resizeEvent(QResizeEvent* e)
-{
-    QWidget::resizeEvent(e);
-    update();
-}
-
-// Returns pixel coords for stop i (along the line from center to radiusEnd)
-QPointF RadialGradientEditor::stopPos(int i) const
-{
-    QPointF normPt = m_center + m_stops[i].position * (m_radiusEnd - m_center);
-    return toPixelPt(normPt);
-}
-
-qreal RadialGradientEditor::tFromPoint(QPointF p) const
-{
-    QPointF n = toNormPt(p);
-    QPointF ab = m_radiusEnd - m_center;
-    qreal len2 = ab.x() * ab.x() + ab.y() * ab.y();
-    if (len2 < 1e-10)
-        return 0.0;
-    qreal t = ((n.x() - m_center.x()) * ab.x() + (n.y() - m_center.y()) * ab.y()) / len2;
-    return qBound(0.0, t, 1.0);
-}
-
-int RadialGradientEditor::hitTestHandle(QPointF p) const
-{
-    int n = m_stops.size();
-    QPointF centerPx = toPixelPt(m_center);
-    QPointF radiusEndPx = toPixelPt(m_radiusEnd);
-
-    if (m_selected == 0 && GHP::hitCircle(p, centerPx, kEndpointR))
-        return 0;
-    if (m_selected == n - 1 && GHP::hitCircle(p, radiusEndPx, kEndpointR))
-        return n - 1;
-    if (m_selected >= 1 && m_selected <= n - 2 &&
-        GHP::hitDiamond(p, stopPos(m_selected), kDiamondD))
-        return m_selected;
-
-    if (GHP::hitCircle(p, radiusEndPx, kEndpointR))
-        return n - 1;
-    if (GHP::hitCircle(p, centerPx, kEndpointR))
-        return 0;
-    for (int i = n - 2; i >= 1; --i)
-        if (GHP::hitDiamond(p, stopPos(i), kDiamondD))
-            return i;
-    return -1;
-}
-
-void RadialGradientEditor::sortStops()
-{
-    std::stable_sort(
-        m_stops.begin(), m_stops.end(),
-        [](const GradientStop& a, const GradientStop& b) { return a.position < b.position; });
-    if (!m_stops.isEmpty()) {
-        m_stops.first().position = 0.0;
-        m_stops.last().position = 1.0;
-    }
-}
-
-void RadialGradientEditor::editStopColor(int idx)
-{
-    QColor chosen = QColorDialog::getColor(m_stops[idx].color, this, "Stop Color",
-                                           QColorDialog::ShowAlphaChannel);
-    if (chosen.isValid()) {
-        m_stops[idx].color = chosen;
-        emit stopsChanged(m_stops);
+    HitResult hit = hitTest(pos);
+    bool changed = hit.type != m_hoverHandle;
+    m_hoverHandle = hit.type;
+    if (changed)
         update();
-    }
-}
 
-void RadialGradientEditor::addStopAt(qreal t)
-{
-    t = qBound(1e-4, t, 1.0 - 1e-4);
-    QColor col = sampleGradient(toQGradientStops(m_stops), t);
-    m_stops.append({t, col});
-    sortStops();
-    for (int i = 0; i < m_stops.size(); ++i) {
-        if (qAbs(m_stops[i].position - t) < 1e-9 && m_stops[i].color == col) {
-            m_selected = i;
-            emit stopSelected(m_selected);
-            break;
-        }
+    switch (hit.type) {
+    case Handle::Center:
+        setCursor(Qt::OpenHandCursor);
+        setToolTip(tr("Gradient centre — drag to move"));
+        break;
+    case Handle::Radius:
+        setCursor(Qt::SizeHorCursor);
+        setToolTip(tr("Gradient radius — drag horizontally to resize"));
+        break;
+    case Handle::Stop:
+        setCursor(Qt::PointingHandCursor);
+        setToolTip(tr("Click to select this stop"));
+        break;
+    default:
+        unsetCursor();
+        setToolTip(QString());
+        break;
     }
-    emit stopsChanged(m_stops);
-    update();
-}
-
-void RadialGradientEditor::drawCheckerboard(QPainter& p) const
-{
-    int cell = kCheckerCell;
-    QRect r = rect();
-    for (int row = 0; row * cell < r.height(); ++row)
-        for (int col = 0; col * cell < r.width(); ++col) {
-            QColor c = ((row + col) % 2 == 0) ? QColor(180, 180, 180) : Qt::white;
-            p.fillRect(r.x() + col * cell, r.y() + row * cell, cell, cell, c);
-        }
 }
 
 void RadialGradientEditor::paintEvent(QPaintEvent*)
@@ -202,176 +97,163 @@ void RadialGradientEditor::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    drawCheckerboard(p);
+    drawBackground(p);
 
-    QPointF centerPx = toPixelPt(m_center);
-    QPointF radiusEndPx = toPixelPt(m_radiusEnd);
-    // Draw the circle preview using normalized radius * widget width
-    qreal pixelR = radius() * (width() > 0 ? width() : 1.0);
+    QRectF preview = previewRect();
+    QPointF centerPx = toPixel(m_center);
+    QPointF radiusPx = toPixel(radiusHandleNorm());
+    // Width-normalized radius, scaled by the PREVIEW's width — which represents the
+    // target element's width — so the drawn circle matches params[5] * elementWidth.
+    qreal pixelR = m_radius * preview.width();
 
-    if (m_stops.size() >= 2) {
-        QRadialGradient grad(centerPx, pixelR, centerPx);
-        for (const auto& s : m_stops)
-            grad.setColorAt(s.position, s.color);
-        p.fillRect(rect(), grad);
+    if (preview.width() > 0 && preview.height() > 0) {
+        p.save();
+        p.setClipRect(preview);
+        if (m_stops.size() >= 2) {
+            QRadialGradient grad(centerPx, pixelR, centerPx);
+            for (const auto& s : m_stops)
+                grad.setColorAt(qBound(0.0, s.position, 1.0), s.color);
+            p.fillRect(preview, grad);
+        }
+        p.setPen(QPen(QColor(220, 220, 220, 160), 1.5));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(centerPx, pixelR, pixelR);
+        p.restore();
     }
-
-    p.setPen(QPen(QColor(220, 220, 220, 160), 1.5));
-    p.setBrush(Qt::NoBrush);
-    p.drawEllipse(centerPx, pixelR, pixelR);
 
     p.setPen(QPen(QColor(0, 0, 0, 80), 1.2));
-    p.drawLine(centerPx, radiusEndPx);
+    p.drawLine(centerPx, radiusPx);
 
-    int n = m_stops.size();
-    for (int pass = 0; pass < 2; ++pass) {
-        for (int i = 0; i < n; ++i) {
-            bool sel = (i == m_selected);
-            if (pass == 0 && sel)
-                continue;
-            if (pass == 1 && !sel)
-                continue;
+    drawStopMarkers(p, [this](int i) { return stopPixelPos(i); });
 
-            if (i == 0)
-                GHP::paintCircleHandle(p, centerPx, kEndpointR, m_stops[0].color, sel, palette());
-            else if (i == n - 1)
-                GHP::paintCircleHandle(p, radiusEndPx, kEndpointR, m_stops[n - 1].color, sel,
-                                       palette());
-            else
-                GHP::paintDiamondHandle(p, stopPos(i), kDiamondD, m_stops[i].color, sel, palette());
-        }
-    }
+    QGradientStops qstops = toQGradientStops(m_stops);
+    QColor centerColor = m_stops.isEmpty() ? Qt::black : sampleGradient(qstops, 0.0);
+    QColor edgeColor = m_stops.isEmpty() ? Qt::white : sampleGradient(qstops, 1.0);
+    GHP::paintCircleHandle(p, centerPx, kEndpointR, centerColor,
+                           m_hoverHandle == Handle::Center || m_pressHandle == Handle::Center,
+                           palette());
+    GHP::paintCircleHandle(p, radiusPx, kEndpointR, edgeColor,
+                           m_hoverHandle == Handle::Radius || m_pressHandle == Handle::Radius,
+                           palette());
 }
 
 void RadialGradientEditor::mousePressEvent(QMouseEvent* e)
 {
-    if (e->button() != Qt::LeftButton)
+    if (e->button() != Qt::LeftButton) {
+        QWidget::mousePressEvent(e);
         return;
+    }
+    setFocus(Qt::MouseFocusReason);
 
     QPointF pos = e->position();
-    int h = hitTestHandle(pos);
-    if (h >= 0) {
-        m_selected = h;
-        emit stopSelected(h);
-        if (h == 0) {
-            m_draggingCenter = true;
-            m_dragOffset = pos - toPixelPt(m_center);
-        } else if (h == m_stops.size() - 1) {
-            m_draggingEdge = true;
-            m_dragOffset = pos - toPixelPt(m_radiusEnd);
-        } else {
-            m_dragging = h;
-        }
+    HitResult hit = hitTest(pos);
+
+    if (hit.type == Handle::Stop) {
+        selectStopAndEmit(hit.stopIndex);
+        m_pressHandle = Handle::None;
+        return;
+    }
+    if (hit.type == Handle::Center || hit.type == Handle::Radius) {
+        m_pressHandle = hit.type;
+        m_activeHandle = hit.type;
+        beginPress(pos);
         update();
         return;
     }
-
-    qreal t;
-    if (GHP::hitSegment(pos, toPixelPt(m_center), toPixelPt(m_radiusEnd), kLineHitTol, &t))
-        addStopAt(t);
+    m_pressHandle = Handle::None;
 }
 
 void RadialGradientEditor::mouseMoveEvent(QMouseEvent* e)
 {
-    if (!(e->buttons() & Qt::LeftButton))
-        return;
     QPointF pos = e->position();
 
-    if (m_draggingCenter) {
-        QPointF newPx = pos - m_dragOffset;
-        QPointF dir = m_radiusEnd - m_center;
-        m_center = toNormPt(newPx);
-        m_center.setX(qBound(0.0, m_center.x(), 1.0));
-        m_center.setY(qBound(0.0, m_center.y(), 1.0));
-        m_radiusEnd = m_center + dir;
-        emit geometryChanged(m_center, radius());
-        update();
-    } else if (m_draggingEdge) {
-        QPointF newPx = pos - m_dragOffset;
-        m_radiusEnd = toNormPt(newPx);
-        m_radiusEnd.setX(qBound(0.0, m_radiusEnd.x(), 1.0));
-        m_radiusEnd.setY(qBound(0.0, m_radiusEnd.y(), 1.0));
-        emit geometryChanged(m_center, radius());
-        update();
-    } else if (m_dragging >= 1 && m_dragging <= m_stops.size() - 2) {
-        qreal t = qBound(1e-4, tFromPoint(pos), 1.0 - 1e-4);
-        m_stops[m_dragging].position = t;
-        emit stopsChanged(m_stops);
-        update();
+    if ((e->buttons() & Qt::LeftButton) && m_pressHandle != Handle::None) {
+        crossedDragThreshold(pos);
+        if (isDragging()) {
+            if (m_pressHandle == Handle::Center) {
+                m_center = clampNorm(toNorm(pos));
+                emit centerChanged(m_center);
+            } else if (m_pressHandle == Handle::Radius) {
+                qreal nx = toNorm(pos).x();
+                m_radius = qMax(kMinRadius, qAbs(nx - m_center.x()));
+                emit radiusChanged(m_radius);
+            }
+            update();
+        }
+        return;
     }
+
+    updateHover(pos);
 }
 
 void RadialGradientEditor::mouseReleaseEvent(QMouseEvent* e)
 {
-    if (e->button() != Qt::LeftButton)
-        return;
-
-    if (m_draggingCenter) {
-        m_draggingCenter = false;
-        emit geometryChanged(m_center, radius());
-        update();
+    if (e->button() != Qt::LeftButton) {
+        QWidget::mouseReleaseEvent(e);
         return;
     }
-    if (m_draggingEdge) {
-        m_draggingEdge = false;
-        emit geometryChanged(m_center, radius());
-        update();
-        return;
-    }
-
-    if (m_dragging >= 0) {
-        GradientStop dragged = m_stops[m_dragging];
-        sortStops();
-        for (int i = 0; i < m_stops.size(); ++i) {
-            if (qAbs(m_stops[i].position - dragged.position) < 1e-9 &&
-                m_stops[i].color == dragged.color) {
-                m_selected = i;
-                emit stopSelected(m_selected);
-                break;
-            }
-        }
-        m_dragging = -1;
-        update();
-    }
+    endPress();
+    m_pressHandle = Handle::None;
+    updateHover(e->position());
+    update();
 }
 
 void RadialGradientEditor::mouseDoubleClickEvent(QMouseEvent* e)
 {
-    int h = hitTestHandle(e->position());
-    if (h >= 0)
-        editStopColor(h);
+    HitResult hit = hitTest(e->position());
+    if (hit.type == Handle::Stop)
+        selectStopAndEmit(hit.stopIndex);
 }
 
-void RadialGradientEditor::contextMenuEvent(QContextMenuEvent* e)
+void RadialGradientEditor::leaveEvent(QEvent* e)
 {
-    int h = hitTestHandle(e->pos());
-    QMenu menu(this);
+    QWidget::leaveEvent(e);
+    m_hoverHandle = Handle::None;
+    unsetCursor();
+    setToolTip(QString());
+    update();
+}
 
-    if (h >= 0) {
-        QAction* editAct = menu.addAction("Edit Color...");
-        QAction* deleteAct = nullptr;
-        bool isEndpoint = (h == 0 || h == m_stops.size() - 1);
-        if (!isEndpoint) {
-            deleteAct = menu.addAction("Delete Stop");
-            deleteAct->setEnabled(m_stops.size() > 2);
-        }
-        QAction* chosen = menu.exec(e->globalPos());
-        if (chosen == editAct) {
-            editStopColor(h);
-        } else if (deleteAct && chosen == deleteAct) {
-            m_stops.removeAt(h);
-            m_selected = qBound(0, m_selected, m_stops.size() - 1);
-            emit stopSelected(m_selected);
-            emit stopsChanged(m_stops);
+void RadialGradientEditor::keyPressEvent(QKeyEvent* e)
+{
+    qreal step = (e->modifiers() & Qt::ShiftModifier) ? 0.02 : 0.005;
+
+    if (m_activeHandle == Handle::Radius) {
+        if (e->key() == Qt::Key_Left) {
+            m_radius = qMax(kMinRadius, m_radius - step);
+            emit radiusChanged(m_radius);
             update();
+            return;
         }
-    } else {
-        qreal t;
-        if (GHP::hitSegment(e->pos(), toPixelPt(m_center), toPixelPt(m_radiusEnd), kLineHitTol,
-                            &t)) {
-            QAction* addAct = menu.addAction("Add Stop Here");
-            if (menu.exec(e->globalPos()) == addAct)
-                addStopAt(t);
+        if (e->key() == Qt::Key_Right) {
+            m_radius = qMax(kMinRadius, m_radius + step);
+            emit radiusChanged(m_radius);
+            update();
+            return;
         }
+        QWidget::keyPressEvent(e);
+        return;
     }
+
+    QPointF delta(0, 0);
+    switch (e->key()) {
+    case Qt::Key_Left:
+        delta = {-step, 0};
+        break;
+    case Qt::Key_Right:
+        delta = {step, 0};
+        break;
+    case Qt::Key_Up:
+        delta = {0, -step};
+        break;
+    case Qt::Key_Down:
+        delta = {0, step};
+        break;
+    default:
+        QWidget::keyPressEvent(e);
+        return;
+    }
+    m_center = clampNorm(m_center + delta);
+    emit centerChanged(m_center);
+    update();
 }

@@ -1,6 +1,8 @@
 #pragma once
 #include <QSlider>
 
+class QWheelEvent;
+
 class GradientSlider : public QSlider {
     Q_OBJECT
 public:
@@ -9,6 +11,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent*) override;
+    void wheelEvent(QWheelEvent*) override;
 
 private:
     QGradientStops m_stops;

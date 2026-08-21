@@ -6,7 +6,12 @@
 
 class ColorWheel : public QWidget {
     Q_OBJECT
-    Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
+    // No NOTIFY clause: colorChanged fires only on user interaction, never from
+    // setColor(). Declaring it as the property's NOTIFY signal would promise
+    // Qt's meta-object system that every WRITE notifies, which is false here —
+    // a QPropertyAnimation or QML binding on "color" would silently miss
+    // programmatic writes. Connect to colorChanged directly instead.
+    Q_PROPERTY(QColor color READ color WRITE setColor)
 public:
     explicit ColorWheel(QWidget* parent = nullptr);
     QColor color() const;
@@ -28,11 +33,18 @@ private:
     enum class DragZone { None, Ring, Triangle };
 
     QColor m_color{Qt::red};
+    // Sticky hue, independent of m_color: QColor::hsvHue() returns -1 for any
+    // fully desaturated colour (black/white/grey), so recomputing hue from
+    // m_color loses the ring position whenever the S/V indicator is dragged
+    // into a triangle corner. Updated only when an incoming colour has a
+    // valid (>= 0) hue.
+    int m_hue{0};
     DragZone m_drag{DragZone::None};
     QImage m_ringImage;
     QImage m_triangleImage;
     bool m_ringDirty{true};
     bool m_triangleDirty{true};
+    int m_cachedTriangleHue{-1};
 
     void rebuildRing();
     void rebuildTriangle();

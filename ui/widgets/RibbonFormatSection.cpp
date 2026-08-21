@@ -9,6 +9,7 @@
 #include "engine/title.h"
 #include "engine/visual_element.h"
 #include "icons.h"
+#include "model/PaintUtils.h"
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 #include "ui/painteditor.h"
@@ -183,6 +184,37 @@ void RibbonFormatSection::updateStrokeSwatch()
         m_strokeBtn->setIcon(makePaintSwatch(el.stroke, m_strokeBtn->iconSize()));
     } catch (const std::runtime_error&) {
         // expected: element id went stale (selection cleared/deleted)
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
+}
+
+void RibbonFormatSection::retargetPaintDialog(PaintEditor* editor, QDialog* dlg, bool stroke)
+{
+    if (!dlg || !editor) return;
+    if (m_elementId.empty()) {
+        dlg->hide();
+        return;
+    }
+    try {
+        const VisualElement& el = m_doc->getElement(m_elementId);
+        QSignalBlocker b(editor);
+        // Skip the setPaint when the editor already holds this exact paint. This
+        // path also runs on the documentChanged that the dialog's OWN edit caused,
+        // and setPaint() rebuilds the stop bar — which would drop the user's
+        // selected stop on any discrete edit (hex entry, brand swatch click) that
+        // never raises the interaction depth. Size and title are still refreshed
+        // unconditionally, since a different element can carry an identical paint.
+        const Paint& want = stroke ? el.stroke : el.fill;
+        if (!paintEquals(editor->getPaint(), want))
+            editor->setPaint(want);
+        const Rectangle bounds = el.GetBounds();
+        editor->setTargetElementSize(bounds.width, bounds.height);
+        dlg->setWindowTitle(QString("%1 — %2").arg(stroke ? "Stroke" : "Fill",
+                                                     QString::fromStdString(m_elementId)));
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted)
+        dlg->hide();
     } catch (const std::exception& e) {
         qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
     }
@@ -411,6 +443,8 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
         };
         auto* fillGradDlg   = makeGradDialog("Fill",   m_fillEditor,   true);
         auto* strokeGradDlg = makeGradDialog("Stroke", m_strokeEditor, false);
+        m_fillDialog   = fillGradDlg;
+        m_strokeDialog = strokeGradDlg;
 
         auto [fillBtn,   fillMenu]   = makePopupButton("Fill",   m_fillPicker);
         auto [strokeBtn, strokeMenu] = makePopupButton("Stroke", m_strokePicker);
@@ -448,15 +482,7 @@ void RibbonFormatSection::buildStyleTab(SARibbonBar* ribbon)
                     this, [this, menu, gradDlg, editor, isFill]() {
                 menu->close();
                 if (m_elementId.empty()) return;
-                try {
-                    const VisualElement& el = m_doc->getElement(m_elementId);
-                    QSignalBlocker b(editor);
-                    editor->setPaint(isFill ? el.fill : el.stroke);
-                } catch (const std::runtime_error&) {
-                    // expected: element id went stale (selection cleared/deleted)
-                } catch (const std::exception& e) {
-                    qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
-                }
+                retargetPaintDialog(editor, gradDlg, !isFill);
                 (isFill ? m_focusBeforeFillGradDlg : m_focusBeforeStrokeGradDlg) = QApplication::focusWidget();
                 gradDlg->show();
                 gradDlg->raise();
@@ -937,6 +963,8 @@ void RibbonFormatSection::setSelection(const std::string& ei)
 void RibbonFormatSection::clearSelection()
 {
     m_elementId.clear();
+    retargetPaintDialog(m_fillEditor, m_fillDialog, false);
+    retargetPaintDialog(m_strokeEditor, m_strokeDialog, true);
 }
 
 // ── populateRefCombos ─────────────────────────────────────────────────────────
@@ -1114,6 +1142,14 @@ void RibbonFormatSection::onDocumentChanged()
 
     updateFillSwatch();
     updateStrokeSwatch();
+
+    // Refresh a visible Fill/Stroke dialog to point at the (possibly new)
+    // selection, e.g. after a selection change or an undo/redo. Never fight a
+    // live drag happening inside the dialog itself.
+    if (m_fillDialog && m_fillDialog->isVisible() && m_fillEditor && !m_fillEditor->isInteracting())
+        retargetPaintDialog(m_fillEditor, m_fillDialog, false);
+    if (m_strokeDialog && m_strokeDialog->isVisible() && m_strokeEditor && !m_strokeEditor->isInteracting())
+        retargetPaintDialog(m_strokeEditor, m_strokeDialog, true);
 }
 
 // ── Slot implementations ──────────────────────────────────────────────────────
@@ -1199,13 +1235,34 @@ void RibbonFormatSection::onOpacityChanged(double v)
 void RibbonFormatSection::onFillPaintChanged(const Paint& p)
 {
     if (m_updating || m_elementId.empty()) return;
-    m_doc->undoStack()->push(new SetElementPaintCmd(m_doc, m_elementId, SetElementPaintCmd::Target::Fill, p));
+    try {
+        const VisualElement& el = m_doc->getElement(m_elementId);
+        // Image paints are never skipped: the path can be unchanged while the file
+        // on disk was overwritten, and the push is what reloads the cached surface.
+        if (p.type != Paint::Type::Image && paintEquals(el.fill, p)) return;
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted) — fall through and push
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
+    m_doc->undoStack()->push(new SetElementPaintCmd(m_doc, m_elementId, SetElementPaintCmd::Target::Fill, p,
+                                                     mergeTag(ElemMergeTag::FillPaint)));
 }
 
 void RibbonFormatSection::onStrokePaintChanged(const Paint& p)
 {
     if (m_updating || m_elementId.empty()) return;
-    m_doc->undoStack()->push(new SetElementPaintCmd(m_doc, m_elementId, SetElementPaintCmd::Target::Stroke, p));
+    try {
+        const VisualElement& el = m_doc->getElement(m_elementId);
+        // Image paints are never skipped: see onFillPaintChanged.
+        if (p.type != Paint::Type::Image && paintEquals(el.stroke, p)) return;
+    } catch (const std::runtime_error&) {
+        // expected: element id went stale (selection cleared/deleted) — fall through and push
+    } catch (const std::exception& e) {
+        qWarning() << "RibbonFormatSection: unexpected exception:" << e.what();
+    }
+    m_doc->undoStack()->push(new SetElementPaintCmd(m_doc, m_elementId, SetElementPaintCmd::Target::Stroke, p,
+                                                     mergeTag(ElemMergeTag::StrokePaint)));
 }
 
 void RibbonFormatSection::onStrokeWidthChanged(double v)

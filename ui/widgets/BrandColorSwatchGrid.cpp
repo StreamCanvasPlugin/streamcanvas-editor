@@ -7,6 +7,11 @@
 #include "model/TitleDocument.h"
 #include "model/UndoCommands.h"
 
+// Single source of truth for the swatch / +- button size. File-local because
+// SwatchCell below is a separate class and cannot see BrandColorSwatchGrid's
+// private members. 24px is the minimum comfortable hit target.
+static constexpr int kCellSize = 24;
+
 // ── SwatchCell ────────────────────────────────────────────────────────────────
 
 class SwatchCell : public QWidget {
@@ -15,7 +20,7 @@ public:
     explicit SwatchCell(const QColor& color, bool selected, QWidget* parent = nullptr)
         : QWidget(parent), m_color(color), m_selected(selected)
     {
-        setFixedSize(16, 16);
+        setFixedSize(kCellSize, kCellSize);
         setCursor(Qt::PointingHandCursor);
     }
 

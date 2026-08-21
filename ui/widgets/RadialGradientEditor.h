@@ -1,47 +1,61 @@
 #pragma once
-#include "GradientEditor.h"
-#include <QPointF>
-#include <QVector>
-#include <QWidget>
+#include "GradientGeometryEditor.h"
 
-class RadialGradientEditor : public QWidget {
+// Radial gradient centre/radius editor.
+//
+// The radius handle only moves HORIZONTALLY. Cairo's radial gradient normalizes BOTH
+// circles' radii by the element's WIDTH ONLY (see engine/types.hpp, `params[5] * w`),
+// so a radius dragged vertically would mean something different from one dragged
+// horizontally unless the element happens to be square. Constraining to horizontal
+// drag keeps radius() always meaning "fraction of target element width", matching the
+// engine exactly.
+//
+// The focal circle (Cairo's first radial-gradient circle, params[0..2]) is not
+// authored here — there is no UI for it — but it must round-trip unchanged from
+// whatever was loaded. See setFocalPoint()/focusX()/focusY()/focusR().
+//
+// Stop VALUES (add/remove/move/colour) are owned by GradientStopBar. This widget only
+// renders stop markers along the centre-radius line and reports clicks via
+// stopSelected().
+class RadialGradientEditor : public GradientGeometryEditor {
     Q_OBJECT
 public:
     explicit RadialGradientEditor(QWidget* parent = nullptr);
 
-    QVector<GradientStop> stops() const;
-    void setStops(const QVector<GradientStop>& stops);
-
-    // center and radius are in normalized (0–1) coordinates
     QPointF center() const
     {
         return m_center;
     }
-    qreal radius() const;
-    void setCenter(QPointF c);
-    void setRadius(qreal r);
+    void setCenter(QPointF c); // silent
 
-    int selectedStop() const
+    // Width-normalized (fraction of the target element's width), matching the engine.
+    qreal radius() const
     {
-        return m_selected;
+        return m_radius;
     }
-    GradientStop& stop(int index)
+    void setRadius(qreal r); // silent
+
+    // Focal circle, stored verbatim (no authoring UI). See class comment.
+    // Named setFocalPoint, not setFocus: a setFocus overload here would hide
+    // QWidget::setFocus(Qt::FocusReason) by name and break this widget's own
+    // focus grab in mousePressEvent.
+    void setFocalPoint(double fx, double fy, double fr); // silent
+    double focusX() const
     {
-        return m_stops[index];
+        return m_focusX;
     }
-
-    void selectStop(int index);
-    bool canDeleteSelectedStop() const;
-    void deleteSelectedStop();
-
-    void updateStops();
-
-    QSize sizeHint() const override;
+    double focusY() const
+    {
+        return m_focusY;
+    }
+    double focusR() const
+    {
+        return m_focusR;
+    }
 
 signals:
-    void stopsChanged(const QVector<GradientStop>&);
-    void stopSelected(int index);
-    void geometryChanged(QPointF center, qreal radius);
+    void centerChanged(QPointF);
+    void radiusChanged(qreal);
 
 protected:
     void paintEvent(QPaintEvent*) override;
@@ -49,41 +63,36 @@ protected:
     void mouseMoveEvent(QMouseEvent*) override;
     void mouseReleaseEvent(QMouseEvent*) override;
     void mouseDoubleClickEvent(QMouseEvent*) override;
-    void contextMenuEvent(QContextMenuEvent*) override;
-    void resizeEvent(QResizeEvent*) override;
+    void leaveEvent(QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
 
 private:
     static constexpr int kEndpointR = 10;
-    static constexpr int kDiamondD = 7;
-    static constexpr int kLineHitTol = 8;
-    static constexpr int kCheckerCell = 5;
-    static constexpr qreal kMinRadius = 4.0;
+    static constexpr qreal kMinRadius = 1e-3;
 
-    // Both stored in normalized (0–1) space
-    QVector<GradientStop> m_stops;
     QPointF m_center{0.5, 0.5};
-    QPointF m_radiusEnd{0.85, 0.5};
+    qreal m_radius{0.35};
 
-    int m_selected{0};
-    int m_dragging{-1};
-    bool m_draggingCenter{false};
-    bool m_draggingEdge{false};
-    QPointF m_dragOffset;
+    // Focal circle — loaded verbatim, written back verbatim. See class comment.
+    double m_focusX{0.5};
+    double m_focusY{0.5};
+    double m_focusR{0.0};
 
-    QPointF toPixelPt(QPointF norm) const
+    enum class Handle { None, Center, Radius, Stop };
+    struct HitResult {
+        Handle type = Handle::None;
+        int stopIndex = -1;
+    };
+
+    Handle m_pressHandle{Handle::None};
+    Handle m_hoverHandle{Handle::None};
+    Handle m_activeHandle{Handle::Center}; // last-interacted handle; arrow-key nudge target
+
+    HitResult hitTest(QPointF px) const;
+    QPointF stopPixelPos(int i) const;
+    QPointF radiusHandleNorm() const
     {
-        return {norm.x() * width(), norm.y() * height()};
+        return {m_center.x() + m_radius, m_center.y()};
     }
-    QPointF toNormPt(QPointF px) const
-    {
-        return {width() > 0 ? px.x() / width() : 0.0, height() > 0 ? px.y() / height() : 0.0};
-    }
-
-    QPointF stopPos(int i) const; // pixel coords
-    int hitTestHandle(QPointF p) const;
-    qreal tFromPoint(QPointF p) const;
-    void sortStops();
-    void editStopColor(int idx);
-    void addStopAt(qreal t);
-    void drawCheckerboard(QPainter& p) const;
+    void updateHover(QPointF pos);
 };

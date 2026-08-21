@@ -164,6 +164,11 @@ QPointF CanvasWidget::widgetToTitle(QPointF pt) const
             (pt.y() - lb.top()) / lb.height() * titleH()};
 }
 
+QPointF CanvasWidget::viewportCenterInTitle() const
+{
+    return widgetToTitle(QRectF(rect()).center());
+}
+
 QRectF CanvasWidget::titleToWidget(const Rectangle& r) const
 {
     const QRectF lb = letterboxRect();
@@ -353,32 +358,65 @@ bool CanvasWidget::isActiveSelectionLocked() const
     return m_doc->isElementLocked(t.elements[sel.elementIndex]->GetId());
 }
 
+const VisualElement* CanvasWidget::hitTestSubtree(const IElement* parent, QPointF titlePt) const
+{
+    // Collect this parent's VisualElement children and stable-sort ASCENDING
+    // by zOrder — this is exactly the paint order used by
+    // Title::RenderElements / VisualElement::RenderChildren.
+    std::vector<const VisualElement*> children;
+    for (const IElement* c : parent->GetChildren()) {
+        if (const auto* vc = dynamic_cast<const VisualElement*>(c))
+            children.push_back(vc);
+    }
+    std::stable_sort(children.begin(), children.end(), [](const VisualElement* a, const VisualElement* b) {
+        return a->zOrder < b->zOrder;
+    });
+
+    // Walk back-to-front: topmost painted element gets first refusal.
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+        const VisualElement* child = *it;
+
+        bool ok = false;
+        const QTransform inv = elementLocalToTitle(*child).inverted(&ok);
+        bool insideSelf = false;
+        if (ok) {
+            const QPointF lp = inv.map(titlePt);
+            const Rectangle b = child->GetBounds();
+            insideSelf = (lp.x() >= 0.0 && lp.x() <= b.width &&
+                          lp.y() >= 0.0 && lp.y() <= b.height);
+        }
+        // A clipping parent hides everything of its subtree that falls outside
+        // it. Approximated as the plain bounds rect: ApplyElementClip also
+        // honours cornerRadius and the wipe-animation sub-rect, so a click in a
+        // rounded-off corner of a clipping parent can still reach a child the
+        // renderer clips away.
+        // When !ok (degenerate transform) containment is unknowable, so descend
+        // rather than hiding the whole subtree — a degenerate parent must not
+        // make its children unclickable.
+        const bool clippedOut = ok && child->clipChildren && !insideSelf;
+        if (!clippedOut) {
+            const VisualElement* hit = hitTestSubtree(child, titlePt);
+            if (hit) return hit;
+        }
+
+        if (insideSelf && !m_doc->isElementLocked(child->GetId()))
+            return child;
+    }
+    return nullptr;
+}
+
 SelectionId CanvasWidget::hitTest(QPointF titlePt) const
 {
     const Title& t = m_doc->title();
+    const IElement* root = t.GetRoot();
+    if (!root) return {};
 
-    std::vector<int> order;
-    order.reserve(t.elements.size());
+    const VisualElement* hit = hitTestSubtree(root, titlePt);
+    if (!hit) return {};
+
     for (int i = 1; i < (int)t.elements.size(); ++i)
-        order.push_back(i);
-    std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
-        const auto* va = dynamic_cast<const VisualElement*>(t.elements[a].get());
-        const auto* vb = dynamic_cast<const VisualElement*>(t.elements[b].get());
-        return (va ? va->zOrder : 0) > (vb ? vb->zOrder : 0);
-    });
-
-    for (int ei : order) {
-        const auto* ve = dynamic_cast<const VisualElement*>(t.elements[ei].get());
-        if (!ve) continue;
-        if (m_doc->isElementLocked(ve->GetId())) continue;   // locked: not click-selectable on canvas
-        bool ok = false;
-        const QTransform inv = elementLocalToTitle(*ve).inverted(&ok);
-        if (!ok) continue;               // degenerate transform (e.g. shear det 0): skip
-        const QPointF lp = inv.map(titlePt);
-        const Rectangle b = ve->GetBounds();
-        if (lp.x() >= 0.0 && lp.x() <= b.width && lp.y() >= 0.0 && lp.y() <= b.height)
-            return {SelectionId::Level::Element, ei};
-    }
+        if (t.elements[i].get() == static_cast<const IElement*>(hit))
+            return {SelectionId::Level::Element, i};
     return {};
 }
 
@@ -906,6 +944,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
                                           sp.x() - m_dragOrigCenterTitle.x());
             m_lastDragWidgetPos = wpos;
             m_dragging = true;
+            m_doc->setFitToChildrenSuppressed(true);
             emit interactiveEditStarted();
         }
         return;
@@ -935,6 +974,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
             m_dragParentOffset = QPointF(gpos.x - m_dragOrigBounds.x, gpos.y - m_dragOrigBounds.y);
         }
 
+        m_doc->setFitToChildrenSuppressed(true);
         emit interactiveEditStarted();
         return;
     }
@@ -993,6 +1033,7 @@ void CanvasWidget::mousePressEvent(QMouseEvent* event)
             }
         }
 
+        m_doc->setFitToChildrenSuppressed(true);
         emit interactiveEditStarted();
     }
 }
@@ -1202,6 +1243,21 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
     }
 
     if (event->button() != Qt::LeftButton || !m_dragging || m_previewTitle) {
+        if (m_dragging && event->button() == Qt::LeftButton) {
+            // The left-button release that would normally end the drag
+            // arrived while m_previewTitle took over (e.g. an animation
+            // preview started mid-gesture). Abandon the drag cleanly rather
+            // than leaving fit-to-children permanently suppressed.
+            m_dragging = false;
+            m_dragMode = DragMode::None;
+            m_dragGroup.clear();
+            m_doc->setFitToChildrenSuppressed(false);
+            // interactiveEditStarted() was emitted unconditionally at drag
+            // start, and MainWindow pairs it with TitleTreeView's
+            // setResetsSuppressed(). Skipping the finish here would leave the
+            // tree's reset suppression stuck on for the rest of the session.
+            emit interactiveEditFinished();
+        }
         QWidget::mouseReleaseEvent(event);
         return;
     }
@@ -1215,6 +1271,7 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
     if (m_dragEi < 1 || m_dragEi >= (int)t.elements.size()) {
         m_dragMode = DragMode::None;
         m_dragGroup.clear();
+        m_doc->setFitToChildrenSuppressed(false);
         return;
     }
 
@@ -1222,6 +1279,7 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
     if (!ve) {
         m_dragMode = DragMode::None;
         m_dragGroup.clear();
+        m_doc->setFitToChildrenSuppressed(false);
         return;
     }
 
@@ -1238,7 +1296,10 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
                     if (sp2) sp2->SetRotation(orig);
                 }
             });
+            m_doc->setFitToChildrenSuppressed(false);
             m_doc->undoStack()->push(new SetElementRotationCmd(m_doc, eid, finalRot, -1));
+        } else {
+            m_doc->setFitToChildrenSuppressed(false);
         }
         m_dragMode = DragMode::None;
         m_dragHandle = -1;
@@ -1263,7 +1324,10 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
                     if (sp) sp->SetBounds(orig);
                 }
             });
+            m_doc->setFitToChildrenSuppressed(false);
             m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, eid, finalBounds));
+        } else {
+            m_doc->setFitToChildrenSuppressed(false);
         }
     } else {
         // Group move commit: gather (id, origBounds, finalBounds) for every
@@ -1282,8 +1346,12 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
             }
         }
 
+        // Stay suppressed across the whole commit. If the fit ran between two
+        // members, it would shift the members not yet reverted and every other
+        // child of the same fitToChildren parent, so their captured
+        // before-values would be wrong. Revert everything first, then push
+        // everything, then let the fit run once at the end.
         if (!changed.empty()) {
-            m_doc->undoStack()->beginMacro("Move elements");
             for (const auto& m : changed) {
                 const std::string id = m.id;
                 const Rectangle orig = m.orig;
@@ -1295,10 +1363,15 @@ void CanvasWidget::mouseReleaseEvent(QMouseEvent* event)
                         break;
                     }
                 });
-                m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m.id, m.final_));
             }
+
+            m_doc->undoStack()->beginMacro("Move elements");
+            for (const auto& m : changed)
+                m_doc->undoStack()->push(new SetElementBoundsCmd(m_doc, m.id, m.final_));
             m_doc->undoStack()->endMacro();
         }
+        m_doc->setFitToChildrenSuppressed(false);
+        m_doc->applyFitToChildrenNow();
     }
 
     m_dragMode = DragMode::None;

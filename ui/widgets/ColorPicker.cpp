@@ -1,4 +1,5 @@
 #include "ColorPicker.h"
+#include "ui/UiUtils.h"
 #include <QGridLayout>
 #include <QScreen>
 
@@ -37,7 +38,35 @@ QColor ColorPicker::color() const
 
 void ColorPicker::setColor(const QColor& color)
 {
-    onColorEditChanged(color);
+    UpdateGuard guard(m_updating);
+    // writeHex: this is the programmatic entry point, so the hex field is a
+    // display that must follow. (onColorEditChanged() passes false because
+    // there the hex field is the source.)
+    syncWidgets(color, true);
+}
+
+void ColorPicker::updateAlphaStops(const QColor& rgb)
+{
+    m_alphaSlider->setStops({
+        {0.0, QColor::fromRgb(rgb.red(), rgb.green(), rgb.blue(), 0)},
+        {1.0, QColor::fromRgb(rgb.red(), rgb.green(), rgb.blue(), 255)},
+    });
+}
+
+void ColorPicker::syncWidgets(const QColor& color, bool writeHex)
+{
+    QColor colorNoAlpha = color;
+    colorNoAlpha.setAlphaF(1.0f);
+
+    // Suppress the nested colorChanged that m_alphaSlider->setValue() would
+    // otherwise trigger via onAlphaSliderChanged; callers emit their own
+    // single colorChanged instead.
+    UpdateGuard guard(m_syncingFromEdit);
+    m_colorWheel->setColor(colorNoAlpha);
+    updateAlphaStops(colorNoAlpha);
+    m_alphaSlider->setValue((int)(color.alphaF() * 1000.0f));
+    if (writeHex)
+        m_colorEdit->setColor(color);
 }
 
 void ColorPicker::showPopup(QWidget* at)
@@ -72,12 +101,12 @@ void ColorPicker::showPopup(QWidget* at)
 
 void ColorPicker::onColorWheelChanged(const QColor& color)
 {
-    m_alphaSlider->setStops({
-        {0.0, QColor::fromRgb(color.red(), color.green(), color.blue(), 0)},
-        {1.0, color},
-    });
-    emit m_alphaSlider->valueChanged(m_alphaSlider->value());
-    emit colorChanged(computeColor());
+    updateAlphaStops(color);
+    // The hex field is a readout of the full colour, so a wheel drag has to
+    // refresh it too — previously only an alpha-slider move ever did.
+    m_colorEdit->setColor(computeColor());
+    if (!m_updating)
+        emit colorChanged(computeColor());
 }
 
 void ColorPicker::onAlphaSliderChanged(int value)
@@ -86,18 +115,18 @@ void ColorPicker::onAlphaSliderChanged(int value)
     QColor col = m_colorWheel->color();
     col.setAlphaF(alpha);
     m_colorEdit->setColor(col);
-    emit colorChanged(computeColor());
+    if (!m_updating && !m_syncingFromEdit)
+        emit colorChanged(computeColor());
 }
 
 void ColorPicker::onColorEditChanged(const QColor& color)
 {
-    QColor colorNoAlpha = color;
-    colorNoAlpha.setAlphaF(1.0f);
+    // writeHex is false: the hex edit is the source of this change, so writing
+    // back would reformat the text the user just committed.
+    syncWidgets(color, false);
 
-    m_colorWheel->setColor(colorNoAlpha);
-    m_alphaSlider->setValue((int)(color.alphaF() * 1000.0f));
-
-    emit colorChanged(computeColor());
+    if (!m_updating)
+        emit colorChanged(computeColor());
 }
 
 QColor ColorPicker::computeColor() const

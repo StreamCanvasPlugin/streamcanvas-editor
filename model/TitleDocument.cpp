@@ -191,6 +191,19 @@ nlohmann::json TitleDocument::elementToJson(const VisualElement& el)
 void TitleDocument::applyMutation(std::function<void(Title&)> fn)
 {
     fn(m_title);
+    if (!m_fitSuppressed) applyFitToChildren();
+    setModified(true);
+    emit documentChanged();
+}
+
+void TitleDocument::setFitToChildrenSuppressed(bool suppressed)
+{
+    m_fitSuppressed = suppressed;
+}
+
+void TitleDocument::applyFitToChildrenNow()
+{
+    if (m_fitSuppressed) return;
     applyFitToChildren();
     setModified(true);
     emit documentChanged();

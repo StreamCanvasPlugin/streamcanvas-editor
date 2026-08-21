@@ -340,10 +340,7 @@ void AnimationTimingPanel::onPlayTick()
         return;
     }
     if (m_scrubTime >= total) {
-        m_scrubTime = total;
-        m_timeline->setPlayhead(total);
-        emitScrub(total);
-        pausePlayback();
+        stopPlayback();   // rewinds the playhead to 0 and reverts the canvas to Visible
         return;
     }
     m_timeline->setPlayhead(m_scrubTime);

@@ -1,4 +1,5 @@
 #include "ColorLineEdit.h"
+#include <QPalette>
 #include <QRegularExpression>
 #include <QTimer>
 
@@ -43,8 +44,13 @@ void ColorLineEdit::onEditingFinished()
         setColor(c);
         emit colorChanged(c);
     } else {
-        setStyleSheet("background: #ffcccc;");
-        QTimer::singleShot(600, this, [this] { setStyleSheet(""); });
+        // Flash via a saved/restored palette rather than a stylesheet, so we
+        // don't wipe any theme stylesheet already applied to this widget.
+        const QPalette original = palette();
+        QPalette flash = original;
+        flash.setColor(QPalette::Base, QColor(255, 204, 204));
+        setPalette(flash);
+        QTimer::singleShot(600, this, [this, original] { setPalette(original); });
     }
 }
 
