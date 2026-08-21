@@ -197,6 +197,23 @@ P1 = cheap, high-visibility UX. P2 = medium. Deferred = large, needs separate si
   reorder (front/back/up/down) + duplicate in context menu, clipboard in tree.
 - **D-4. `.ogt` schema versioning** for plugin-forward compatibility (engine-side, MIT — coordinate
   before touching; out of editor boundary).
+- **D-5. Inline text markup** (bold/italic/underline/strike on a *range* of characters). Not
+  supported today: `TextElement::Font` carries one `weight`/`isItalic`/`isUnderline`/
+  `isStrikethrough` for the whole element (`engine/element_text.h:47-55`), the renderer calls
+  `pango_layout_set_text` with no markup parsing (`engine/element_text.cpp:40`), the underline and
+  strikethrough `PangoAttr`s are inserted with no index range (`engine/element_text.cpp:30-38`),
+  and the JSON keys `font_italic`/`font_underline`/`font_strikethrough`/`font_weight` are scalars
+  (`engine/title.cpp:511-523`). The editor's content dialog is a `QPlainTextEdit` and the ribbon
+  B/I/U/S buttons push `SetElementFieldCmd<bool>` on the element font
+  (`ui/widgets/RibbonFormatSection.cpp:909,1441-1457`). A user typing `<b>x</b>` gets those literal
+  characters rendered. Cost: cross-repo and a save-format change —
+  1. engine renders via `pango_layout_set_markup` (or an indexed `PangoAttrList`), with an escape
+     policy for existing titles containing `<` or `&`;
+  2. `text` becomes markup-bearing or gains a parallel span list in the JSON, gated on the `version`
+     field added in E4;
+  3. editor swaps `QPlainTextEdit` for `QTextEdit` + a rich-text→markup converter, and B/I/U/S act
+     on the cursor selection instead of the element;
+  4. the OBS plugin needs the same parsing change or old builds render the tags on screen.
 
 ---
 

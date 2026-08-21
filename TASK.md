@@ -902,3 +902,323 @@ and a document edit or slot switch now also releases the preview automatically. 
 verified live. The pre-existing SIGSEGV-on-close investigation (see the section above) is still open
 and untouched by this pass; the test instance here was killed rather than closed through the UI, so
 this session adds no new data on it.
+
+---
+
+## Four fixes: child drag, playback revert, paint editor rewrite, zoom-aware add — 2026-08-21
+
+Plan file: `~/.claude-personal/plans/we-have-a-couple-parallel-curry.md` (approved).
+Execution model per that plan: every subtask delegated to `implementer` (`model: sonnet`),
+reviewed by `reviewer` (`model: sonnet`), 2-round retry limit. Editor-side only —
+`engine/` (submodule `1c82d275`) is not touched.
+
+### Goal
+1. Clicking/dragging a CHILD element on the canvas selects the parent instead.
+2. Timeline playback must rewind to 0 and revert the canvas to Visible when it ends.
+3. Rewrite the Paint editor (colour + linear/radial gradient) to industry-standard UX.
+4. Adding a new element must respect canvas zoom/pan (was hardcoded to title-space 100,100).
+
+### Plan
+- [x] 2 — end of playback calls `stopPlayback()`
+- [x] 1A — hierarchical `hitTest` walking the render tree
+- [x] 1B — stop `applyFitToChildren` running at drag frequency
+- [x] 3A — undo foundations (`paintEquals`, paint merge tags)
+- [x] 3B — fix shared colour widgets (ColorWheel / ColorPicker / GradientSlider / ColorLineEdit)
+- [ ] 3C — numeric colour fields + eyedropper  (NOT STARTED; flagged droppable in the plan)
+- [x] 3D — new `GradientStopBar`
+- [x] 3E — aspect-correct gradient geometry editors
+- [x] 3F — rebuild `PaintEditor`
+- [x] 3G — modeless Fill/Stroke dialog desync
+- [x] 3H — delete dead code (HueSlider / ColorPreview / GradientEditor)
+- [x] 4 — new elements centred on the viewport
+- [ ] Reviews for 1B, 3B, 3D, 3E, 3F, 3G, 4 (three reviewer agents RUNNING)
+- [ ] End-to-end GUI verification with `qt-auto-test`
+
+### Log
+#### 2026-08-21
+- **Root cause of bug 1, part A — `hitTest` treated `zOrder` as global.**
+  EVIDENCE: `engine/title.cpp:191-199` (`Title::RenderElements` draws only `root->GetChildren()`,
+  stable-sorted ASCENDING by zOrder) and `engine/visual_element.cpp:193-196`
+  (`RenderChildren` draws children AFTER the element, sorted among SIBLINGS only). So a child is
+  always painted above its parent regardless of zOrder, but the old flat `hitTest`
+  (`ui/widgets/CanvasWidget.cpp:356-383`) sorted ALL of `title.elements[1..]` descending by zOrder
+  and returned the first containing element — reaching the child only when
+  `child.zOrder > parent.zOrder`. `TitleTreeModel.cpp:415-425` renumbers siblings to `0..n-1` on
+  drag-reorder, which makes the parent's number higher deterministically.
+- **Root cause of bug 1, part B — fit-to-children ran at drag frequency.**
+  `TitleDocument::applyMutation` called `applyFitToChildren()` on EVERY mutation, i.e. every
+  mouse-move. For a `fitToChildren` parent that shifts the parent by dx/dy and compensates each
+  child by -dx/-dy, staling the press-time `m_dragOrigBounds` so the child accelerated away.
+- **Subtask 2 landed** — `ui/widgets/AnimationTimingPanel.cpp` `onPlayTick` end branch now calls
+  `stopPlayback()` instead of `pausePlayback()`. `pausePlayback()` only stopped the QTimer and left
+  `m_previewActive == true` with `CanvasWidget::m_previewTitle` alive, freezing the canvas on the
+  last frame (blank for the Out slot, which ends in `TitleState::Hidden`) and leaving every canvas
+  input path gated off. EVIDENCE: `cmake --build build -j$(nproc)` exit 0.
+- **Subtask 1A landed** — recursive `CanvasWidget::hitTestSubtree(const IElement*, QPointF)`,
+  depth-first in reverse paint order, lock check gating only the RETURN so a locked parent is still
+  descended into. Reviewer flagged that the `clipChildren` guard skipped the whole subtree when the
+  transform was non-invertible; orchestrator fixed it directly to
+  `const bool clippedOut = ok && child->clipChildren && !insideSelf;` so a degenerate parent cannot
+  make its children unclickable. EVIDENCE: `cmake --build build -j$(nproc)` exit 0.
+- **Subtask 3A landed** — new `model/PaintUtils.h` (`paintEquals`), `SetElementPaintCmd` gained a
+  `mergeTag` ctor param + `id()`/`mergeWith()` (refusing to merge across different `m_target`, so
+  Fill and Stroke never collapse into one entry), `ElemMergeTag::FillPaint=1013`/`StrokePaint=1014`.
+  Reviewer found a real regression: skipping the undo push on `paintEquals` also skipped RELOADING
+  an image whose path was unchanged but whose file had been overwritten on disk. Orchestrator fixed
+  directly — both guards now read `p.type != Paint::Type::Image && paintEquals(...)`.
+  EVIDENCE: `cmake --build build -j$(nproc)` exit 0.
+- **Subtask 3B landed** — `ColorWheel` gained a sticky `int m_hue` (`QColor::hsvHue()` returns -1 for
+  any fully desaturated colour, so the three `if (hue < 0) hue = 0;` sites snapped the ring back to
+  red whenever the user dragged into black or white); `setColor()` no longer emits; `rebuildTriangle`
+  writes integer HSV->RGB straight into `QImage::scanLine` behind a `(hue, size, dpr)` cache;
+  `ColorPicker` no longer fakes `emit m_alphaSlider->valueChanged(...)` on another object (one wheel
+  move used to emit `colorChanged` twice); `GradientSlider` paints its handle at
+  `style()->subControlRect(CC_Slider, SC_SliderHandle)` so the drawn and grabbable knobs coincide,
+  and ignores wheel events unless focused; `ColorLineEdit` flashes via a saved/restored `QPalette`
+  instead of `setStyleSheet("")`, which wiped theme styling.
+  EVIDENCE: `cmake --build build -j$(nproc)` exit 0.
+- **Subtask 3D landed** — new `ui/widgets/GradientStop.h` + `ui/widgets/GradientStopBar.{h,cpp}`
+  (483 lines). Stops carry a stable internal id so selection survives a re-sort; the three existing
+  epsilon+colour re-selection loops selected the wrong stop when two shared a colour. `sortByPosition()`
+  only sorts — the old `sortStops()` forced `first().position = 0.0` / `last().position = 1.0`,
+  silently rewriting loaded `.ogt` data. 4px drag threshold so a click that only selects pushes no
+  undo entry. All four setters are silent.
+  EVIDENCE: `cmake --build build -j$(nproc)` exit 0.
+
+- **Subtask 3F landed — `ui/painteditor.cpp` fully rewritten** against the already-written new
+  header. Five checkable `QToolButton`s in a `QButtonGroup` replace the type `QComboBox`; a plain
+  `QStackedWidget` replaces `AdaptiveStack`; ONE shared `ColorPicker` replaces the three separate
+  instances (`m_cpSolid`/`m_cpLinear`/`m_cpRadial`); `m_paintByType` caches the last Paint per type
+  so None -> Linear -> None -> Linear restores the gradient. Image page gained `ScaleMode::Tile`
+  (implemented in the engine but absent from the combo, so loading a tiled paint showed "None" and
+  the next edit wrote `None`), a `tileScale` spin box, an inline missing-file error label, and a
+  path-keyed cache so the synchronous `cairo_image_surface_create_from_png` in `Paint::Image(path)`
+  no longer runs on every emit. `BrandColorSwatchGrid` cells and its `+`/`-` buttons raised from
+  `setFixedSize(16,16)` to `24,24`.
+- **Name-hiding defect found by the 3F agent and fixed by the orchestrator.** 3E had added
+  `RadialGradientEditor::setFocus(double,double,double)`, which hides
+  `QWidget::setFocus(Qt::FocusReason)` by name — so the widget's own `mousePressEvent` line
+  `setFocus(Qt::MouseFocusReason)` no longer resolved and the file would not compile.
+  EVIDENCE: `error: no matching function for call to 'RadialGradientEditor::setFocus(Qt::FocusReason)'
+  ... note: candidate: 'void RadialGradientEditor::setFocus(double, double, double)'`.
+  Renamed to `setFocalPoint(double,double,double)` in `RadialGradientEditor.{h,cpp}` and at the one
+  call site in `painteditor.cpp`, with a header comment recording why the name is not `setFocus`.
+  The agent correctly refused to edit a file outside its stated scope and reported instead.
+- **Subtask 3G landed** — `RibbonFormatSection::retargetPaintDialog(PaintEditor*, QDialog*, bool)`.
+  The dialogs previously had no member variables at all (`fillGradDlg`/`strokeGradDlg` were locals
+  inside `buildStyleTab`), so `m_fillDialog`/`m_strokeDialog` were added. Wired at three points:
+  `clearSelection()` (hides both), the `onDocumentChanged()` tail guarded by `isInteracting()`
+  (covers both selection change and undo/redo, since `setSelection()` routes through
+  `onDocumentChanged`), and the "More Options..." open path (which now also calls
+  `setTargetElementSize`).
+  Orchestrator correction on review of the diff: that tail block re-`setPaint()`s on EVERY
+  `documentChanged`, including the one the dialog's own edit just caused. `m_interactionDepth` only
+  rises on stop-bar and geometry-editor drags, so a discrete edit (hex entry, brand swatch click)
+  would round-trip through `setPaint()` and rebuild the stop bar, dropping the user's selected stop.
+  `retargetPaintDialog` now skips the `setPaint` when `paintEquals(editor->getPaint(), want)` while
+  still refreshing size and title unconditionally (a different element can carry an identical paint).
+  Call-site check: `mainwindow.cpp:1000` calls `clearSelection()` on the non-element branch and
+  `setSelection()` on the element branch, so both requirements are genuinely wired.
+- **BUILD GREEN.** EVIDENCE: `cmake --build build -j$(nproc)` -> `[6/6] Linking CXX executable
+  stream-canvas-editor`, exit 0. This is the first compile that covers 3F, 3G (+ the orchestrator
+  guard), and the three previously-uncompiled items: subtask 3E, subtask 4, and the group-move
+  restructure in `CanvasWidget.cpp` + `TitleDocument::applyFitToChildrenNow()`.
+- **Subtask 3H landed — dead code deleted.** Precondition re-verified before deleting:
+  `grep -rn "HueSlider|ColorPreview|GradientEditor"` over `*.cpp`/`*.h`/`*.txt` (excluding
+  `engine/` and `build/`) showed the only references were the three `CMakeLists.txt` lines, the
+  files' own self-includes, and one stale comment in `GradientSlider.cpp:28` naming `HueSlider.cpp`.
+  `grep -rn '#include.*"(GradientEditor|HueSlider|ColorPreview).h"'` matched ONLY the three
+  self-includes — `GradientEditor.h` had no includer left, since 3D moved `GradientStop` into its
+  own header. Removed `ui/widgets/{HueSlider,ColorPreview,GradientEditor}.{h,cpp}` (`git rm -f` was
+  needed because 3D had already modified `GradientEditor.h`), their three `CMakeLists.txt` lines,
+  and the stale comment.
+  EVIDENCE: post-delete `grep` -> `none`. `cmake -B build -DCMAKE_BUILD_TYPE=Debug` exit 0;
+  `cmake --build build -j$(nproc)` -> `[49/49] Linking CXX executable stream-canvas-editor`, exit 0.
+
+- **Reviewer round complete — three agents over disjoint areas. Five real findings, all fixed.**
+  - *(a) 1B + 4.* Found: the "abandon drag cleanly" branch in `CanvasWidget::mouseReleaseEvent`
+    (the release that arrives while `m_previewTitle` took over mid-gesture) cleared `m_dragging`
+    and fit-suppression but never emitted `interactiveEditFinished()`. `interactiveEditStarted()`
+    is emitted unconditionally at all three drag-start sites and `mainwindow.cpp:785-788` pairs the
+    two onto `TitleTreeView::setResetsSuppressed(true/false)` — so that branch left the TREE's
+    reset suppression stuck on for the rest of the session. Exactly the second instance of the bug
+    class the branch was written to avoid. FIXED: added the emit with a comment naming the pairing.
+  - *(a) second finding.* `doPaste`'s system-clipboard-image branch still hardcoded
+    `{"x", inPlace ? 0.0 : 100.0}` — a sixth site the original bug-4 enumeration missed (it is
+    neither one of the five named sites nor one of the two deliberately excluded paths). A
+    clipboard image has no source element to cascade from, so FIXED by routing it through
+    `makeNewElementJson`, with Paste-in-Place passing `x`/`y` as `extra` overrides (extra merges
+    last, so it wins over the computed centre).
+  - *(a) verified clean:* `applyFitToChildrenNow()` is called exactly once, immediately after
+    suppression is cleared, never while suppressed; the group-move commit matches the required
+    revert-all -> beginMacro -> push-all -> endMacro -> unsuppress -> fit-once sequence with the
+    macro never left unbalanced; press-time undo before-values are captured before suppression is
+    turned on; keyboard nudge correctly needs no suppression; no Escape/cancel-drag path exists to
+    leak the flag. For subtask 4: no double zoom application, the empty-clamp-range case avoids
+    `std::clamp(lo > hi)` UB, `extra` merges last, id/z_order logic is a verbatim copy of the old
+    per-callsite lambdas, the tree's `extraJson` parse is inside `try/catch`, and `grep -rn '"x", 100'`
+    confirms all five original literal sites are gone.
+  - *(b) 3B + 3D.* Found: `ColorWheel` still declared
+    `Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)` while `setColor()` had
+    deliberately stopped emitting — the class promised Qt's meta-object system that every WRITE
+    notifies, which had become false. Inert today (the only consumer, `ColorPicker`, uses a direct
+    `connect`), but a `QPropertyAnimation` or QML binding on `"color"` would silently miss
+    programmatic writes. FIXED: dropped the NOTIFY clause with a comment explaining why.
+  - *(b) verified clean:* the integer HSV->RGB triangle rewrite is mathematically exact (the
+    reviewer derived `RGB = w*hueRGB + u*white` as an identity for `QColor::fromHsvF`, and the hue
+    corner comes from Qt's own `QColor::fromHsv`, so there is no hand-rolled 6-sector branching to
+    get wrong); `scanLine` writes are bounds-clamped to the PHYSICAL size with the correct
+    `Format_ARGB32`/`QRgb*` pairing — no memory-safety issue; the `(hue, size, dpr)` cache key
+    covers every input; `GradientStopBar`'s every `m_stops[...]` subscript is guarded by an
+    `indexOfId`/`indexOfSelected` that returns -1 rather than an out-of-range index; all four
+    setters are silent; the 2-stop floor cannot be bypassed; `interactionStarted`/`Finished` stay
+    balanced across press-without-drag, release-outside-widget, and delete-while-dragging.
+  - *(c) 3E + 3F + 3G.* Found (moderate): the new path-keyed image cache in `getPaint()` only
+    re-decoded when the path STRING changed, so re-picking the same file via Browse never reloaded
+    a PNG that had been overwritten on disk — and the comment I had written in
+    `RibbonFormatSection::onFillPaintChanged` ("the push is what reloads the cached surface") was
+    simply wrong about the mechanism, since `paintEquals` does not compare surfaces. FIXED with
+    `mutable bool m_imageCacheDirty`: set by the two USER-driven entry points (Browse click and
+    `editingFinished`), cleared after a rebuild and in `setPaint()` (a programmatic load already
+    carries a decoded surface). The never-skip-Image carve-out in `onFillPaintChanged` is still
+    required and is now accurate — the two pieces only work together.
+  - *(c) two minor findings, both fixed.* `BrandColorSwatchGrid::kCellSize = 16` had been left
+    orphaned while the three call sites were changed to a hardcoded `24`, destroying the single
+    source of truth the constant implied; moved to a file-local `constexpr int kCellSize = 24` in
+    the `.cpp` (the header's private member was invisible to `SwatchCell`, a separate class in that
+    file — the first attempt, bumping the header constant, failed to compile with
+    `error: 'kCellSize' was not declared in this scope`, which is what forced the move). And
+    `GradientGeometryEditor::setTargetSize`'s degenerate fallback was per-axis, so `(-5, 100)` gave
+    a 1:100 letterbox rather than the 1:1 its own doc comment promised; made it joint.
+  - *(c) verified clean:* `previewRect()` letterbox math checked by hand for 1920x200, 200x1920 and
+    square, never zero-area; `toNorm`/`toPixel` are exact inverses; the radial radius is
+    width-normalised on BOTH read and write, matching `engine/types.hpp:203-204`; the focal point
+    round-trips byte-identically through a type-switch cycle, so the old destructive
+    `Paint::Radial(p.x(), p.y(), 0.0, ...)` write is genuinely fixed; `hitDiamond` slack 8 gives a
+    >=20px hit diameter in every direction; the live-during-drag signal path cannot loop (traced
+    editor -> emitPaint -> undo push -> documentChanged -> retarget, broken by `isInteracting()`
+    during drags and by `paintEquals` for discrete edits); `setPaint()` emits nothing on any path;
+    `m_interactionDepth` never goes negative; and 3G's core desync is genuinely closed (traced
+    Fill-dialog-open-on-A -> select B -> edit: the write lands on B).
+  EVIDENCE after all five fixes: `cmake --build build -j$(nproc)` -> `[6/6] Linking CXX executable
+  stream-canvas-editor`, exit 0.
+
+- **GUI VERIFICATION PASS (qt-auto-test, live X11 session).** Unlike earlier sessions, this one's
+  Bash shell shares the host PID namespace (`ps -ef` shows the real `/sbin/init`, not a container
+  init) with `DISPLAY=:0` and `XDG_SESSION_TYPE=x11`, so the editor was drivable end to end.
+  Launched with `qt-auto-test launch -- ./build/stream-canvas-editor`.
+- **BUG 4 PROVEN (zoom-aware add).** At 100% zoom, no pan: Insert -> Rectangle produced
+  X=860,0 / Y=500,0 for a 200x80 element on a 1920x1080 title — exactly the title centre
+  (960-100, 540-40). Then Zoom In x6 (1.25^6 = 3.81) plus a middle-button pan drag
+  (1100,480)->(1500,300); a second Insert -> Rectangle produced X=656,7 / Y=590,5 and rendered
+  centred in the visible viewport: the element's on-screen centre was (1089,475) against a canvas
+  viewport centre of (1090,476). The old code placed every new element at title-space (100,100),
+  which at this zoom and pan is off-screen.
+- **BUG 2 PROVEN (playback reverts to Visible).** Transport state across a full playback:
+  before play `stopBtn.enabled=False resetBtn.enabled=False`; 0.3s in, both `True`; 3.3s in (past
+  `contentDuration()`), both back to `False`. Under the old `pausePlayback()` ending they stayed
+  `True` with the preview held. Screenshot after the run shows the playhead marker back at 0.00s
+  and both elements fully composed rather than blank. Clicking element_1 on the canvas selected it
+  (ID field, handles, tree row and Element ribbon tab all updated), so the canvas is editable again.
+- **BUG 1 PROVEN, both root causes.**
+  Selection half: built the exact failing condition — element_1 reparented under element_2 via the
+  ribbon Parent combo, child zOrder 0 < parent zOrder 1, child shrunk to 80x40 at local (60,20) so
+  it sits fully inside the 200x80 parent. Alternating canvas clicks flipped correctly every time:
+  parent-only area -> `element_2`, inside the child -> `element_1`, parent -> `element_2`,
+  child -> `element_1`. The old flat hit test sorted all elements descending by zOrder, so a parent
+  with the higher number swallowed every click on its children.
+  Drag half: dragging the child screen (1090,475)->(1190,525) moved it from local (60,20) to
+  (110,6 / 45,3) — delta (+50,6 / +25,3) for a screen delta of (+100,+50) at 1.975x zoom. Exact 1:1.
+  Drift half (the fitToChildren case): enabled Fit to Children on the parent, which correctly shrank
+  it to wrap the child. A 2000ms drag of the child (many move events — where the old code
+  accelerated) moved the parent 767,3/635,8 -> 868,6/686,4, a delta of (+101,3 / +50,6) against an
+  expected (200/1.975, 100/1.975) = (+101,3 / +50,6). The return drag landed back on exactly
+  767,3/635,8 with no accumulated error.
+- **BUG 3 PARTLY VERIFIED (paint editor).** The rewritten `PaintEditor` opens as a modeless tool
+  dialog titled `Fill — element_1` (3G's retarget sets that title). Confirmed live: the segmented
+  None/Solid/Linear/Radial/Image button row, the single shared colour picker, the new
+  `GradientStopBar`, the linear preset row (horizontal / vertical / both diagonals / reverse), the
+  Angle and Length numeric fields, and the enlarged 24px brand swatches. Switching to Linear applied
+  a black->white gradient to the canvas element, so the editor drives the document correctly.
+  **3E aspect fix confirmed**: on a 1920x200 element the geometry preview letterboxes to a wide,
+  short rect matching the element's aspect ratio rather than filling a square-ish widget.
+- **THREE DEFECTS FOUND BY THE USER DURING THE GUI PASS, ALL FIXED.**
+  1. *Large empty gap in the dialog.* `QStackedWidget::sizeHint` is the MAXIMUM over all pages, so
+     the tall Linear/Radial pages reserved their height in None/Solid/Image mode. Fixed in
+     `applyTypeUi` by setting every non-current page to `QSizePolicy::Ignored` and re-fitting the
+     host window via a queued `adjustSize`. EVIDENCE: the Solid dialog went from 415x500 to 415x323,
+     and grows back to 415x547 on switching to Linear.
+  2. *Hex field and alpha slider never updated.* Two separate faults in `ColorPicker`, both
+     mode-independent, which is what the user observed. (a) `setColor()` delegated to
+     `onColorEditChanged()` — the hex edit's OWN slot, which deliberately never writes back to the
+     hex field — so the programmatic path left the hex stale; `onColorWheelChanged` did not write it
+     either, so only an alpha-slider move ever refreshed it. (b) The alpha slider's gradient STOPS
+     were refreshed only inside `onColorWheelChanged`; subtask 3B had made `ColorWheel::setColor()`
+     silent, so the programmatic path stopped reaching that slot and the slider kept painting the
+     previous hue. This was a regression 3B introduced and its review missed, because the review
+     checked emission COUNTS rather than sync COMPLETENESS. Fixed by extracting
+     `syncWidgets(color, writeHex)` and `updateAlphaStops(rgb)`: `setColor()` does a full sync
+     including the hex, `onColorEditChanged()` passes `writeHex=false` so the user's own typing is
+     not reformatted, and `onColorWheelChanged()` now refreshes both stops and hex.
+     EVIDENCE: in Solid mode the hex now reads `#8080E6` (the element's real fill) with a matching
+     purple alpha track, where it previously read a stale `#FF0000` with a red track; in Linear mode
+     with stop 0 selected it reads `#000000` with a black alpha track.
+  3. *Angle rotated about the wrong pivot.* `setAngleDegrees` pinned `m_p1` and swung `m_p2` around
+     it, so typing an angle slid the whole gradient across the element instead of rotating it in
+     place; `setLengthFraction` grew in one direction only for the same reason. Both now pivot about
+     the MIDPOINT of the gradient line, matching Figma, Illustrator and CSS `linear-gradient`.
+     Endpoints are deliberately left unclamped, since clamping to 0..1 would silently change the
+     requested angle and the engine's Cairo pattern extends past them.
+     EVIDENCE: at 0 degrees the line runs horizontally with p1 at x=115 and p2 at x=315 in the
+     captured preview (midpoint 215, preview-rect centre 214); at 90 degrees the line is vertical at
+     that same x=215. Length held at 74,3% across 0 / 90 / 180 degrees.
+  EVIDENCE for all three: `cmake --build build -j8` exit 0 after each, and the live captures named
+  above (`g08`, `g16`, `g18`, `g20-angle0`, `g20-angle90` in the session scratchpad).
+
+### Unverified / Pending
+- **Not yet exercised in the GUI**: Radial mode end to end, Image mode (including the new
+  `ScaleMode::Tile` entry and `tileScale` box), stop add / drag / delete / duplicate / reverse /
+  distribute on the new stop bar, undo granularity (one wheel drag must collapse to one Ctrl+Z),
+  3G's cross-element retarget (open Fill on A, select B, edit — only B may change), and the
+  data-preservation round trip (stops at 0.2/0.6/0.9 and a non-centred radial focal point must
+  survive an open/save cycle byte-identical).
+- **Subtask 3C not started** (numeric R/G/B and H/S/V fields, alpha as a percent field, and the XDG
+  portal eyedropper). The plan marks it the one subtask with real platform risk and explicitly
+  droppable.
+- **Subtask 1B remains a deliberate deviation from the approved plan** (suppress `applyFitToChildren`
+  during drags rather than world-space anchoring). Cost: a `fitToChildren` group's box no longer
+  grows live during a child drag — it resizes on release. The zero-drift measurement above is with
+  that behaviour.
+- Reviewer (b) flagged one residual it could not settle by reading: whether a `leaveEvent` can
+  arrive mid-drag on this Qt/platform combination, which would leave `GradientStopBar`'s
+  `interactionStarted` unbalanced. The consumer side is defensive (`endInteraction()` guards against
+  underflow) and the pre-existing gradient editors share the identical pattern, so it is not a
+  regression.
+- `GradientGeometryEditor::cancelPress()` is declared and documented but never called. Unused API.
+- Injecting window-manager decorations does not work (dialog title-bar drag and the decoration close
+  button are not Qt widgets), so the dialog could not be moved or closed by clicking. Escape or a
+  ribbon action is the workable route.
+
+### Current State
+All four reported bugs are fixed, and three of the four are proven live with numeric evidence
+recorded above: child selection and drag including the zero-drift fitToChildren case, playback
+reverting to Visible with the playhead rewound, and zoom/pan-aware element insertion. The paint
+editor rewrite is partly proven — the dialog, type switching, the shared colour picker, the stop
+bar, the aspect-correct gradient preview and the canvas round trip all work live; radial, image,
+stop editing and undo granularity have not been exercised yet.
+
+Eleven of twelve subtasks are implemented, compiled and reviewed; only 3C is unstarted and the plan
+marks it droppable. Three defects the user spotted while watching the GUI pass — the dialog layout
+gap, the dead hex/alpha sync, and the wrong gradient rotation pivot — were fixed and re-verified in
+this same session. The last of those, and the `ColorPicker` sync bug, were real regressions that the
+static review rounds did not catch, which is worth noting as evidence that the GUI pass was load
+bearing rather than a formality.
+
+Text markup support was checked at the user's request before shipping: it does not exist. Styling is
+per element, not per character range — `TextElement::Font` holds one weight/italic/underline/strike
+set (`engine/element_text.h:47-55`), the renderer calls `pango_layout_set_text` with no markup
+parsing (`engine/element_text.cpp:40`), `grep -rn "set_markup\|pango_parse_markup" engine/` returns 0
+hits, and the JSON keys are scalars (`engine/title.cpp:511-523`). Recorded as **PLAN.md D-5** for a
+later cross-repo pass; not in this release.
+
+This pass is being shipped as a release tag.
